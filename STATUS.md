@@ -20,10 +20,10 @@ Statuses:
 | GitHub repo connected                        | complete | git@github.com:ovanapdesign-svg/sol.git |
 | WP install on demo.ovanap.dev/sol1           | complete | Tomas verified                     |
 | WooCommerce installed                        | pending  | WooCommerce must be installed and active before Phase 3 Admin UI starts. Currently pending — owner will install via `wp plugin install woocommerce --activate` before Phase 3 entry. |
-| TARGET_ARCHITECTURE.md (Batch 1)             | wip      | DRAFT v2 — awaiting owner approval |
-| DATA_MODEL.md (Batch 1)                      | wip      | DRAFT v2 — awaiting owner approval |
-| FIELD_MODEL.md (Batch 1)                     | wip      | DRAFT v2 — awaiting owner approval |
-| MODULE_LIBRARY_MODEL.md (Batch 1)            | wip      | DRAFT v2 — awaiting owner approval |
+| TARGET_ARCHITECTURE.md (Batch 1)             | complete | DRAFT v2 — approved 2026-04-29     |
+| DATA_MODEL.md (Batch 1)                      | complete | DRAFT v2 — approved 2026-04-29     |
+| FIELD_MODEL.md (Batch 1)                     | complete | DRAFT v2 — approved 2026-04-29     |
+| MODULE_LIBRARY_MODEL.md (Batch 1)            | complete | DRAFT v2 — approved 2026-04-29     |
 | RULE_ENGINE_CONTRACT.md (Batch 2)            | pending  |                                    |
 | PRICING_CONTRACT.md (Batch 2)                | pending  |                                    |
 | TEMPLATE_VERSIONING.md (Batch 2)             | pending  |                                    |
@@ -31,6 +31,11 @@ Statuses:
 | MULTILANGUAGE_MODEL.md (Batch 2)             | pending  |                                    |
 | AUDIT_CHECKLIST.md (Batch 2)                 | pending  |                                    |
 | UX roadmap (8 docs)                          | pending  |                                    |
+
+**Phase 0 exit:** Owner approved Batch 1 v2 on 2026-04-29. All four Batch 1
+specs (TARGET_ARCHITECTURE, DATA_MODEL, FIELD_MODEL, MODULE_LIBRARY_MODEL)
+are marked `complete`. Phase 0 closed; awaiting owner approval to enter
+Phase 1.
 
 ---
 
@@ -78,8 +83,8 @@ Statuses:
 
 ## Last updated
 
-2026-04-29 — Batch 1 v2 patched per owner review issues. All four Batch 1
-specs remain in DRAFT v2; owner approval still pending.
+2026-04-29 — Owner approved Batch 1 v2. All four Batch 1 spec rows marked
+`complete`. Phase 0 closed; awaiting owner approval to enter Phase 1.
 
 ---
 
@@ -131,5 +136,5 @@ Batch 1 specs remain `wip` and DRAFT v2; nothing is approved yet.
   `TARGET_ARCHITECTURE.md §6` (Performance budgets). §10 was "What this
   document does not cover".
 
-All four Batch 1 specs remain DRAFT v2. Awaiting owner approval to flip
-Batch 1 rows from `wip` to `complete`.
+**Update 2026-04-29:** Owner approved Batch 1 v2. All four Batch 1 spec
+rows are now `complete`. Phase 0 closed; see "Phase 0 exit" line above.
