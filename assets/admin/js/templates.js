@@ -11,6 +11,48 @@
 		[ 'archived', 'archived' ],
 	];
 
+	const FIELD_KIND_CHOICES = [
+		{ id: 'enter_number',  label: 'Enter a number', help: 'Numeric input with min/max/step.', axes: { field_kind: 'input',  input_type: 'number',   display_type: 'plain', behavior: 'normal_option', value_source: 'manual_options' } },
+		{ id: 'pick_one',      label: 'Pick one option', help: 'Single choice from a small set.',  axes: { field_kind: 'input',  input_type: 'radio',    display_type: 'plain', behavior: 'normal_option' } },
+		{ id: 'pick_multiple', label: 'Pick multiple options', help: 'Multi-select from a set.',   axes: { field_kind: 'input',  input_type: 'checkbox', display_type: 'plain', behavior: 'normal_option' } },
+		{ id: 'addon',         label: 'Pick a Woo product (add-on)', help: 'Customer attaches a Woo product as an add-on.', axes: { field_kind: 'addon', input_type: 'checkbox', display_type: 'cards', behavior: 'product_addon', value_source: 'woo_category' } },
+		{ id: 'show_info',     label: 'Show information (no input)', help: 'Static heading or info block.', axes: { field_kind: 'display', input_type: null, display_type: 'heading', value_source: 'manual_options', behavior: 'presentation_only' } },
+		{ id: 'lookup',        label: 'Configure as a lookup dimension', help: 'Advanced. Field feeds a lookup table.', axes: { field_kind: 'lookup', input_type: 'number', display_type: 'plain', behavior: 'lookup_dimension', value_source: 'lookup_table' }, advanced: true },
+	];
+
+	const SOURCE_CHOICES_BY_KIND = {
+		enter_number:  [], // no source picker — uses manual_options as a no-op default
+		pick_one:      [
+			{ id: 'manual_options', label: "I'll type them in here" },
+			{ id: 'library',        label: 'Pull from a library' },
+		],
+		pick_multiple: [
+			{ id: 'manual_options', label: "I'll type them in here" },
+			{ id: 'library',        label: 'Pull from a library' },
+		],
+		addon: [
+			{ id: 'woo_category', label: 'All Woo products in a category' },
+			{ id: 'woo_products', label: 'Specific Woo products by SKU' },
+		],
+		show_info: [],
+		lookup:    [],
+	};
+
+	const DISPLAY_STYLE_CHOICES = [
+		{ id: 'plain',       label: 'Plain controls' },
+		{ id: 'cards',       label: 'Cards with images' },
+		{ id: 'image_grid',  label: 'Image grid' },
+		{ id: 'swatch_grid', label: 'Color swatches' },
+	];
+
+	const PRICING_MODE_CHOICES = [
+		[ 'none',             "Doesn't affect price" ],
+		[ 'fixed',            'Fixed amount per selection' ],
+		[ 'per_unit',         'Multiplied by number of selections' ],
+		[ 'per_m2',           'Multiplied by area (width × height)' ],
+		[ 'lookup_dimension', 'Field feeds the lookup table' ],
+	];
+
 	const state = {
 		view: 'loading', // 'list' | 'form' | 'detail' | 'step_form' | 'loading'
 		list: { items: [], total: 0 },
@@ -18,6 +60,12 @@
 		viewing: null, // template currently opened in detail view
 		steps: { items: [], total: 0 },
 		editingStep: null,
+		// B3 additions
+		selectedStepId: null,
+		fields: { items: [], total: 0 },
+		editingField: null, // field whose editor is shown in the right pane
+		fieldOptions: { items: [], total: 0 },
+		wizard: null, // null when closed; otherwise { step: 1|2|3, kindChoice, sourceChoice, label, fieldKey }
 		dirty: false,
 		message: null,
 		fieldErrors: {},
@@ -156,7 +204,8 @@
 		}
 	}
 
-	async function openTemplateDetail( id ) {
+	async function openTemplateDetail( id, opts ) {
+		opts = opts || {};
 		state.view = 'loading';
 		render();
 		try {
@@ -164,13 +213,363 @@
 			state.viewing = data.record;
 			const stepsData = await ConfigKit.request( '/templates/' + id + '/steps' );
 			state.steps = stepsData;
+
+			// Pick a step to show in the middle pane: explicit selection wins,
+			// else the previously-selected step if still present, else first.
+			let stepId = opts.selectStepId || state.selectedStepId || 0;
+			const stepsList = state.steps.items || [];
+			if ( ! stepsList.find( ( s ) => s.id === stepId ) ) {
+				stepId = stepsList.length > 0 ? stepsList[ 0 ].id : null;
+			}
+			state.selectedStepId = stepId;
+			await refreshFields();
+
+			// Pick a field to show in the right pane (if requested).
+			if ( opts.selectFieldId ) {
+				try {
+					const fr = await ConfigKit.request( '/templates/' + id + '/fields/' + opts.selectFieldId );
+					state.editingField = fr.record;
+					await refreshFieldOptions();
+				} catch ( e ) {
+					state.editingField = null;
+				}
+			} else {
+				state.editingField = null;
+				state.fieldOptions = { items: [], total: 0 };
+			}
+
 			state.view = 'detail';
 			clearMessages();
-			setUrl( { action: null, id: id, step_id: null, step_action: null } );
+			const urlParams = { action: null, step_id: state.selectedStepId, step_action: null, field_action: null };
+			urlParams.field_id = state.editingField ? state.editingField.id : null;
+			urlParams.id = id;
+			setUrl( urlParams );
 			render();
 		} catch ( err ) {
 			showError( err );
 			state.view = 'list';
+			render();
+		}
+	}
+
+	async function refreshFields() {
+		if ( ! state.viewing || ! state.selectedStepId ) {
+			state.fields = { items: [], total: 0 };
+			return;
+		}
+		try {
+			const data = await ConfigKit.request(
+				'/templates/' + state.viewing.id + '/steps/' + state.selectedStepId + '/fields'
+			);
+			state.fields = data;
+		} catch ( e ) {
+			state.fields = { items: [], total: 0 };
+		}
+	}
+
+	async function refreshFieldOptions() {
+		if ( ! state.editingField ) {
+			state.fieldOptions = { items: [], total: 0 };
+			return;
+		}
+		if ( state.editingField.value_source !== 'manual_options' ) {
+			state.fieldOptions = { items: [], total: 0 };
+			return;
+		}
+		try {
+			const data = await ConfigKit.request( '/fields/' + state.editingField.id + '/options' );
+			state.fieldOptions = data;
+		} catch ( e ) {
+			state.fieldOptions = { items: [], total: 0 };
+		}
+	}
+
+	async function selectStep( stepId ) {
+		state.selectedStepId = stepId;
+		state.editingField = null;
+		state.fieldOptions = { items: [], total: 0 };
+		await refreshFields();
+		setUrl( { step_id: stepId, field_id: null, field_action: null } );
+		render();
+	}
+
+	async function selectField( fieldId ) {
+		try {
+			const data = await ConfigKit.request( '/templates/' + state.viewing.id + '/fields/' + fieldId );
+			state.editingField = data.record;
+			await refreshFieldOptions();
+			setUrl( { field_id: fieldId, field_action: null } );
+			render();
+		} catch ( err ) {
+			showError( err );
+			render();
+		}
+	}
+
+	async function reorderField( fieldId, direction ) {
+		if ( ! state.viewing ) return;
+		const items = state.fields.items.slice();
+		const idx = items.findIndex( ( f ) => f.id === fieldId );
+		if ( idx < 0 ) return;
+		const swap = direction === 'up' ? idx - 1 : idx + 1;
+		if ( swap < 0 || swap >= items.length ) return;
+		const a = items[ idx ];
+		items[ idx ] = items[ swap ];
+		items[ swap ] = a;
+		const payload = items.map( ( f, i ) => ( { field_id: f.id, sort_order: i + 1 } ) );
+
+		try {
+			await ConfigKit.request(
+				'/templates/' + state.viewing.id + '/steps/' + state.selectedStepId + '/fields/reorder',
+				{ method: 'POST', body: { items: payload } }
+			);
+			await refreshFields();
+			render();
+		} catch ( err ) {
+			showError( err );
+			render();
+		}
+	}
+
+	async function saveField() {
+		if ( state.busy || ! state.viewing || ! state.editingField ) return;
+		state.busy = true;
+		render();
+
+		const rec = state.editingField;
+		const payload = {
+			label: rec.label,
+			helper_text: rec.helper_text || null,
+			field_kind: rec.field_kind,
+			input_type: rec.input_type,
+			display_type: rec.display_type,
+			value_source: rec.value_source,
+			source_config: rec.source_config || {},
+			behavior: rec.behavior,
+			pricing_mode: rec.pricing_mode || null,
+			pricing_value: rec.pricing_value === '' || rec.pricing_value === null ? null : rec.pricing_value,
+			is_required: !! rec.is_required,
+			default_value: rec.default_value || null,
+			show_in_cart: !! rec.show_in_cart,
+			show_in_checkout: !! rec.show_in_checkout,
+			show_in_admin_order: !! rec.show_in_admin_order,
+			show_in_customer_email: !! rec.show_in_customer_email,
+			version_hash: rec.version_hash,
+		};
+
+		try {
+			const resp = await ConfigKit.request(
+				'/templates/' + state.viewing.id + '/fields/' + rec.id,
+				{ method: 'PUT', body: payload }
+			);
+			state.editingField = resp.record;
+			state.dirty = false;
+			state.message = { kind: 'success', text: 'Field saved.' };
+			state.fieldErrors = {};
+			await refreshFields();
+		} catch ( err ) {
+			showError( err );
+		} finally {
+			state.busy = false;
+		}
+		render();
+	}
+
+	async function deleteField() {
+		if ( ! state.viewing || ! state.editingField ) return;
+		if ( ! window.confirm( 'Delete this field? This action is permanent.' ) ) return;
+		try {
+			await ConfigKit.request(
+				'/templates/' + state.viewing.id + '/fields/' + state.editingField.id,
+				{ method: 'DELETE' }
+			);
+			state.editingField = null;
+			await refreshFields();
+			state.message = { kind: 'success', text: 'Field deleted.' };
+			render();
+		} catch ( err ) {
+			showError( err );
+			render();
+		}
+	}
+
+	// ---- Wizard ----
+
+	function openWizard() {
+		if ( ! state.selectedStepId ) {
+			window.alert( 'Pick a step first.' );
+			return;
+		}
+		state.wizard = {
+			step: 1,
+			kindChoice: null,
+			sourceChoice: null,
+			label: '',
+			fieldKey: '',
+		};
+		clearMessages();
+		setUrl( { field_action: 'new' } );
+		render();
+	}
+
+	function closeWizard() {
+		state.wizard = null;
+		setUrl( { field_action: null } );
+		render();
+	}
+
+	function wizardNext() {
+		const w = state.wizard;
+		if ( ! w ) return;
+		const choice = FIELD_KIND_CHOICES.find( ( c ) => c.id === w.kindChoice );
+		if ( w.step === 1 ) {
+			if ( ! choice ) {
+				state.message = { kind: 'error', text: 'Pick what the customer does first.' };
+				render();
+				return;
+			}
+			// Skip step 2 when there is no source choice for this kind.
+			if ( ( SOURCE_CHOICES_BY_KIND[ w.kindChoice ] || [] ).length === 0 ) {
+				w.sourceChoice = ( choice.axes.value_source ) || 'manual_options';
+				w.step = 3;
+			} else {
+				w.step = 2;
+			}
+		} else if ( w.step === 2 ) {
+			if ( ! w.sourceChoice ) {
+				state.message = { kind: 'error', text: 'Pick where options come from.' };
+				render();
+				return;
+			}
+			w.step = 3;
+		}
+		render();
+	}
+
+	function wizardBack() {
+		const w = state.wizard;
+		if ( ! w ) return;
+		if ( w.step === 3 && ( SOURCE_CHOICES_BY_KIND[ w.kindChoice ] || [] ).length === 0 ) {
+			w.step = 1;
+		} else if ( w.step > 1 ) {
+			w.step -= 1;
+		}
+		render();
+	}
+
+	async function wizardSave() {
+		if ( state.busy ) return;
+		const w = state.wizard;
+		if ( ! w ) return;
+		const choice = FIELD_KIND_CHOICES.find( ( c ) => c.id === w.kindChoice );
+		if ( ! choice ) return;
+		if ( ! w.label || ! w.fieldKey ) {
+			state.message = { kind: 'error', text: 'Name and field_key are required.' };
+			render();
+			return;
+		}
+		state.busy = true;
+		render();
+
+		const axes = Object.assign( {}, choice.axes );
+		axes.value_source = w.sourceChoice || axes.value_source || 'manual_options';
+
+		const sourceConfig = { type: axes.value_source };
+		if ( axes.value_source === 'library' ) sourceConfig.libraries = [];
+		if ( axes.value_source === 'woo_products' ) sourceConfig.product_skus = [];
+		if ( axes.value_source === 'woo_category' ) sourceConfig.category_slug = '';
+		if ( axes.value_source === 'lookup_table' ) {
+			sourceConfig.lookup_table_key = '';
+			sourceConfig.dimension = 'width';
+		}
+
+		const payload = Object.assign(
+			{
+				field_key: w.fieldKey,
+				label: w.label,
+			},
+			axes,
+			{ source_config: sourceConfig }
+		);
+
+		try {
+			const resp = await ConfigKit.request(
+				'/templates/' + state.viewing.id + '/steps/' + state.selectedStepId + '/fields',
+				{ method: 'POST', body: payload }
+			);
+			state.editingField = resp.record;
+			await refreshFields();
+			await refreshFieldOptions();
+			state.wizard = null;
+			state.message = { kind: 'success', text: 'Field created. Configure it on the right.' };
+			setUrl( { field_action: null, field_id: state.editingField.id } );
+		} catch ( err ) {
+			showError( err );
+		} finally {
+			state.busy = false;
+		}
+		render();
+	}
+
+	// ---- Manual options inline editor ----
+
+	async function addManualOption() {
+		if ( ! state.editingField ) return;
+		const optionKey = window.prompt( 'New option key (snake_case, 3-64 chars):' );
+		if ( ! optionKey ) return;
+		const label = window.prompt( 'Label (display text):' );
+		if ( ! label ) return;
+		try {
+			await ConfigKit.request(
+				'/fields/' + state.editingField.id + '/options',
+				{ method: 'POST', body: { option_key: optionKey, label: label, price: 0, is_active: true } }
+			);
+			await refreshFieldOptions();
+			render();
+		} catch ( err ) {
+			showError( err );
+			render();
+		}
+	}
+
+	async function saveManualOption( option ) {
+		if ( ! state.editingField ) return;
+		try {
+			await ConfigKit.request(
+				'/fields/' + state.editingField.id + '/options/' + option.id,
+				{
+					method: 'PUT',
+					body: {
+						label: option.label,
+						price: option.price === '' || option.price === null ? null : option.price,
+						sale_price: option.sale_price === '' || option.sale_price === null ? null : option.sale_price,
+						image_url: option.image_url || null,
+						is_active: !! option.is_active,
+						sort_order: option.sort_order,
+						version_hash: option.version_hash,
+					},
+				}
+			);
+			await refreshFieldOptions();
+			render();
+		} catch ( err ) {
+			showError( err );
+			render();
+		}
+	}
+
+	async function deleteManualOption( optionId ) {
+		if ( ! state.editingField ) return;
+		if ( ! window.confirm( 'Soft-delete this option?' ) ) return;
+		try {
+			await ConfigKit.request(
+				'/fields/' + state.editingField.id + '/options/' + optionId,
+				{ method: 'DELETE' }
+			);
+			await refreshFieldOptions();
+			render();
+		} catch ( err ) {
+			showError( err );
 			render();
 		}
 	}
@@ -198,7 +597,7 @@
 			state.view = 'step_form';
 			state.dirty = false;
 			clearMessages();
-			setUrl( { action: null, id: templateId, step_id: stepId, step_action: null } );
+			setUrl( { action: null, id: templateId, step_id: stepId, step_action: 'edit', field_id: null, field_action: null } );
 			render();
 		} catch ( err ) {
 			showError( err );
@@ -586,8 +985,8 @@
 		const t = state.viewing;
 		const wrap = el( 'div' );
 
-		// Template header (metadata summary).
-		const header = el( 'div', { class: 'configkit-form' } );
+		// Template header.
+		const header = el( 'div', { class: 'configkit-form configkit-detail-header' } );
 		header.appendChild( el( 'h2', null, t.name ) );
 		header.appendChild( el(
 			'p',
@@ -597,9 +996,7 @@
 			t.family_key ? ' · Family: ' + t.family_key : '',
 			' · Status: ' + t.status
 		) );
-
 		if ( state.message ) header.appendChild( messageBanner( state.message ) );
-
 		header.appendChild( el(
 			'div',
 			{ class: 'configkit-form__footer' },
@@ -608,120 +1005,549 @@
 		) );
 		wrap.appendChild( header );
 
-		// Steps panel.
-		const stepsBlock = el( 'div', { class: 'configkit-form configkit-items' } );
-		stepsBlock.appendChild( el(
+		// Three-pane builder.
+		const panes = el( 'div', { class: 'configkit-builder' } );
+		panes.appendChild( renderStepsPane() );
+		panes.appendChild( renderFieldsPane() );
+		panes.appendChild( renderSettingsPane() );
+		wrap.appendChild( panes );
+
+		// Wizard modal overlay (rendered last so it sits on top).
+		if ( state.wizard ) {
+			wrap.appendChild( renderWizard() );
+		}
+
+		return wrap;
+	}
+
+	function renderStepsPane() {
+		const t = state.viewing;
+		const pane = el( 'div', { class: 'configkit-builder__pane configkit-builder__steps' } );
+		pane.appendChild( el(
 			'div',
-			{ class: 'configkit-list__header' },
+			{ class: 'configkit-builder__pane-header' },
 			el( 'h3', null, 'Steps' ),
-			el(
-				'button',
-				{ type: 'button', class: 'button button-secondary', onClick: showNewStepForm },
-				'+ Add step'
-			)
+			el( 'button', { type: 'button', class: 'button button-small', onClick: showNewStepForm }, '+ Step' )
 		) );
 
 		const steps = state.steps.items || [];
 		if ( steps.length === 0 ) {
-			stepsBlock.appendChild( el(
-				'div',
-				{ class: 'configkit-empty' },
-				el( 'p', null, 'No steps yet.' ),
+			pane.appendChild( el(
+				'p',
+				{ class: 'configkit-empty__hint' },
+				'No steps yet. Add at least one to start placing fields.'
+			) );
+			return pane;
+		}
+
+		const list = el( 'ul', { class: 'configkit-step-list' } );
+		steps.forEach( ( s, i ) => {
+			const isSel = s.id === state.selectedStepId;
+			list.appendChild( el(
+				'li',
+				{ class: 'configkit-step-list__item' + ( isSel ? ' is-selected' : '' ) },
 				el(
-					'p',
-					{ class: 'configkit-empty__hint' },
-					'Templates need at least one step. Steps group fields the customer fills out (e.g. Mål, Duk og farge, Betjening).'
+					'div',
+					{ class: 'configkit-step-list__order' },
+					el(
+						'button',
+						{
+							type: 'button',
+							class: 'button-link',
+							disabled: i === 0,
+							onClick: () => reorderStep( s.id, 'up' ),
+							title: 'Move up',
+						},
+						'▲'
+					),
+					el(
+						'button',
+						{
+							type: 'button',
+							class: 'button-link',
+							disabled: i === steps.length - 1,
+							onClick: () => reorderStep( s.id, 'down' ),
+							title: 'Move down',
+						},
+						'▼'
+					)
 				),
 				el(
-					'p',
-					null,
-					el( 'button', { type: 'button', class: 'button button-primary', onClick: showNewStepForm }, '+ Add first step' )
+					'a',
+					{
+						href: '#',
+						class: 'configkit-step-list__name',
+						onClick: ( ev ) => { ev.preventDefault(); selectStep( s.id ); },
+					},
+					s.label
+				),
+				el( 'code', { class: 'configkit-step-list__key' }, s.step_key ),
+				el(
+					'button',
+					{
+						type: 'button',
+						class: 'button-link configkit-step-list__edit',
+						onClick: () => loadStep( t.id, s.id ),
+						title: 'Edit step',
+					},
+					'Edit'
 				)
 			) );
-		} else {
-			const table = el(
-				'table',
-				{ class: 'wp-list-table widefat striped configkit-steps-table' },
-				el(
-					'thead',
-					null,
-					el(
-						'tr',
-						null,
-						el( 'th', { class: 'configkit-steps-table__order' }, 'Order' ),
-						el( 'th', null, 'Step name' ),
-						el( 'th', null, 'step_key' ),
-						el( 'th', null, 'Required' ),
-						el( 'th', null, 'Sort' ),
-						el( 'th', { class: 'configkit-actions' }, '' )
-					)
-				)
-			);
+		} );
+		pane.appendChild( list );
+		return pane;
+	}
 
+	function renderFieldsPane() {
+		const t = state.viewing;
+		const pane = el( 'div', { class: 'configkit-builder__pane configkit-builder__fields' } );
+
+		const selectedStep = ( state.steps.items || [].find ).call( state.steps.items || [], ( s ) => s.id === state.selectedStepId )
+			|| ( state.steps.items || [] ).find( ( s ) => s.id === state.selectedStepId );
+		// (Workaround keeps lint happy if items is empty.)
+
+		pane.appendChild( el(
+			'div',
+			{ class: 'configkit-builder__pane-header' },
+			el( 'h3', null, 'Fields' + ( selectedStep ? ' in ' + selectedStep.label : '' ) ),
+			el( 'button', {
+				type: 'button',
+				class: 'button button-small',
+				disabled: ! state.selectedStepId,
+				onClick: openWizard,
+			}, '+ Field' )
+		) );
+
+		if ( ! state.selectedStepId ) {
+			pane.appendChild( el( 'p', { class: 'configkit-empty__hint' }, 'Select a step to see its fields.' ) );
+			return pane;
+		}
+
+		const fields = state.fields.items || [];
+		if ( fields.length === 0 ) {
+			pane.appendChild( el( 'p', { class: 'configkit-empty__hint' }, 'No fields yet. Click "+ Field" to launch the wizard.' ) );
+			return pane;
+		}
+
+		const list = el( 'ul', { class: 'configkit-field-list' } );
+		fields.forEach( ( f, i ) => {
+			const isSel = state.editingField && state.editingField.id === f.id;
+			list.appendChild( el(
+				'li',
+				{ class: 'configkit-field-list__item' + ( isSel ? ' is-selected' : '' ) },
+				el(
+					'div',
+					{ class: 'configkit-field-list__order' },
+					el(
+						'button',
+						{
+							type: 'button',
+							class: 'button-link',
+							disabled: i === 0,
+							onClick: () => reorderField( f.id, 'up' ),
+							title: 'Move up',
+						},
+						'▲'
+					),
+					el(
+						'button',
+						{
+							type: 'button',
+							class: 'button-link',
+							disabled: i === fields.length - 1,
+							onClick: () => reorderField( f.id, 'down' ),
+							title: 'Move down',
+						},
+						'▼'
+					)
+				),
+				el(
+					'a',
+					{
+						href: '#',
+						class: 'configkit-field-list__name',
+						onClick: ( ev ) => { ev.preventDefault(); selectField( f.id ); },
+					},
+					f.label
+				),
+				el( 'code', { class: 'configkit-field-list__key' }, f.field_key ),
+				el( 'span', { class: 'configkit-field-list__source' }, f.value_source )
+			) );
+		} );
+		pane.appendChild( list );
+		return pane;
+	}
+
+	function renderSettingsPane() {
+		const pane = el( 'div', { class: 'configkit-builder__pane configkit-builder__settings' } );
+		pane.appendChild( el(
+			'div',
+			{ class: 'configkit-builder__pane-header' },
+			el( 'h3', null, 'Settings' )
+		) );
+
+		if ( ! state.editingField ) {
+			pane.appendChild( el( 'p', { class: 'configkit-empty__hint' }, 'Select a field to edit it.' ) );
+			return pane;
+		}
+
+		pane.appendChild( renderFieldEditor() );
+		return pane;
+	}
+
+	function renderFieldEditor() {
+		const f = state.editingField;
+		const wrap = el( 'div', { class: 'configkit-field-editor' } );
+
+		// Owner-friendly summary instead of raw axis labels.
+		const kindMatch = FIELD_KIND_CHOICES.find( ( c ) => c.axes.field_kind === f.field_kind && ( c.axes.input_type === f.input_type || ( c.axes.input_type === undefined ) ) ) || null;
+		wrap.appendChild( el(
+			'p',
+			{ class: 'description' },
+			kindMatch ? kindMatch.label : ( f.field_kind + ' / ' + ( f.input_type || '—' ) ),
+			' · Stored as: ',
+			el( 'code', null, f.field_kind + '/' + ( f.input_type || 'null' ) + '/' + f.display_type + '/' + f.value_source + '/' + f.behavior )
+		) );
+
+		// Basics
+		wrap.appendChild( fieldset( 'Basics', [
+			textField( 'Label', 'label', f.label, ( v ) => {
+				f.label = v;
+				state.dirty = true;
+			} ),
+			textField( 'Helper text', 'helper_text', f.helper_text || '', ( v ) => {
+				f.helper_text = v;
+				state.dirty = true;
+			} ),
+		] ) );
+
+		// Source
+		if ( f.value_source === 'library' ) {
+			const libs = ( f.source_config && f.source_config.libraries ) || [];
+			wrap.appendChild( fieldset( 'Source · libraries', [
+				el( 'p', { class: 'description' }, 'Comma-separated library_keys.' ),
+				textField( 'library_keys', 'libraries_csv', libs.join( ',' ), ( v ) => {
+					f.source_config = Object.assign( {}, f.source_config, {
+						type: 'library',
+						libraries: v.split( ',' ).map( ( s ) => s.trim() ).filter( Boolean ),
+					} );
+					state.dirty = true;
+				} ),
+				fieldErrors( 'source_config' ),
+			] ) );
+		} else if ( f.value_source === 'woo_category' ) {
+			wrap.appendChild( fieldset( 'Source · Woo category', [
+				textField( 'category_slug', 'category_slug', ( f.source_config && f.source_config.category_slug ) || '', ( v ) => {
+					f.source_config = Object.assign( {}, f.source_config, { type: 'woo_category', category_slug: v } );
+					state.dirty = true;
+				} ),
+				fieldErrors( 'source_config' ),
+			] ) );
+		} else if ( f.value_source === 'woo_products' ) {
+			const skus = ( f.source_config && f.source_config.product_skus ) || [];
+			wrap.appendChild( fieldset( 'Source · Woo products', [
+				el( 'p', { class: 'description' }, 'Comma-separated product SKUs.' ),
+				textField( 'product_skus', 'product_skus', skus.join( ',' ), ( v ) => {
+					f.source_config = Object.assign( {}, f.source_config, {
+						type: 'woo_products',
+						product_skus: v.split( ',' ).map( ( s ) => s.trim() ).filter( Boolean ),
+					} );
+					state.dirty = true;
+				} ),
+				fieldErrors( 'source_config' ),
+			] ) );
+		} else if ( f.value_source === 'lookup_table' ) {
+			wrap.appendChild( fieldset( 'Source · Lookup table', [
+				textField( 'lookup_table_key', 'lookup_table_key', ( f.source_config && f.source_config.lookup_table_key ) || '', ( v ) => {
+					f.source_config = Object.assign( {}, f.source_config, { type: 'lookup_table', lookup_table_key: v } );
+					state.dirty = true;
+				} ),
+				selectFieldRow(
+					'dimension',
+					'dimension',
+					[
+						[ 'width', 'width' ],
+						[ 'height', 'height' ],
+						[ 'price_group', 'price_group' ],
+					],
+					( f.source_config && f.source_config.dimension ) || 'width',
+					( v ) => {
+						f.source_config = Object.assign( {}, f.source_config, { type: 'lookup_table', dimension: v } );
+						state.dirty = true;
+					}
+				),
+				fieldErrors( 'source_config' ),
+			] ) );
+		} else if ( f.value_source === 'manual_options' ) {
+			wrap.appendChild( renderManualOptions( f ) );
+		}
+
+		// Display style — only for input/addon kinds.
+		if ( f.field_kind === 'input' || f.field_kind === 'addon' ) {
+			wrap.appendChild( fieldset( 'How should it look?', [
+				selectFieldRow(
+					'Display style',
+					'display_type',
+					DISPLAY_STYLE_CHOICES.map( ( c ) => [ c.id, c.label ] ),
+					f.display_type,
+					( v ) => {
+						f.display_type = v;
+						state.dirty = true;
+					}
+				),
+			] ) );
+		}
+
+		// Pricing.
+		wrap.appendChild( fieldset( 'Pricing', [
+			selectFieldRow(
+				'Pricing mode',
+				'pricing_mode',
+				PRICING_MODE_CHOICES,
+				f.pricing_mode || 'none',
+				( v ) => {
+					f.pricing_mode = v;
+					state.dirty = true;
+				}
+			),
+			numberFieldRow(
+				'Pricing value (NOK)',
+				'pricing_value',
+				f.pricing_value === null || f.pricing_value === '' ? '' : f.pricing_value,
+				( v ) => {
+					f.pricing_value = v;
+					state.dirty = true;
+				},
+				{ allowFloat: true }
+			),
+			el( 'p', { class: 'description' }, 'fixed = flat per selection · per_unit = ×count · per_m2 = ×area · lookup_dimension = via lookup table · none = no price impact.' ),
+		] ) );
+
+		// Show in cart/checkout/admin/email.
+		wrap.appendChild( fieldset( 'Show this field in', [
+			checkboxField( 'Cart line summary', 'show_in_cart', !! f.show_in_cart, ( v ) => {
+				f.show_in_cart = v;
+				state.dirty = true;
+			} ),
+			checkboxField( 'Checkout', 'show_in_checkout', !! f.show_in_checkout, ( v ) => {
+				f.show_in_checkout = v;
+				state.dirty = true;
+			} ),
+			checkboxField( 'Admin order', 'show_in_admin_order', !! f.show_in_admin_order, ( v ) => {
+				f.show_in_admin_order = v;
+				state.dirty = true;
+			} ),
+			checkboxField( 'Customer email', 'show_in_customer_email', !! f.show_in_customer_email, ( v ) => {
+				f.show_in_customer_email = v;
+				state.dirty = true;
+			} ),
+		] ) );
+
+		// Required + default.
+		wrap.appendChild( fieldset( 'Required + default', [
+			checkboxField( 'Required', 'is_required', !! f.is_required, ( v ) => {
+				f.is_required = v;
+				state.dirty = true;
+			} ),
+			textField( 'Default value (option_key / number / library:item)', 'default_value', f.default_value || '', ( v ) => {
+				f.default_value = v;
+				state.dirty = true;
+			}, { mono: true } ),
+		] ) );
+
+		// Advanced (collapsed).
+		const adv = el( 'details', { class: 'configkit-advanced' } );
+		adv.appendChild( el( 'summary', null, 'Advanced' ) );
+		adv.appendChild( fieldset( 'Identity', [
+			el( 'p', { class: 'description' },
+				'field_key: ',
+				el( 'code', null, f.field_key ),
+				' (immutable). Sort order: ',
+				el( 'code', null, String( f.sort_order ) ),
+				'.'
+			),
+		] ) );
+		adv.appendChild( fieldset( 'Raw 5-axis (read-only)', [
+			el( 'pre', { class: 'configkit-json' }, JSON.stringify( {
+				field_kind: f.field_kind,
+				input_type: f.input_type,
+				display_type: f.display_type,
+				value_source: f.value_source,
+				behavior: f.behavior,
+			}, null, 2 ) ),
+		] ) );
+		wrap.appendChild( adv );
+
+		// Footer.
+		wrap.appendChild( el(
+			'div',
+			{ class: 'configkit-form__footer' },
+			el(
+				'button',
+				{ type: 'button', class: 'button button-primary', disabled: state.busy, onClick: saveField },
+				state.busy ? 'Saving…' : 'Save field'
+			),
+			el( 'button', { type: 'button', class: 'button button-link-delete', onClick: deleteField }, 'Delete' )
+		) );
+
+		return wrap;
+	}
+
+	function renderManualOptions( f ) {
+		const wrap = el( 'fieldset', { class: 'configkit-fieldset' }, el( 'legend', null, 'Options' ) );
+		const opts = state.fieldOptions.items || [];
+		if ( opts.length === 0 ) {
+			wrap.appendChild( el( 'p', { class: 'description' }, 'No options yet.' ) );
+		} else {
+			const table = el( 'table', { class: 'wp-list-table widefat striped configkit-options-table' } );
+			const thead = el( 'thead', null, el(
+				'tr',
+				null,
+				el( 'th', null, 'option_key' ),
+				el( 'th', null, 'Label' ),
+				el( 'th', null, 'Price' ),
+				el( 'th', null, 'Sale' ),
+				el( 'th', null, 'Active' ),
+				el( 'th', null, '' )
+			) );
+			table.appendChild( thead );
 			const tbody = el( 'tbody' );
-			steps.forEach( ( s, i ) => {
+			opts.forEach( ( opt ) => {
 				tbody.appendChild( el(
 					'tr',
 					null,
+					el( 'td', null, el( 'code', null, opt.option_key ) ),
 					el(
 						'td',
-						{ class: 'configkit-steps-table__order' },
-						el(
-							'button',
-							{
-								type: 'button',
-								class: 'button-link',
-								disabled: i === 0,
-								onClick: () => reorderStep( s.id, 'up' ),
-								'aria-label': 'Move up',
-								title: 'Move up',
-							},
-							'▲'
-						),
-						el(
-							'button',
-							{
-								type: 'button',
-								class: 'button-link',
-								disabled: i === steps.length - 1,
-								onClick: () => reorderStep( s.id, 'down' ),
-								'aria-label': 'Move down',
-								title: 'Move down',
-							},
-							'▼'
-						)
+						null,
+						el( 'input', {
+							type: 'text',
+							value: opt.label,
+							onChange: ( ev ) => { opt.label = ev.target.value; saveManualOption( opt ); },
+						} )
 					),
 					el(
 						'td',
 						null,
-						el(
-							'a',
-							{
-								href: '#',
-								onClick: ( ev ) => {
-									ev.preventDefault();
-									loadStep( t.id, s.id );
-								},
-							},
-							s.label
-						)
+						el( 'input', {
+							type: 'number',
+							step: '0.01',
+							value: opt.price === null ? '' : String( opt.price ),
+							onChange: ( ev ) => { opt.price = ev.target.value === '' ? null : parseFloat( ev.target.value ); saveManualOption( opt ); },
+						} )
 					),
-					el( 'td', null, el( 'code', null, s.step_key ) ),
-					el( 'td', null, s.is_required ? 'Yes' : 'No' ),
-					el( 'td', null, String( s.sort_order ) ),
+					el(
+						'td',
+						null,
+						el( 'input', {
+							type: 'number',
+							step: '0.01',
+							value: opt.sale_price === null ? '' : String( opt.sale_price ),
+							onChange: ( ev ) => { opt.sale_price = ev.target.value === '' ? null : parseFloat( ev.target.value ); saveManualOption( opt ); },
+						} )
+					),
+					el(
+						'td',
+						null,
+						el( 'input', {
+							type: 'checkbox',
+							checked: !! opt.is_active,
+							onChange: ( ev ) => { opt.is_active = ev.target.checked; saveManualOption( opt ); },
+						} )
+					),
 					el(
 						'td',
 						{ class: 'configkit-actions' },
-						el( 'button', { type: 'button', class: 'button', onClick: () => loadStep( t.id, s.id ) }, 'Edit' )
+						el( 'button', { type: 'button', class: 'button button-link-delete', onClick: () => deleteManualOption( opt.id ) }, '✕' )
 					)
 				) );
 			} );
 			table.appendChild( tbody );
-			stepsBlock.appendChild( table );
+			wrap.appendChild( table );
+		}
+		wrap.appendChild( el( 'button', { type: 'button', class: 'button', onClick: addManualOption }, '+ Add option' ) );
+		// Mark `f` used to silence lint; the option list comes from state already.
+		void f;
+		return wrap;
+	}
+
+	function renderWizard() {
+		const w = state.wizard;
+		const overlay = el( 'div', { class: 'configkit-modal-overlay' } );
+		const modal = el( 'div', { class: 'configkit-modal' } );
+		overlay.appendChild( modal );
+
+		modal.appendChild( el( 'h2', null, 'Add a field' + ( w.step > 1 ? ' (step ' + w.step + ' of 3)' : '' ) ) );
+
+		if ( state.message ) modal.appendChild( messageBanner( state.message ) );
+
+		if ( w.step === 1 ) {
+			modal.appendChild( el( 'p', null, 'What does the customer do here?' ) );
+			const list = el( 'div', { class: 'configkit-wizard-choices' } );
+			FIELD_KIND_CHOICES.filter( ( c ) => ! c.advanced ).forEach( ( c ) => {
+				list.appendChild( renderWizardChoice( c, w.kindChoice, ( id ) => { w.kindChoice = id; render(); } ) );
+			} );
+			const advWrap = el( 'details', { class: 'configkit-advanced' } );
+			advWrap.appendChild( el( 'summary', null, 'Show advanced' ) );
+			FIELD_KIND_CHOICES.filter( ( c ) => c.advanced ).forEach( ( c ) => {
+				advWrap.appendChild( renderWizardChoice( c, w.kindChoice, ( id ) => { w.kindChoice = id; render(); } ) );
+			} );
+			list.appendChild( advWrap );
+			modal.appendChild( list );
+		} else if ( w.step === 2 ) {
+			modal.appendChild( el( 'p', null, 'Where do the options come from?' ) );
+			const list = el( 'div', { class: 'configkit-wizard-choices' } );
+			( SOURCE_CHOICES_BY_KIND[ w.kindChoice ] || [] ).forEach( ( c ) => {
+				list.appendChild( renderWizardChoice( c, w.sourceChoice, ( id ) => { w.sourceChoice = id; render(); } ) );
+			} );
+			modal.appendChild( list );
+		} else if ( w.step === 3 ) {
+			modal.appendChild( el( 'p', null, 'Field name and key.' ) );
+			modal.appendChild( textField( 'Field name', 'wiz_label', w.label, ( v ) => {
+				w.label = v;
+				if ( ! w.fieldKey ) {
+					w.fieldKey = slugify( v );
+					render();
+				}
+			} ) );
+			modal.appendChild( textField( 'field_key', 'wiz_field_key', w.fieldKey, ( v ) => {
+				w.fieldKey = v;
+				render();
+			}, { mono: true, help: 'Lowercase, snake_case, 3–64 chars. Locked after save.' } ) );
 		}
 
-		wrap.appendChild( stepsBlock );
-		return wrap;
+		modal.appendChild( el(
+			'div',
+			{ class: 'configkit-form__footer' },
+			w.step > 1
+				? el( 'button', { type: 'button', class: 'button', onClick: wizardBack }, 'Back' )
+				: null,
+			w.step < 3
+				? el( 'button', { type: 'button', class: 'button button-primary', onClick: wizardNext }, 'Continue' )
+				: el( 'button', {
+					type: 'button',
+					class: 'button button-primary',
+					disabled: state.busy,
+					onClick: wizardSave,
+				}, state.busy ? 'Saving…' : 'Save and configure' ),
+			el( 'button', { type: 'button', class: 'button', onClick: closeWizard }, 'Cancel' )
+		) );
+
+		return overlay;
+	}
+
+	function renderWizardChoice( choice, current, onPick ) {
+		const isSel = choice.id === current;
+		return el(
+			'button',
+			{
+				type: 'button',
+				class: 'configkit-wizard-choice' + ( isSel ? ' is-selected' : '' ),
+				onClick: () => onPick( choice.id ),
+			},
+			el( 'strong', null, choice.label ),
+			choice.help ? el( 'span', { class: 'description' }, choice.help ) : null
+		);
 	}
 
 	function renderStepForm() {
@@ -874,20 +1700,24 @@
 		const id = parseInt( params.get( 'id' ) || '0', 10 );
 		const stepAction = params.get( 'step_action' );
 		const stepId = parseInt( params.get( 'step_id' ) || '0', 10 );
+		const fieldId = parseInt( params.get( 'field_id' ) || '0', 10 );
+		const fieldAction = params.get( 'field_action' );
 		const savedMessage = consumeSavedFlag();
 
 		if ( action === 'new' ) {
 			showNewForm();
 		} else if ( action === 'edit' && id > 0 ) {
 			loadTemplateForEdit( id );
-		} else if ( id > 0 && stepId > 0 ) {
-			loadStep( id, stepId );
 		} else if ( id > 0 && stepAction === 'new' ) {
-			openTemplateDetail( id ).then( () => {
-				showNewStepForm();
-			} );
+			openTemplateDetail( id ).then( () => showNewStepForm() );
+		} else if ( id > 0 && stepId > 0 && stepAction === 'edit' ) {
+			loadStep( id, stepId );
 		} else if ( id > 0 ) {
-			openTemplateDetail( id ).then( () => {
+			openTemplateDetail( id, {
+				selectStepId: stepId > 0 ? stepId : 0,
+				selectFieldId: fieldId > 0 ? fieldId : 0,
+			} ).then( () => {
+				if ( fieldAction === 'new' && state.selectedStepId ) openWizard();
 				if ( savedMessage ) {
 					state.message = { kind: 'success', text: savedMessage };
 					render();

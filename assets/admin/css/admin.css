@@ -328,3 +328,203 @@
 	width: 80px;
 	text-align: right;
 }
+
+/* Template builder — three-pane layout */
+.configkit-detail-header {
+	margin-bottom: 12px;
+}
+
+.configkit-builder {
+	display: grid;
+	grid-template-columns: 220px 360px 1fr;
+	gap: 12px;
+	min-height: 400px;
+	margin-top: 12px;
+}
+
+@media ( max-width: 1200px ) {
+	.configkit-builder {
+		grid-template-columns: 200px 320px 1fr;
+	}
+}
+
+@media ( max-width: 1024px ) {
+	.configkit-builder {
+		grid-template-columns: 1fr;
+	}
+}
+
+.configkit-builder__pane {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	padding: 12px;
+	min-width: 0;
+}
+
+.configkit-builder__pane-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 8px;
+}
+
+.configkit-builder__pane-header h3 {
+	margin: 0;
+	font-size: 14px;
+}
+
+.configkit-step-list,
+.configkit-field-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.configkit-step-list__item,
+.configkit-field-list__item {
+	display: grid;
+	grid-template-columns: auto 1fr auto auto;
+	align-items: center;
+	gap: 4px 8px;
+	padding: 6px 8px;
+	border-radius: 3px;
+	border: 1px solid transparent;
+	margin-bottom: 4px;
+}
+
+.configkit-step-list__item.is-selected,
+.configkit-field-list__item.is-selected {
+	background: #f0f6fc;
+	border-color: #2271b1;
+}
+
+.configkit-step-list__order .button-link,
+.configkit-field-list__order .button-link {
+	padding: 0 2px;
+	font-size: 10px;
+	color: #50575e;
+	display: block;
+	line-height: 1.2;
+}
+
+.configkit-step-list__order .button-link[disabled],
+.configkit-field-list__order .button-link[disabled] {
+	color: #c3c4c7;
+	cursor: not-allowed;
+}
+
+.configkit-step-list__name,
+.configkit-field-list__name {
+	font-weight: 500;
+	text-decoration: none;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.configkit-step-list__key,
+.configkit-field-list__key {
+	font-size: 11px;
+	color: #50575e;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.configkit-step-list__edit {
+	font-size: 11px;
+	color: #2271b1;
+}
+
+.configkit-field-list__source {
+	grid-column: 2 / span 3;
+	font-size: 10px;
+	color: #50575e;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+/* Field editor (right pane) */
+.configkit-field-editor .configkit-fieldset {
+	margin: 8px 0;
+}
+
+.configkit-options-table input[ type="text" ],
+.configkit-options-table input[ type="number" ] {
+	width: 100%;
+	min-width: 0;
+}
+
+/* Wizard modal */
+.configkit-modal-overlay {
+	position: fixed;
+	inset: 0;
+	background: rgba( 0, 0, 0, 0.45 );
+	z-index: 99999;
+	display: flex;
+	align-items: flex-start;
+	justify-content: center;
+	padding: 60px 16px 16px;
+	overflow-y: auto;
+}
+
+.configkit-modal {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 6px;
+	padding: 20px 24px;
+	max-width: 560px;
+	width: 100%;
+	box-shadow: 0 12px 32px rgba( 0, 0, 0, 0.15 );
+}
+
+.configkit-modal h2 {
+	margin-top: 0;
+}
+
+.configkit-wizard-choices {
+	display: grid;
+	gap: 8px;
+	margin: 12px 0;
+}
+
+.configkit-wizard-choice {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	text-align: left;
+	gap: 4px;
+	padding: 12px 14px;
+	background: #f6f7f7;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	cursor: pointer;
+	width: 100%;
+}
+
+.configkit-wizard-choice:hover {
+	background: #f0f0f1;
+}
+
+.configkit-wizard-choice.is-selected {
+	background: #f0f6fc;
+	border-color: #2271b1;
+}
+
+.configkit-wizard-choice .description {
+	color: #50575e;
+	font-size: 12px;
+	margin: 0;
+}
+
+.configkit-advanced {
+	margin: 12px 0;
+}
+
+.configkit-advanced > summary {
+	cursor: pointer;
+	color: #2271b1;
+	font-size: 13px;
+	user-select: none;
+}
