@@ -158,6 +158,20 @@ priority.
    Phase 3 uses WP Settings API for plugin-level options
    (Settings → General) and the custom `configkit/v1/*` REST namespace
    for entity CRUD (modules, libraries, etc.) once those land.
+4. **Families form: schema vs. brief.** The Families CRUD chunk brief
+   listed `family_kind` (5-value dropdown) and `sort_order` form
+   fields, but `DATA_MODEL.md §3.4` / migration 0005 do not declare
+   those columns. Editing specs in `docs/configkit/specs/` is
+   forbidden in Phase 3, so this chunk shipped only schema-backed
+   fields (name, family_key, description, is_active). Pending owner
+   decision: (a) approve an additive migration 0017 that adds
+   `family_kind VARCHAR(32)` + `sort_order INT` (with indexes) and
+   updates `DATA_MODEL.md §3.4` in the same approved edit, then
+   re-enable the form fields; or (b) drop `family_kind` /
+   `sort_order` from the brief. Other §3.4 columns
+   (`default_template_key`, `allowed_modules_json`,
+   `default_step_order_json`) are deferred until Templates CRUD
+   exists, since they reference templates and modules.
 
 ### Progress
 
@@ -175,17 +189,19 @@ priority.
 | Settings → Logs (read-only viewer)                    | pending  |                                                                        |
 | Libraries list + detail + item editor                 | complete | Two repositories, two services, two REST controllers, single page with four JS views (list / library form / library detail / item form). Capability-conditional fields driven by parent module. attribute_schema enforcement for items. |
 | Lookup Tables list + cells editor                     | complete | Two repositories, two services, two REST controllers (incl. POST /cells/bulk for Phase-4 grid editor). Phase 3 cell editor is paginated table + form (pivot grid deferred to Phase 4). Cells use real DELETE; tables use soft-delete + version_hash. supports_price_group → cells_have_price_groups guard prevents orphaning grouped cells. |
+| Families CRUD                                         | complete | Pattern copy. New capability `configkit_manage_families` (admin + shop_manager). `CAPS_VERSION` bumped to 2 so the admin_init safety net replays registration. Form ships only schema-backed fields — see Phase 3 question 4 below for the family_kind / sort_order gap. |
 | Products list + binding edit                          | pending  | Cross-references families / templates / lookup tables.                 |
-| Families CRUD                                         | pending  |                                                                        |
 | Templates list                                        | pending  |                                                                        |
 | Template builder (3-pane + field wizard + rules)      | pending  | Per `TEMPLATE_BUILDER_UX.md §14` — multi-session by itself.            |
 | Rules basic CRUD                                      | pending  |                                                                        |
 | Diagnostics (critical issues only)                    | pending  |                                                                        |
-| Optimistic locking via `version_hash` everywhere      | partial  | Wired for Modules, Libraries, Library Items, Lookup Tables (returns 409 on stale hash). Cells intentionally have no version_hash per schema. Other entities wire on landing. |
-| Capability auto-assign on activation + safety net     | complete | `Capabilities\Registrar::register / deregister / ensure_registered`. `register_deactivation_hook` clears caps + version flag; `admin_init` re-runs registration once when option `configkit_caps_version` ≠ current. |
+| Optimistic locking via `version_hash` everywhere      | partial  | Wired for Modules, Libraries, Library Items, Lookup Tables, Families (returns 409 on stale hash). Cells intentionally have no version_hash per schema. Other entities wire on landing. |
+| Capability auto-assign on activation + safety net     | complete | `Capabilities\Registrar::register / deregister / ensure_registered`. `register_deactivation_hook` clears caps + version flag; `admin_init` re-runs registration once when option `configkit_caps_version` ≠ current. Bumped to v2 with the addition of `configkit_manage_families`. |
+| Shared key validation (`Validation\KeyValidator`)     | complete | One source of truth for `*_key` rules across Modules, Libraries, Library Items, Lookup Tables, Families: 3–64 chars, lowercase ASCII, must start with letter, reserved-word block list. |
+| User-friendly REST error display                      | complete | `ConfigKit.describeError()` in admin.js maps 404 / 401-403 / 409 / 400-422 / 5xx to natural-language messages. Each banner has a "Show technical details" collapsible with the raw message + code + status. |
 
 **Engine purity preserved.** `grep -rE "wp_\|get_option\|WP_Query\|\\$wpdb" src/Engines/`
-returns zero matches. Phase 2 + 3 PHPUnit tests green (155 / 327).
+returns zero matches. Phase 2 + 3 PHPUnit tests green (181 / 391).
 
 **Honest scope note.** This phase has 14 suggested commits and ten
 admin pages. Two are landed; the remaining twelve are each a focused
@@ -221,12 +237,13 @@ in subsequent sessions per owner direction.
 ## Last updated
 
 2026-04-29 — Phase 3 progress: Foundation + Dashboard + Settings →
-General + Modules CRUD + Libraries CRUD (incl. items) + Lookup
-Tables CRUD (incl. cells with bulk-upsert endpoint). Pattern (repo →
-service → REST → admin page → JS) applied three times and stable.
-Engines remain pure; 155 PHPUnit tests / 327 assertions green.
-Awaiting owner direction on next chunk: Families, Templates, Products,
-or Diagnostics.
+General + Modules + Libraries (incl. items) + Lookup Tables (incl.
+cells) + Families CRUD. 4 of 7 in-scope entities done. Shared key
+validation + user-friendly error display added. New capability
+`configkit_manage_families`. Pattern (repo → service → REST → admin
+page → JS) applied four times and stable. Engines remain pure; 181
+PHPUnit tests / 391 assertions green. Awaiting owner direction on
+next chunk: Templates, Products, Rules, or Diagnostics.
 
 ---
 
