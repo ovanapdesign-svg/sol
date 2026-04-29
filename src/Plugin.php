@@ -26,6 +26,7 @@ use ConfigKit\Repository\LibraryRepository;
 use ConfigKit\Repository\LookupCellRepository;
 use ConfigKit\Repository\LookupTableRepository;
 use ConfigKit\Repository\ModuleRepository;
+use ConfigKit\Repository\StepRepository;
 use ConfigKit\Repository\TemplateRepository;
 use ConfigKit\Rest\Controllers\FamiliesController;
 use ConfigKit\Rest\Controllers\LibrariesController;
@@ -33,6 +34,7 @@ use ConfigKit\Rest\Controllers\LibraryItemsController;
 use ConfigKit\Rest\Controllers\LookupCellsController;
 use ConfigKit\Rest\Controllers\LookupTablesController;
 use ConfigKit\Rest\Controllers\ModulesController;
+use ConfigKit\Rest\Controllers\StepsController;
 use ConfigKit\Rest\Controllers\TemplatesController;
 use ConfigKit\Rest\Router;
 use ConfigKit\Service\FamilyService;
@@ -41,6 +43,7 @@ use ConfigKit\Service\LibraryService;
 use ConfigKit\Service\LookupCellService;
 use ConfigKit\Service\LookupTableService;
 use ConfigKit\Service\ModuleService;
+use ConfigKit\Service\StepService;
 use ConfigKit\Service\TemplateService;
 use ConfigKit\Settings\GeneralSettings;
 
@@ -127,7 +130,10 @@ final class Plugin {
 		$router->add( new LookupTablesController( new LookupTableService( $lookup_repo, $cell_repo ) ) );
 		$router->add( new LookupCellsController( new LookupCellService( $cell_repo, $lookup_repo ) ) );
 		$router->add( new FamiliesController( new FamilyService( new FamilyRepository( $wpdb ) ) ) );
-		$router->add( new TemplatesController( new TemplateService( new TemplateRepository( $wpdb ) ) ) );
+		$template_repo = new TemplateRepository( $wpdb );
+		$step_repo     = new StepRepository( $wpdb );
+		$router->add( new TemplatesController( new TemplateService( $template_repo ) ) );
+		$router->add( new StepsController( new StepService( $step_repo, $template_repo ) ) );
 		return $router;
 	}
 

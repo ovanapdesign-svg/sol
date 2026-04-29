@@ -12,10 +12,12 @@
 	];
 
 	const state = {
-		view: 'loading', // 'list' | 'form' | 'detail_placeholder' | 'loading'
+		view: 'loading', // 'list' | 'form' | 'detail' | 'step_form' | 'loading'
 		list: { items: [], total: 0 },
 		editing: null,
-		viewing: null, // template being "Open"-ed (placeholder view in B1)
+		viewing: null, // template currently opened in detail view
+		steps: { items: [], total: 0 },
+		editingStep: null,
 		dirty: false,
 		message: null,
 		fieldErrors: {},
@@ -72,6 +74,9 @@
 			created: 'Template created.',
 			updated: 'Template metadata updated.',
 			deleted: 'Template archived.',
+			step_created: 'Step created.',
+			step_updated: 'Step updated.',
+			step_deleted: 'Step deleted.',
 		} )[ v ] || null;
 	}
 
@@ -151,21 +156,169 @@
 		}
 	}
 
-	async function openTemplatePlaceholder( id ) {
+	async function openTemplateDetail( id ) {
 		state.view = 'loading';
 		render();
 		try {
 			const data = await ConfigKit.request( '/templates/' + id );
 			state.viewing = data.record;
-			state.view = 'detail_placeholder';
+			const stepsData = await ConfigKit.request( '/templates/' + id + '/steps' );
+			state.steps = stepsData;
+			state.view = 'detail';
 			clearMessages();
-			setUrl( { action: null, id: id } );
+			setUrl( { action: null, id: id, step_id: null, step_action: null } );
 			render();
 		} catch ( err ) {
 			showError( err );
 			state.view = 'list';
 			render();
 		}
+	}
+
+	function showNewStepForm() {
+		if ( ! state.viewing ) return;
+		state.view = 'step_form';
+		state.editingStep = blankStep();
+		state.dirty = false;
+		clearMessages();
+		setUrl( { action: null, id: state.viewing.id, step_action: 'new', step_id: null } );
+		render();
+	}
+
+	async function loadStep( templateId, stepId ) {
+		state.view = 'loading';
+		render();
+		try {
+			if ( ! state.viewing || state.viewing.id !== templateId ) {
+				const tmplResp = await ConfigKit.request( '/templates/' + templateId );
+				state.viewing = tmplResp.record;
+			}
+			const stepResp = await ConfigKit.request( '/templates/' + templateId + '/steps/' + stepId );
+			state.editingStep = stepResp.record;
+			state.view = 'step_form';
+			state.dirty = false;
+			clearMessages();
+			setUrl( { action: null, id: templateId, step_id: stepId, step_action: null } );
+			render();
+		} catch ( err ) {
+			showError( err );
+			state.view = 'list';
+			render();
+		}
+	}
+
+	function blankStep() {
+		return {
+			id: 0,
+			step_key: '',
+			label: '',
+			description: '',
+			sort_order: '',
+			is_required: false,
+			is_collapsed_by_default: false,
+			version_hash: '',
+		};
+	}
+
+	async function saveStep() {
+		if ( state.busy || ! state.viewing ) return;
+		state.busy = true;
+		render();
+
+		const rec = state.editingStep;
+		const wasNew = ! ( rec.id > 0 );
+		const payload = {
+			step_key: rec.step_key,
+			label: rec.label,
+			description: rec.description || null,
+			is_required: !! rec.is_required,
+			is_collapsed_by_default: !! rec.is_collapsed_by_default,
+		};
+		if ( rec.sort_order !== '' && rec.sort_order !== null ) {
+			payload.sort_order = rec.sort_order;
+		}
+
+		let success = false;
+		try {
+			if ( rec.id > 0 ) {
+				payload.version_hash = rec.version_hash;
+				await ConfigKit.request(
+					'/templates/' + state.viewing.id + '/steps/' + rec.id,
+					{ method: 'PUT', body: payload }
+				);
+			} else {
+				await ConfigKit.request(
+					'/templates/' + state.viewing.id + '/steps',
+					{ method: 'POST', body: payload }
+				);
+			}
+			success = true;
+		} catch ( err ) {
+			showError( err );
+		} finally {
+			state.busy = false;
+		}
+
+		if ( success ) {
+			redirectToTemplate( state.viewing.id, wasNew ? 'step_created' : 'step_updated' );
+			return;
+		}
+		render();
+	}
+
+	async function deleteStep() {
+		if ( ! state.viewing || ! state.editingStep || ! state.editingStep.id ) return;
+		if ( ! window.confirm( 'Delete this step? This action is permanent. Fields inside this step will become orphaned (Phase 3 B3 will offer reassignment).' ) ) return;
+		try {
+			await ConfigKit.request(
+				'/templates/' + state.viewing.id + '/steps/' + state.editingStep.id,
+				{ method: 'DELETE' }
+			);
+			redirectToTemplate( state.viewing.id, 'step_deleted' );
+		} catch ( err ) {
+			showError( err );
+			render();
+		}
+	}
+
+	async function reorderStep( stepId, direction ) {
+		if ( ! state.viewing ) return;
+		const items = state.steps.items.slice();
+		const idx = items.findIndex( ( s ) => s.id === stepId );
+		if ( idx < 0 ) return;
+		const swap = direction === 'up' ? idx - 1 : idx + 1;
+		if ( swap < 0 || swap >= items.length ) return;
+
+		// Swap and rebuild sort_order (1..N).
+		const a = items[ idx ];
+		items[ idx ] = items[ swap ];
+		items[ swap ] = a;
+		const payload = items.map( ( s, i ) => ( { step_id: s.id, sort_order: i + 1 } ) );
+
+		try {
+			await ConfigKit.request(
+				'/templates/' + state.viewing.id + '/steps/reorder',
+				{ method: 'POST', body: { items: payload } }
+			);
+			openTemplateDetail( state.viewing.id );
+		} catch ( err ) {
+			showError( err );
+			render();
+		}
+	}
+
+	function redirectToTemplate( templateId, flag ) {
+		const url = new URL( window.location.href );
+		[ 'action', 'step_id', 'step_action' ].forEach( ( p ) => url.searchParams.delete( p ) );
+		url.searchParams.set( 'id', String( templateId ) );
+		url.searchParams.set( 'saved', flag );
+		window.location.href = url.toString();
+	}
+
+	function cancelToTemplate() {
+		if ( state.dirty && ! window.confirm( 'Discard unsaved changes?' ) ) return;
+		if ( state.viewing ) openTemplateDetail( state.viewing.id );
+		else loadList();
 	}
 
 	function blankRecord() {
@@ -255,7 +408,8 @@
 		}
 		if ( state.view === 'list' ) root.appendChild( renderList() );
 		else if ( state.view === 'form' ) root.appendChild( renderForm() );
-		else if ( state.view === 'detail_placeholder' ) root.appendChild( renderDetailPlaceholder() );
+		else if ( state.view === 'detail' ) root.appendChild( renderDetail() );
+		else if ( state.view === 'step_form' ) root.appendChild( renderStepForm() );
 	}
 
 	function messageBanner( m ) {
@@ -329,7 +483,7 @@
 							href: '#',
 							onClick: ( ev ) => {
 								ev.preventDefault();
-								openTemplatePlaceholder( t.id );
+								openTemplateDetail( t.id );
 							},
 						},
 						t.name
@@ -428,45 +582,211 @@
 		return wrap;
 	}
 
-	function renderDetailPlaceholder() {
+	function renderDetail() {
 		const t = state.viewing;
 		const wrap = el( 'div' );
 
-		const meta = el( 'div', { class: 'configkit-form' } );
-		meta.appendChild( el( 'h2', null, t.name ) );
-		meta.appendChild( el(
+		// Template header (metadata summary).
+		const header = el( 'div', { class: 'configkit-form' } );
+		header.appendChild( el( 'h2', null, t.name ) );
+		header.appendChild( el(
 			'p',
 			{ class: 'description' },
-			'template_key: '
-		) );
-		meta.appendChild( el( 'code', null, t.template_key ) );
-		meta.appendChild( el(
-			'p',
-			{ class: 'description' },
-			t.family_key ? 'Family: ' + t.family_key + ' · ' : '',
-			'Status: ' + t.status
+			'template_key: ',
+			el( 'code', null, t.template_key ),
+			t.family_key ? ' · Family: ' + t.family_key : '',
+			' · Status: ' + t.status
 		) );
 
-		const placeholder = el(
-			'div',
-			{ class: 'configkit-empty' },
-			el( 'p', null, 'Steps and fields editor coming in next phase.' ),
-			el(
-				'p',
-				{ class: 'configkit-empty__hint' },
-				'B1 ships list + metadata only. Step CRUD lands in B2; field CRUD in B3; rules drawer in B4; publish workflow in B5.'
-			)
-		);
-		meta.appendChild( placeholder );
+		if ( state.message ) header.appendChild( messageBanner( state.message ) );
 
-		meta.appendChild( el(
+		header.appendChild( el(
 			'div',
 			{ class: 'configkit-form__footer' },
 			el( 'button', { type: 'button', class: 'button', onClick: () => loadTemplateForEdit( t.id ) }, 'Edit metadata' ),
 			el( 'button', { type: 'button', class: 'button', onClick: cancelToList }, 'Back to list' )
 		) );
+		wrap.appendChild( header );
 
-		wrap.appendChild( meta );
+		// Steps panel.
+		const stepsBlock = el( 'div', { class: 'configkit-form configkit-items' } );
+		stepsBlock.appendChild( el(
+			'div',
+			{ class: 'configkit-list__header' },
+			el( 'h3', null, 'Steps' ),
+			el(
+				'button',
+				{ type: 'button', class: 'button button-secondary', onClick: showNewStepForm },
+				'+ Add step'
+			)
+		) );
+
+		const steps = state.steps.items || [];
+		if ( steps.length === 0 ) {
+			stepsBlock.appendChild( el(
+				'div',
+				{ class: 'configkit-empty' },
+				el( 'p', null, 'No steps yet.' ),
+				el(
+					'p',
+					{ class: 'configkit-empty__hint' },
+					'Templates need at least one step. Steps group fields the customer fills out (e.g. Mål, Duk og farge, Betjening).'
+				),
+				el(
+					'p',
+					null,
+					el( 'button', { type: 'button', class: 'button button-primary', onClick: showNewStepForm }, '+ Add first step' )
+				)
+			) );
+		} else {
+			const table = el(
+				'table',
+				{ class: 'wp-list-table widefat striped configkit-steps-table' },
+				el(
+					'thead',
+					null,
+					el(
+						'tr',
+						null,
+						el( 'th', { class: 'configkit-steps-table__order' }, 'Order' ),
+						el( 'th', null, 'Step name' ),
+						el( 'th', null, 'step_key' ),
+						el( 'th', null, 'Required' ),
+						el( 'th', null, 'Sort' ),
+						el( 'th', { class: 'configkit-actions' }, '' )
+					)
+				)
+			);
+
+			const tbody = el( 'tbody' );
+			steps.forEach( ( s, i ) => {
+				tbody.appendChild( el(
+					'tr',
+					null,
+					el(
+						'td',
+						{ class: 'configkit-steps-table__order' },
+						el(
+							'button',
+							{
+								type: 'button',
+								class: 'button-link',
+								disabled: i === 0,
+								onClick: () => reorderStep( s.id, 'up' ),
+								'aria-label': 'Move up',
+								title: 'Move up',
+							},
+							'▲'
+						),
+						el(
+							'button',
+							{
+								type: 'button',
+								class: 'button-link',
+								disabled: i === steps.length - 1,
+								onClick: () => reorderStep( s.id, 'down' ),
+								'aria-label': 'Move down',
+								title: 'Move down',
+							},
+							'▼'
+						)
+					),
+					el(
+						'td',
+						null,
+						el(
+							'a',
+							{
+								href: '#',
+								onClick: ( ev ) => {
+									ev.preventDefault();
+									loadStep( t.id, s.id );
+								},
+							},
+							s.label
+						)
+					),
+					el( 'td', null, el( 'code', null, s.step_key ) ),
+					el( 'td', null, s.is_required ? 'Yes' : 'No' ),
+					el( 'td', null, String( s.sort_order ) ),
+					el(
+						'td',
+						{ class: 'configkit-actions' },
+						el( 'button', { type: 'button', class: 'button', onClick: () => loadStep( t.id, s.id ) }, 'Edit' )
+					)
+				) );
+			} );
+			table.appendChild( tbody );
+			stepsBlock.appendChild( table );
+		}
+
+		wrap.appendChild( stepsBlock );
+		return wrap;
+	}
+
+	function renderStepForm() {
+		const rec = state.editingStep;
+		const t = state.viewing;
+		const isNew = rec.id === 0;
+		const wrap = el( 'div', { class: 'configkit-form' } );
+		wrap.appendChild( el(
+			'h2',
+			null,
+			isNew ? 'New step in: ' + t.name : 'Edit step: ' + rec.label
+		) );
+		if ( state.message ) wrap.appendChild( messageBanner( state.message ) );
+
+		wrap.appendChild( fieldset( 'Basics', [
+			textField( 'Step name', 'label', rec.label, ( v ) => {
+				rec.label = v;
+				state.dirty = true;
+				if ( ! rec.step_key && isNew ) {
+					rec.step_key = slugify( v );
+					render();
+				}
+			} ),
+			textField( 'step_key', 'step_key', rec.step_key, ( v ) => {
+				rec.step_key = v;
+				state.dirty = true;
+			}, {
+				mono: true,
+				disabled: ! isNew,
+				help: isNew
+					? 'Lowercase, snake_case, 3–64 chars. Locked after save. Unique within this template.'
+					: 'step_key is immutable after a step is saved.',
+			} ),
+			textareaField( 'Description', 'description', rec.description || '', ( v ) => {
+				rec.description = v;
+				state.dirty = true;
+			} ),
+		] ) );
+
+		wrap.appendChild( fieldset( 'Behavior', [
+			checkboxField( 'Required', 'is_required', !! rec.is_required, ( v ) => {
+				rec.is_required = v;
+				state.dirty = true;
+			} ),
+			checkboxField( 'Collapsed by default', 'is_collapsed_by_default', !! rec.is_collapsed_by_default, ( v ) => {
+				rec.is_collapsed_by_default = v;
+				state.dirty = true;
+			} ),
+			el( 'p', { class: 'description' }, 'Visibility is controlled by rules at render time, not stored on the step itself.' ),
+		] ) );
+
+		wrap.appendChild( el(
+			'div',
+			{ class: 'configkit-form__footer' },
+			el(
+				'button',
+				{ type: 'button', class: 'button button-primary', disabled: state.busy, onClick: saveStep },
+				state.busy ? 'Saving…' : 'Save step'
+			),
+			el( 'button', { type: 'button', class: 'button', onClick: cancelToTemplate }, 'Cancel' ),
+			rec.id > 0
+				? el( 'button', { type: 'button', class: 'button button-link-delete', onClick: deleteStep }, 'Delete step' )
+				: null
+		) );
+
 		return wrap;
 	}
 
@@ -534,18 +854,45 @@
 		);
 	}
 
+	function checkboxField( label, name, checked, onChange ) {
+		return el(
+			'label',
+			{ class: 'configkit-checkbox' },
+			el( 'input', {
+				type: 'checkbox',
+				checked: !! checked,
+				onChange: ( ev ) => onChange( ev.target.checked ),
+			} ),
+			' ',
+			label
+		);
+	}
+
 	function init() {
 		const params = new URLSearchParams( window.location.search );
 		const action = params.get( 'action' );
 		const id = parseInt( params.get( 'id' ) || '0', 10 );
+		const stepAction = params.get( 'step_action' );
+		const stepId = parseInt( params.get( 'step_id' ) || '0', 10 );
 		const savedMessage = consumeSavedFlag();
 
 		if ( action === 'new' ) {
 			showNewForm();
 		} else if ( action === 'edit' && id > 0 ) {
 			loadTemplateForEdit( id );
+		} else if ( id > 0 && stepId > 0 ) {
+			loadStep( id, stepId );
+		} else if ( id > 0 && stepAction === 'new' ) {
+			openTemplateDetail( id ).then( () => {
+				showNewStepForm();
+			} );
 		} else if ( id > 0 ) {
-			openTemplatePlaceholder( id );
+			openTemplateDetail( id ).then( () => {
+				if ( savedMessage ) {
+					state.message = { kind: 'success', text: savedMessage };
+					render();
+				}
+			} );
 		} else {
 			loadList().then( () => {
 				if ( savedMessage ) {
