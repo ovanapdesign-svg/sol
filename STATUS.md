@@ -95,9 +95,10 @@ it." Both Batch 2 specs are DRAFT v1; chosen interpretations:
 6. **Conflict resolution — same priority.** `RULE_ENGINE_CONTRACT.md §6.5`
    says "the one with the higher `sort_order` wins". → Rules sorted by
    `priority` ascending, then `sort_order` ascending. Later rules
-   overwrite earlier ones, so a higher `sort_order` wins. Emitted as
-   `rule.conflict` marker in `rule_results` when two rules in the same
-   priority bucket affect the same field.
+   overwrite earlier ones, so a higher `sort_order` wins. Precedence is
+   implemented; spec-mentioned `rule.conflict` diagnostic marker is
+   deferred (detection requires per-bucket field-touch tracking, not
+   needed for correctness — only diagnostics).
 7. **Width / height fields for `per_m2`.** `PRICING_CONTRACT.md §4`
    defines `per_m2 = amount × (width × height) / 1,000,000` but does not
    say how the engine identifies width/height fields. → Caller passes
@@ -120,7 +121,18 @@ it." Both Batch 2 specs are DRAFT v1; chosen interpretations:
 
 ### Progress
 
-(Implementation in progress.)
+| Item                                                | Status   | Notes                                                                  |
+|-----------------------------------------------------|----------|------------------------------------------------------------------------|
+| `ConfigKit\Engines\RuleEngine`                      | complete | All operators (equals/not_equals/greater_than/less_than/between/contains/in/not_in/is_selected/is_empty/all/any/not/always); all 12 actions; single-pass eval; reset cascade for hidden fields and disabled selections; missing-target marker. |
+| `ConfigKit\Engines\LookupEngine`                    | complete | Three match strategies (exact, round_up, nearest); 2D and 3D matching; price-group filtering; reasons `no_cell` and `exceeds_max_dimensions`. |
+| `ConfigKit\Engines\PricingEngine`                   | complete | All pricing modes; hidden-field exclusion; sale-price precedence; rule surcharges (amount + percent_of_base); minimum price floor; negative clamp; rounding (4 modes × any step); VAT (incl/excl/off); Woo addon availability check; lookup mismatch blocks. Uses LookupEngine via DI. |
+| `ConfigKit\Engines\ValidationEngine`                | complete | Effective-required logic (FIELD_MODEL §11); type coercion (number→int/float, scalar→array for checkbox, array dropped for radio/dropdown/text); blocked-by-rule propagation. |
+| PHPUnit unit tests                                  | complete | 78 tests / 163 assertions, all green. Covers each engine spec section with positive and negative cases. |
+| Engine purity                                       | complete | `grep -rE "wp_\|get_option\|WP_Query\|\\$wpdb" src/Engines/` returns zero matches. |
+| `declare(strict_types=1)` everywhere in `src/Engines/` | complete |                                                                        |
+
+**Phase 2 status:** code complete, all tests green, engines pure. No DB
+writes, no WP function calls inside engine methods.
 
 ---
 
@@ -156,9 +168,10 @@ it." Both Batch 2 specs are DRAFT v1; chosen interpretations:
 
 ## Last updated
 
-2026-04-29 — Phase 1 verified on staging. 16 ConfigKit tables created,
-migration runner operational, idempotency confirmed (~140 ms total).
-Phase 1 closed; awaiting owner approval to enter Phase 2.
+2026-04-29 — Phase 2 engines implemented. RuleEngine, LookupEngine,
+PricingEngine, ValidationEngine pure-PHP, no WP dependencies.
+PHPUnit: 78 tests / 163 assertions, all green. Awaiting owner approval
+to enter Phase 3.
 
 ---
 
