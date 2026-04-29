@@ -61,7 +61,66 @@ add modules in Phase 3.
 
 ## Phase 2 — Engines
 
-(Nothing started.)
+### Phase 2 questions
+
+Resolved before implementation per owner instruction "If the spec is
+ambiguous, document the chosen behavior in STATUS.md before implementing
+it." Both Batch 2 specs are DRAFT v1; chosen interpretations:
+
+1. **VAT rate source.** `PRICING_CONTRACT.md §11` says the engine delegates
+   rate resolution to Woo at compute time. The Phase 2 prompt forbids WP
+   function calls inside engines. → Engine accepts
+   `config.vat_rate_percent` as input. A non-engine caller resolves the
+   rate from Woo and passes it in.
+2. **Addon product data.** `PRICING_CONTRACT.md §16` references Woo
+   stock / orphan checks. → Caller pre-resolves addons into
+   `addon_products_resolved` keyed by SKU with
+   `{ label, price, available, product_id }`. Engine treats
+   `available = false` as a block.
+3. **Library item resolution.** `PRICING_CONTRACT.md §3 / §9` reference
+   library item prices and sale prices. → Caller pre-resolves selected
+   library items into `library_items_resolved` keyed by
+   `library_key:item_key` with `{ label, price, sale_price, price_group_key }`.
+4. **Lookup cell data.** Phase 2 prompt explicitly says `LookupEngine`
+   takes `cells_data` as input. → Engine never reads
+   `wp_configkit_lookup_cells` directly.
+5. **Reset cascade — `options_filter excludes value` trigger.**
+   `RULE_ENGINE_CONTRACT.md §6.4` lists four reset triggers; one requires
+   evaluating filters against actual library / source data the engine
+   does not have. → Engine implements three of four triggers
+   (`visible = false`, `reset_value` action targeted, `disabled_options`
+   includes selected value). The fourth is recorded as a filter on
+   `fields[*].options_filter`; enforcement is the renderer's or a later
+   server-side validation pass's responsibility.
+6. **Conflict resolution — same priority.** `RULE_ENGINE_CONTRACT.md §6.5`
+   says "the one with the higher `sort_order` wins". → Rules sorted by
+   `priority` ascending, then `sort_order` ascending. Later rules
+   overwrite earlier ones, so a higher `sort_order` wins. Emitted as
+   `rule.conflict` marker in `rule_results` when two rules in the same
+   priority bucket affect the same field.
+7. **Width / height fields for `per_m2`.** `PRICING_CONTRACT.md §4`
+   defines `per_m2 = amount × (width × height) / 1,000,000` but does not
+   say how the engine identifies width/height fields. → Caller passes
+   `width_field_key` and `height_field_key` in pricing input. Missing →
+   `per_m2` fields contribute 0 and a
+   `pricing.per_m2_dimensions_missing` warning is emitted.
+8. **Minimum price floor.** `PRICING_CONTRACT.md §12` references a
+   template-level minimum price stored in a column that does not yet
+   exist in `DATA_MODEL.md §3.5`. → Engine accepts
+   `config.minimum_price` (float|null) as input. Caller passes `null`
+   until the column lands.
+9. **`spec` vs `spec_json` in rule input.** `RULE_ENGINE_CONTRACT.md §6.1`
+   implies parsed rules. → Each rule input carries `spec` (already-decoded
+   array). Callers `json_decode` `spec_json` from the DB and supply
+   `spec`.
+10. **`set_default` ordering.** `RULE_ENGINE_CONTRACT.md §6.3` step 5
+    applies defaults after the reset cascade. → `set_default` actions
+    are queued during rule application, not applied in place; only
+    applied after cascade if the field's effective value is null/empty.
+
+### Progress
+
+(Implementation in progress.)
 
 ---
 
