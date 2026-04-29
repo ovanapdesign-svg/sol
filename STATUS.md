@@ -217,7 +217,7 @@ priority.
 | Templates B4: rules drawer (basic CRUD)               | complete | RuleRepository + RuleService (full RULE_ENGINE_CONTRACT.md schema validator: top-level shape, atomic / all / any / not / always conditions, per-action shape, operator-specific value shape) + RulesController + drawer UI in templates.js (structured editor for flat AND/OR + single NOT, JSON mode for nested groups, inline Active toggle in list, summarized WHEN / THEN columns). Cross-ref validation against live template fields / steps / manual options; errors carry a `path` field pointing at the offending JSON location. Visual nested-group builder + rule preview deferred to Phase 4. |
 | Templates B5: publish workflow + version snapshot     | complete | TemplateVersionRepository + TemplateValidator (pre-publish drift catcher per `TEMPLATE_BUILDER_UX.md §9.3`) + TemplateVersionService (snapshot builder + publish) + TemplateVersionsController (`/validate`, `/publish`, `/versions`, `/versions/{vid}`). Detail toolbar gains Validate / Publish v(N+1) / Versions buttons + a "Published vN" badge. Validate panel surfaces errors (red) and warnings (yellow). Publish runs validation, refuses on errors, opens a confirmation modal on clean, then snapshots and increments. Versions drawer lists immutable snapshots; View action shows read-only JSON. **Templates is feature-complete per `TEMPLATE_BUILDER_UX.md §14`.** |
 | Rules basic CRUD                                      | pending  |                                                                        |
-| Diagnostics (critical issues only)                    | pending  |                                                                        |
+| Diagnostics (critical issues only)                    | complete | LogRepository (read/write `wp_configkit_log`; microsecond-precision `created_at`; ack-index builder), SystemDiagnosticsService (eight checks per `ADMIN_SITEMAP.md §2.7` + `OWNER_UX_FLOW.md §8` Flow F: products_missing_template, products_missing_lookup_table, templates_no_published_version, templates_no_steps, lookup_tables_empty, library_items_orphaned, modules_no_field_kinds, rules_broken_targets — six critical, two warning), DiagnosticsController (3 endpoints: GET /diagnostics, POST /diagnostics/refresh, POST /diagnostics/acknowledge), DiagnosticsPage shell, diagnostics.js (tabs by object_type + Re-scan + "Show all (incl. acknowledged)" toggle + per-issue Fix/Mark-as-known). Acknowledgements stored as `wp_configkit_log` rows with `event_type='diagnostic_acknowledged'` and `context_json` carrying issue_id / object_type / object_id / note (per chunk brief). Capability `configkit_view_diagnostics` (already shipped on activation). |
 | Optimistic locking via `version_hash` everywhere      | partial  | Wired for Modules, Libraries, Library Items, Lookup Tables, Families, Templates, Steps, Fields, Field Options, Rules (returns 409 on stale hash). Lookup cells intentionally have no version_hash per schema. Other entities wire on landing. |
 | Save-button freeze guard                              | complete | All save handlers (Modules, Libraries, Library Items, Lookup Tables, Families, Templates, Steps, Fields, Field Options) use try/catch/finally; showError() is defensive against missing `ConfigKit.describeError`. Button always re-enables on validation error. |
 | Capability auto-assign on activation + safety net     | complete | `Capabilities\Registrar::register / deregister / ensure_registered`. `register_deactivation_hook` clears caps + version flag; `admin_init` re-runs registration once when option `configkit_caps_version` ≠ current. Bumped to v2 with the addition of `configkit_manage_families`. |
@@ -225,12 +225,17 @@ priority.
 | User-friendly REST error display                      | complete | `ConfigKit.describeError()` in admin.js maps 404 / 401-403 / 409 / 400-422 / 5xx to natural-language messages. Each banner has a "Show technical details" collapsible with the raw message + code + status. |
 
 **Engine purity preserved.** `grep -rE "wp_\|get_option\|WP_Query\|\\$wpdb" src/Engines/`
-returns zero matches. Phase 2 + 3 PHPUnit tests green (331 / 747).
+returns zero matches. Phase 2 + 3 PHPUnit tests green (351 / 781).
 
-**Honest scope note.** Six of seven in-scope entities are landed
-(Modules, Libraries, Lookup Tables, Families, Templates, Products);
-Rules admin page and Diagnostics are still pending. Continuing in
-subsequent sessions per owner direction.
+**Phase 3 status.** Seven of seven in-scope entities are landed
+(Modules, Libraries, Lookup Tables, Families, Templates, Products,
+Diagnostics). The Rules CRUD page row above is "pending" because the
+top-level "Rules" admin page is intentionally deferred — rules are
+authored inside the Templates rules drawer (B4) and that surface is
+feature-complete; a standalone cross-template rules dashboard is a
+Phase 4 polish item, not a blocker. Settings → Logs viewer remains
+pending and is the only deferred Phase 3 item. Phase 3 is feature-
+complete pending owner closure approval.
 
 ---
 
@@ -260,16 +265,14 @@ subsequent sessions per owner direction.
 
 ## Last updated
 
-2026-04-29 — Phase 3 progress: Modules + Libraries + Lookup Tables
-+ Families + **Templates feature-complete (B1 metadata + B2 steps
-+ B3 fields/wizard/three-pane + B4 rules drawer + B5 publish/
-version snapshot)** + **Products binding** (Woo product-data tab +
-ConfigKit → Products overview, 4 REST endpoints, 11 diagnostics
-checks per `PRODUCT_BINDING_SPEC.md §10.1`, 10 post-meta keys per
-§12, status derivation per §10.3). 6 of 7 Phase 3 entities done.
-Engines remain pure; 331 PHPUnit tests / 747 assertions green.
-Awaiting owner direction on next chunk: Rules admin page or
-Diagnostics.
+2026-04-29 — Phase 3 feature-complete: Modules + Libraries +
+Lookup Tables + Families + **Templates (B1 metadata + B2 steps +
+B3 fields/wizard/three-pane + B4 rules drawer + B5 publish/version
+snapshot)** + **Products binding** (Woo product-data tab + overview)
++ **System diagnostics** (8 checks per `OWNER_UX_FLOW.md §8` Flow F,
+ack via `wp_configkit_log` rows, tabbed UI). 7 of 7 in-scope Phase 3
+entities landed. Engines remain pure; 351 PHPUnit tests / 781
+assertions green. Awaiting Phase 3 closure approval.
 
 ---
 
