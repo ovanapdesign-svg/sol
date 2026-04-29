@@ -10,11 +10,13 @@ use ConfigKit\Admin\AssetLoader;
 use ConfigKit\Admin\Menu;
 use ConfigKit\Admin\Pages\AbstractPage;
 use ConfigKit\Admin\Pages\DashboardPage;
+use ConfigKit\Admin\Pages\SettingsPage;
 use ConfigKit\Capabilities\Registrar;
 use ConfigKit\CLI\Command;
 use ConfigKit\Migration\Runner;
 use ConfigKit\Repository\CountsService;
 use ConfigKit\Rest\Router;
+use ConfigKit\Settings\GeneralSettings;
 
 final class Plugin {
 
@@ -30,6 +32,7 @@ final class Plugin {
 		if ( \is_admin() ) {
 			\add_action( 'admin_menu', [ $this, 'register_admin_menu' ] );
 			\add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_admin_assets' ] );
+			\add_action( 'admin_init', [ $this, 'register_admin_init' ] );
 		}
 
 		$this->build_rest_router()->init();
@@ -48,6 +51,18 @@ final class Plugin {
 		$this->build_asset_loader()->enqueue( $hook_suffix );
 	}
 
+	public function register_admin_init(): void {
+		$this->build_general_settings()->register();
+	}
+
+	private function build_general_settings(): GeneralSettings {
+		static $instance = null;
+		if ( $instance === null ) {
+			$instance = new GeneralSettings();
+		}
+		return $instance;
+	}
+
 	/**
 	 * @return list<AbstractPage>
 	 */
@@ -56,6 +71,7 @@ final class Plugin {
 
 		return [
 			new DashboardPage( new CountsService( $wpdb ) ),
+			new SettingsPage( $this->build_general_settings() ),
 		];
 	}
 
