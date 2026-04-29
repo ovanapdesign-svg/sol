@@ -616,3 +616,151 @@
 .configkit-versions-drawer__panel {
 	max-width: 880px;
 }
+
+/* ---- Product binding (Woo product tab) + Products overview ---- */
+
+.configkit-binding {
+	margin: 12px 0 60px;
+}
+
+.configkit-binding__section {
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	padding: 16px 20px;
+	margin-bottom: 16px;
+}
+
+.configkit-binding__section-title {
+	margin: 0 0 12px;
+	font-size: 14px;
+	font-weight: 600;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.configkit-binding__status-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.configkit-binding__status-busy {
+	color: #50575e;
+	font-style: italic;
+}
+
+.configkit-binding__field-card {
+	border: 1px solid #ececec;
+	border-radius: 3px;
+	padding: 10px 14px;
+	margin: 8px 0;
+	background: #fafafa;
+}
+
+.configkit-binding__field-card h4 {
+	margin: 0 0 6px;
+	font-size: 13px;
+}
+
+.configkit-binding__override-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 16px;
+	margin-bottom: 8px;
+}
+
+.configkit-binding__diag-actions {
+	margin-bottom: 12px;
+}
+
+.configkit-binding__checks {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.configkit-binding__check {
+	padding: 6px 10px;
+	margin-bottom: 3px;
+	border-radius: 3px;
+	font-size: 13px;
+}
+
+.configkit-binding__check--pass {
+	background: #f0f6e8;
+	border-left: 3px solid #46b450;
+}
+
+.configkit-binding__check--warn {
+	background: #fcf9e8;
+	border-left: 3px solid #b08c00;
+}
+
+.configkit-binding__check--fail {
+	background: #fdf0f0;
+	border-left: 3px solid #b32d2e;
+}
+
+.configkit-binding__savebar {
+	position: sticky;
+	bottom: 0;
+	background: #fff;
+	border-top: 1px solid #dcdcde;
+	padding: 12px 16px;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-top: 16px;
+	box-shadow: 0 -2px 6px rgba( 0, 0, 0, 0.05 );
+}
+
+.configkit-binding__savebar-meta {
+	color: #50575e;
+	font-size: 12px;
+}
+
+.configkit-badge--warning {
+	background: #fcf9e8;
+	color: #614500;
+	border: 1px solid #d3ba50;
+}
+
+/* Products overview */
+
+.configkit-products__filters {
+	display: flex;
+	gap: 16px;
+	align-items: center;
+	margin: 12px 0;
+}
+
+.configkit-products__filters label {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 13px;
+}
+
+.configkit-products__poststatus {
+	color: #50575e;
+	font-size: 12px;
+}
+
+.configkit-products-table code {
+	font-size: 11px;
+}
+
+.configkit-pagination {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	margin: 16px 0;
+}
+
+.configkit-pagination__count {
+	color: #50575e;
+	font-size: 13px;
+	margin-right: auto;
+}
