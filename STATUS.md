@@ -195,7 +195,7 @@ priority.
 | Templates B2: steps CRUD inside template              | complete | StepRepository / StepService / StepsController + reorder endpoint. Detail view replaced placeholder with single-column header + Steps panel. step_key unique per template (different templates can share keys). Real DELETE (no is_active in schema; B5 publish will snapshot history). Reorder UI is up/down arrow buttons; HTML5 drag-drop deferred to B3 with the three-pane layout. |
 | Templates B3: fields CRUD + 3-pane builder layout     | complete | FieldRepository, FieldOptionRepository, FieldService (full `FIELD_MODEL.md §8` axis-combination matrix + per-source `source_config` validation), FieldOptionService, FieldsController, FieldOptionsController. Detail view is a three-pane CSS-grid (steps / fields / settings) collapsing to single-column below 1024px. 3-step modal wizard for field creation (owner-friendly choices; no raw axis labels). Right-pane field editor: Basics, Source, Display style, Pricing, "Show in" flags, Required+default, Advanced. Manual options inline editor. Reorder via up/down buttons. fields use real DELETE; field_options soft-delete (per schema). Mobile tab-bar layout deferred. |
 | Templates B4: rules drawer (basic CRUD)               | complete | RuleRepository + RuleService (full RULE_ENGINE_CONTRACT.md schema validator: top-level shape, atomic / all / any / not / always conditions, per-action shape, operator-specific value shape) + RulesController + drawer UI in templates.js (structured editor for flat AND/OR + single NOT, JSON mode for nested groups, inline Active toggle in list, summarized WHEN / THEN columns). Cross-ref validation against live template fields / steps / manual options; errors carry a `path` field pointing at the offending JSON location. Visual nested-group builder + rule preview deferred to Phase 4. |
-| Templates B5: publish workflow + version snapshot     | pending  | Touches `wp_configkit_template_versions` per `DATA_MODEL.md §3.6`.     |
+| Templates B5: publish workflow + version snapshot     | complete | TemplateVersionRepository + TemplateValidator (pre-publish drift catcher per `TEMPLATE_BUILDER_UX.md §9.3`) + TemplateVersionService (snapshot builder + publish) + TemplateVersionsController (`/validate`, `/publish`, `/versions`, `/versions/{vid}`). Detail toolbar gains Validate / Publish v(N+1) / Versions buttons + a "Published vN" badge. Validate panel surfaces errors (red) and warnings (yellow). Publish runs validation, refuses on errors, opens a confirmation modal on clean, then snapshots and increments. Versions drawer lists immutable snapshots; View action shows read-only JSON. **Templates is feature-complete per `TEMPLATE_BUILDER_UX.md §14`.** |
 | Rules basic CRUD                                      | pending  |                                                                        |
 | Diagnostics (critical issues only)                    | pending  |                                                                        |
 | Optimistic locking via `version_hash` everywhere      | partial  | Wired for Modules, Libraries, Library Items, Lookup Tables, Families, Templates, Steps, Fields, Field Options, Rules (returns 409 on stale hash). Lookup cells intentionally have no version_hash per schema. Other entities wire on landing. |
@@ -205,7 +205,7 @@ priority.
 | User-friendly REST error display                      | complete | `ConfigKit.describeError()` in admin.js maps 404 / 401-403 / 409 / 400-422 / 5xx to natural-language messages. Each banner has a "Show technical details" collapsible with the raw message + code + status. |
 
 **Engine purity preserved.** `grep -rE "wp_\|get_option\|WP_Query\|\\$wpdb" src/Engines/`
-returns zero matches. Phase 2 + 3 PHPUnit tests green (288 / 614).
+returns zero matches. Phase 2 + 3 PHPUnit tests green (305 / 659).
 
 **Honest scope note.** This phase has 14 suggested commits and ten
 admin pages. Two are landed; the remaining twelve are each a focused
@@ -241,12 +241,12 @@ in subsequent sessions per owner direction.
 ## Last updated
 
 2026-04-30 — Phase 3 progress: Modules + Libraries + Lookup Tables
-+ Families + Templates B1 (metadata) + B2 (steps) + B3 (fields +
-5-axis wizard + three-pane layout) + B4 (rules drawer with
-structured form + JSON toggle, full schema validator) complete.
-Templates B5 (publish + version snapshot) pending. Engines remain
-pure; 288 PHPUnit tests / 614 assertions green. Awaiting owner
-direction on next chunk: Templates B5, Products, or Diagnostics.
++ Families + **Templates feature-complete (B1 metadata + B2 steps
++ B3 fields/wizard/three-pane + B4 rules drawer + B5 publish/
+version snapshot)** per `TEMPLATE_BUILDER_UX.md §14`. 5 of 7 Phase 3
+entities done. Engines remain pure; 305 PHPUnit tests / 659
+assertions green. Awaiting owner direction on next chunk: Products
+binding, Rules admin page, or Diagnostics.
 
 ---
 
