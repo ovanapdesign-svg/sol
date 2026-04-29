@@ -248,3 +248,33 @@
 .configkit-chip__remove:hover {
 	color: #b32d2e;
 }
+
+.configkit-stats {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	padding: 16px 24px;
+	margin: 16px 0;
+}
+
+.configkit-stats > h2 {
+	margin: 0 0 4px;
+}
+
+.configkit-stats > p.description {
+	margin: 0 0 12px;
+}
+
+.configkit-stats .configkit-counts {
+	margin: 0;
+}
+
+.configkit-stats .configkit-counts__value {
+	font-size: 18px;
+}
+
+.configkit-cells-table .configkit-actions,
+.configkit-lookup-tables-table .configkit-actions {
+	width: 80px;
+	text-align: right;
+}
