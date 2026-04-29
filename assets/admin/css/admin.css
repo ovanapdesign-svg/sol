@@ -528,3 +528,35 @@
 	font-size: 13px;
 	user-select: none;
 }
+
+/* Rules drawer */
+.configkit-rules-drawer .configkit-rules-drawer__panel {
+	max-width: 880px;
+}
+
+.configkit-rules-table .configkit-actions {
+	width: 110px;
+	text-align: right;
+}
+
+.configkit-rule-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: flex-end;
+	padding: 8px;
+	border: 1px solid #dcdcde;
+	border-radius: 3px;
+	margin-bottom: 6px;
+	background: #fafafa;
+}
+
+.configkit-rule-row .configkit-field {
+	flex: 1 1 140px;
+	min-width: 140px;
+	margin-bottom: 0;
+}
+
+.configkit-rule-row .configkit-field--inline {
+	flex: 0 0 auto;
+}

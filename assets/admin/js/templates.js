@@ -66,11 +66,44 @@
 		editingField: null, // field whose editor is shown in the right pane
 		fieldOptions: { items: [], total: 0 },
 		wizard: null, // null when closed; otherwise { step: 1|2|3, kindChoice, sourceChoice, label, fieldKey }
+		// B4 additions — rules drawer
+		rulesOpen: false,
+		rules: { items: [], total: 0 },
+		editingRule: null, // structured form: { id, rule_key, name, priority, is_active, conjunction, conditions[], actions[], spec, version_hash, jsonMode, jsonText, jsonLocked }
 		dirty: false,
 		message: null,
 		fieldErrors: {},
 		busy: false,
 	};
+
+	const RULE_OPERATORS = [
+		[ 'equals', 'equals' ],
+		[ 'not_equals', 'not equals' ],
+		[ 'greater_than', 'greater than' ],
+		[ 'less_than', 'less than' ],
+		[ 'between', 'between (min,max)' ],
+		[ 'contains', 'contains' ],
+		[ 'is_selected', 'is selected (no value)' ],
+		[ 'is_empty', 'is empty (no value)' ],
+		[ 'in', 'in (comma-separated)' ],
+		[ 'not_in', 'not in (comma-separated)' ],
+	];
+
+	const RULE_ACTIONS = [
+		[ 'show_field', 'Show field' ],
+		[ 'hide_field', 'Hide field' ],
+		[ 'show_step', 'Show step' ],
+		[ 'hide_step', 'Hide step' ],
+		[ 'require_field', 'Require field' ],
+		[ 'disable_option', 'Disable option' ],
+		[ 'filter_source', 'Filter source by tag' ],
+		[ 'set_default', 'Set default value' ],
+		[ 'reset_value', 'Reset value' ],
+		[ 'switch_lookup_table', 'Switch lookup table' ],
+		[ 'add_surcharge', 'Add surcharge' ],
+		[ 'show_warning', 'Show warning' ],
+		[ 'block_add_to_cart', 'Block add to cart' ],
+	];
 
 	function el( tag, attrs, ...children ) {
 		const node = document.createElement( tag );
@@ -1001,6 +1034,11 @@
 			'div',
 			{ class: 'configkit-form__footer' },
 			el( 'button', { type: 'button', class: 'button', onClick: () => loadTemplateForEdit( t.id ) }, 'Edit metadata' ),
+			el(
+				'button',
+				{ type: 'button', class: 'button', onClick: openRulesDrawer },
+				'Rules (' + ( state.rules.total || 0 ) + ')'
+			),
 			el( 'button', { type: 'button', class: 'button', onClick: cancelToList }, 'Back to list' )
 		) );
 		wrap.appendChild( header );
@@ -1015,6 +1053,11 @@
 		// Wizard modal overlay (rendered last so it sits on top).
 		if ( state.wizard ) {
 			wrap.appendChild( renderWizard() );
+		}
+
+		// Rules drawer overlay.
+		if ( state.rulesOpen ) {
+			wrap.appendChild( renderRulesDrawer() );
 		}
 
 		return wrap;
@@ -1692,6 +1735,742 @@
 			' ',
 			label
 		);
+	}
+
+	// ---- Rules drawer ----
+
+	async function openRulesDrawer() {
+		state.rulesOpen = true;
+		clearMessages();
+		await refreshRules();
+		render();
+	}
+
+	function closeRulesDrawer() {
+		state.rulesOpen = false;
+		state.editingRule = null;
+		clearMessages();
+		render();
+	}
+
+	async function refreshRules() {
+		if ( ! state.viewing ) return;
+		try {
+			const data = await ConfigKit.request( '/templates/' + state.viewing.id + '/rules' );
+			state.rules = data;
+		} catch ( err ) {
+			showError( err );
+		}
+	}
+
+	async function newRuleInDrawer() {
+		state.editingRule = blankRuleForm();
+		clearMessages();
+		render();
+	}
+
+	async function loadRuleForEdit( ruleId ) {
+		try {
+			const resp = await ConfigKit.request( '/templates/' + state.viewing.id + '/rules/' + ruleId );
+			state.editingRule = ruleFormFromRecord( resp.record );
+			clearMessages();
+			render();
+		} catch ( err ) {
+			showError( err );
+			render();
+		}
+	}
+
+	async function deleteRule( ruleId ) {
+		if ( ! window.confirm( 'Soft-delete this rule? It will be marked inactive.' ) ) return;
+		try {
+			await ConfigKit.request(
+				'/templates/' + state.viewing.id + '/rules/' + ruleId,
+				{ method: 'DELETE' }
+			);
+			await refreshRules();
+			state.editingRule = null;
+			render();
+		} catch ( err ) {
+			showError( err );
+			render();
+		}
+	}
+
+	async function toggleRuleActive( rule ) {
+		try {
+			const spec = rule.spec || { when: { always: true }, then: [] };
+			await ConfigKit.request(
+				'/templates/' + state.viewing.id + '/rules/' + rule.id,
+				{
+					method: 'PUT',
+					body: {
+						name: rule.name,
+						priority: rule.priority,
+						sort_order: rule.sort_order,
+						is_active: ! rule.is_active,
+						spec: spec,
+						version_hash: rule.version_hash,
+					},
+				}
+			);
+			await refreshRules();
+			render();
+		} catch ( err ) {
+			showError( err );
+			render();
+		}
+	}
+
+	function blankRuleForm() {
+		return {
+			id: 0,
+			rule_key: '',
+			name: '',
+			priority: 100,
+			sort_order: 0,
+			is_active: true,
+			conjunction: 'all',
+			conditions: [ blankCondition() ],
+			actions: [ blankAction() ],
+			version_hash: '',
+			jsonMode: false,
+			jsonText: '',
+			jsonLocked: false,
+		};
+	}
+
+	function blankCondition() {
+		return { field: '', op: 'equals', value: '' };
+	}
+
+	function blankAction() {
+		return { action: 'show_step', step: '', field: '', option: '', value: '', message: '', level: 'info', label: '', amount: '', percent_of_base: '', lookup_table_key: '', filter_tag: '' };
+	}
+
+	function ruleFormFromRecord( record ) {
+		const form = {
+			id: record.id,
+			rule_key: record.rule_key,
+			name: record.name,
+			priority: record.priority,
+			sort_order: record.sort_order,
+			is_active: !! record.is_active,
+			version_hash: record.version_hash,
+			jsonMode: false,
+			jsonText: JSON.stringify( record.spec || {}, null, 2 ),
+			jsonLocked: false,
+			conjunction: 'all',
+			conditions: [],
+			actions: [],
+		};
+		const spec = record.spec || {};
+		// Parse `when` — only flat all/any/atomic/always shapes round-trip cleanly.
+		const w = spec.when;
+		if ( w && typeof w === 'object' ) {
+			if ( w.all || w.any ) {
+				form.conjunction = w.all ? 'all' : 'any';
+				const arr = w.all || w.any;
+				if ( Array.isArray( arr ) && arr.every( ( c ) => c && typeof c === 'object' && 'field' in c && 'op' in c ) ) {
+					form.conditions = arr.map( ( c ) => ( {
+						field: c.field || '',
+						op: c.op || 'equals',
+						value: serializeOpValue( c.op, c.value ),
+					} ) );
+				} else {
+					form.jsonLocked = true;
+				}
+			} else if ( 'always' in w ) {
+				form.conjunction = w.always ? 'all_always' : 'all_never';
+				form.conditions = [];
+			} else if ( 'field' in w && 'op' in w ) {
+				form.conditions = [ { field: w.field, op: w.op, value: serializeOpValue( w.op, w.value ) } ];
+			} else {
+				// not / nested groups → JSON-only
+				form.jsonLocked = true;
+			}
+		}
+		// Parse `then` — list of action records.
+		const then = spec.then;
+		if ( Array.isArray( then ) ) {
+			form.actions = then.map( ( a ) => actionRecordToFormRow( a ) );
+		}
+		return form;
+	}
+
+	function serializeOpValue( op, value ) {
+		if ( op === 'between' && Array.isArray( value ) ) return value.join( ',' );
+		if ( ( op === 'in' || op === 'not_in' ) && Array.isArray( value ) ) return value.join( ',' );
+		if ( value === null || value === undefined ) return '';
+		return String( value );
+	}
+
+	function actionRecordToFormRow( a ) {
+		return Object.assign( blankAction(), {
+			action: a.action || 'show_step',
+			field: a.field || '',
+			step: a.step || '',
+			option: a.option || '',
+			value: a.value !== undefined ? String( a.value ) : '',
+			message: a.message || '',
+			level: a.level || 'info',
+			label: a.label || '',
+			amount: a.amount !== undefined ? String( a.amount ) : '',
+			percent_of_base: a.percent_of_base !== undefined ? String( a.percent_of_base ) : '',
+			lookup_table_key: a.lookup_table_key || '',
+			filter_tag: a.filter && a.filter.tag ? a.filter.tag : '',
+		} );
+	}
+
+	function ruleFormToSpec( form ) {
+		// when
+		let when;
+		if ( form.conjunction === 'all_always' ) {
+			when = { always: true };
+		} else if ( form.conjunction === 'all_never' ) {
+			when = { always: false };
+		} else {
+			const conds = ( form.conditions || [] ).map( ( c ) => atomToSpec( c ) );
+			if ( conds.length === 1 ) {
+				when = conds[ 0 ];
+			} else {
+				when = { [ form.conjunction === 'any' ? 'any' : 'all' ]: conds };
+			}
+		}
+		// then
+		const then = ( form.actions || [] ).map( ( a ) => actionFormRowToSpec( a ) );
+		return { when: when, then: then };
+	}
+
+	function atomToSpec( c ) {
+		const out = { field: c.field, op: c.op };
+		if ( c.op === 'is_selected' || c.op === 'is_empty' ) {
+			// no value
+		} else if ( c.op === 'between' ) {
+			const parts = String( c.value || '' ).split( ',' ).map( ( s ) => s.trim() ).filter( ( s ) => s !== '' );
+			out.value = parts.map( ( p ) => Number.isFinite( +p ) ? +p : p );
+		} else if ( c.op === 'in' || c.op === 'not_in' ) {
+			out.value = String( c.value || '' ).split( ',' ).map( ( s ) => s.trim() ).filter( ( s ) => s !== '' );
+		} else if ( c.op === 'greater_than' || c.op === 'less_than' ) {
+			out.value = Number.isFinite( +c.value ) ? +c.value : c.value;
+		} else {
+			out.value = c.value;
+		}
+		return out;
+	}
+
+	function actionFormRowToSpec( a ) {
+		const t = a.action;
+		const out = { action: t };
+		if ( [ 'show_field', 'hide_field', 'require_field', 'reset_value' ].includes( t ) ) {
+			out.field = a.field;
+		} else if ( [ 'show_step', 'hide_step' ].includes( t ) ) {
+			out.step = a.step;
+		} else if ( t === 'disable_option' ) {
+			out.field = a.field;
+			out.option = a.option;
+		} else if ( t === 'filter_source' ) {
+			out.field = a.field;
+			out.filter = { tag: a.filter_tag };
+		} else if ( t === 'set_default' ) {
+			out.field = a.field;
+			out.value = a.value;
+		} else if ( t === 'switch_lookup_table' ) {
+			out.lookup_table_key = a.lookup_table_key;
+		} else if ( t === 'add_surcharge' ) {
+			out.label = a.label;
+			if ( a.amount !== '' ) out.amount = Number( a.amount );
+			else if ( a.percent_of_base !== '' ) out.percent_of_base = Number( a.percent_of_base );
+		} else if ( t === 'show_warning' ) {
+			out.message = a.message;
+			out.level = a.level || 'info';
+		} else if ( t === 'block_add_to_cart' ) {
+			out.message = a.message;
+		}
+		return out;
+	}
+
+	async function saveRule() {
+		if ( state.busy || ! state.viewing || ! state.editingRule ) return;
+		state.busy = true;
+		render();
+
+		const form = state.editingRule;
+		let spec;
+		if ( form.jsonMode ) {
+			try {
+				spec = JSON.parse( form.jsonText );
+			} catch ( e ) {
+				state.message = { kind: 'error', text: 'Invalid JSON: ' + e.message };
+				state.busy = false;
+				render();
+				return;
+			}
+		} else {
+			spec = ruleFormToSpec( form );
+		}
+
+		const payload = {
+			rule_key: form.rule_key,
+			name: form.name,
+			priority: form.priority,
+			sort_order: form.sort_order,
+			is_active: !! form.is_active,
+			spec: spec,
+		};
+
+		let success = false;
+		try {
+			if ( form.id > 0 ) {
+				payload.version_hash = form.version_hash;
+				const resp = await ConfigKit.request(
+					'/templates/' + state.viewing.id + '/rules/' + form.id,
+					{ method: 'PUT', body: payload }
+				);
+				state.editingRule = ruleFormFromRecord( resp.record );
+			} else {
+				const resp = await ConfigKit.request(
+					'/templates/' + state.viewing.id + '/rules',
+					{ method: 'POST', body: payload }
+				);
+				state.editingRule = ruleFormFromRecord( resp.record );
+			}
+			success = true;
+			state.message = { kind: 'success', text: 'Rule saved.' };
+			await refreshRules();
+		} catch ( err ) {
+			showError( err );
+		} finally {
+			state.busy = false;
+		}
+		render();
+		void success;
+	}
+
+	function switchRuleEditorToJson() {
+		if ( ! state.editingRule ) return;
+		state.editingRule.jsonText = JSON.stringify(
+			ruleFormToSpec( state.editingRule ),
+			null,
+			2
+		);
+		state.editingRule.jsonMode = true;
+		render();
+	}
+
+	function switchRuleEditorToStructured() {
+		if ( ! state.editingRule ) return;
+		try {
+			const spec = JSON.parse( state.editingRule.jsonText );
+			// Create a synthetic record + reparse.
+			const fake = {
+				id: state.editingRule.id,
+				rule_key: state.editingRule.rule_key,
+				name: state.editingRule.name,
+				priority: state.editingRule.priority,
+				sort_order: state.editingRule.sort_order,
+				is_active: state.editingRule.is_active,
+				version_hash: state.editingRule.version_hash,
+				spec: spec,
+			};
+			const reparsed = ruleFormFromRecord( fake );
+			if ( reparsed.jsonLocked ) {
+				state.message = { kind: 'error', text: 'This spec uses nested groups or NOT — keep using JSON mode.' };
+				state.editingRule.jsonMode = true;
+				render();
+				return;
+			}
+			state.editingRule = reparsed;
+			state.editingRule.jsonMode = false;
+			clearMessages();
+		} catch ( e ) {
+			state.message = { kind: 'error', text: 'Invalid JSON: ' + e.message };
+		}
+		render();
+	}
+
+	// ---- Rules drawer rendering ----
+
+	function renderRulesDrawer() {
+		const overlay = el( 'div', { class: 'configkit-modal-overlay configkit-rules-drawer' } );
+		const drawer  = el( 'div', { class: 'configkit-modal configkit-rules-drawer__panel' } );
+		overlay.appendChild( drawer );
+
+		drawer.appendChild( el(
+			'div',
+			{ class: 'configkit-builder__pane-header' },
+			el( 'h2', null, state.editingRule ? ( state.editingRule.id > 0 ? 'Edit rule: ' + state.editingRule.name : 'New rule' ) : 'Rules' ),
+			el( 'button', { type: 'button', class: 'button', onClick: closeRulesDrawer }, 'Close' )
+		) );
+
+		if ( state.message ) drawer.appendChild( messageBanner( state.message ) );
+
+		if ( state.editingRule ) {
+			drawer.appendChild( renderRuleEditor() );
+		} else {
+			drawer.appendChild( renderRuleList() );
+		}
+
+		return overlay;
+	}
+
+	function renderRuleList() {
+		const wrap = el( 'div' );
+
+		wrap.appendChild( el(
+			'div',
+			{ class: 'configkit-list__header' },
+			el( 'button', { type: 'button', class: 'button button-primary', onClick: newRuleInDrawer }, '+ New rule' )
+		) );
+
+		const items = state.rules.items || [];
+		if ( items.length === 0 ) {
+			wrap.appendChild( el(
+				'div',
+				{ class: 'configkit-empty' },
+				el( 'p', null, 'No rules yet.' ),
+				el(
+					'p',
+					{ class: 'configkit-empty__hint' },
+					'Rules let you show/hide fields, filter options, add surcharges, and more based on the customer\u2019s selections.'
+				)
+			) );
+			return wrap;
+		}
+
+		const table = el(
+			'table',
+			{ class: 'wp-list-table widefat striped configkit-rules-table' },
+			el(
+				'thead',
+				null,
+				el(
+					'tr',
+					null,
+					el( 'th', null, 'Name' ),
+					el( 'th', null, 'rule_key' ),
+					el( 'th', null, 'WHEN' ),
+					el( 'th', null, 'THEN' ),
+					el( 'th', null, 'Priority' ),
+					el( 'th', null, 'Active' ),
+					el( 'th', { class: 'configkit-actions' }, '' )
+				)
+			)
+		);
+		const tbody = el( 'tbody' );
+		items.forEach( ( r ) => {
+			tbody.appendChild( el(
+				'tr',
+				null,
+				el(
+					'td',
+					null,
+					el( 'a', {
+						href: '#',
+						onClick: ( ev ) => { ev.preventDefault(); loadRuleForEdit( r.id ); },
+					}, r.name )
+				),
+				el( 'td', null, el( 'code', null, r.rule_key ) ),
+				el( 'td', null, summarizeWhen( r.spec ) ),
+				el( 'td', null, summarizeThen( r.spec ) ),
+				el( 'td', null, String( r.priority ) ),
+				el(
+					'td',
+					null,
+					el( 'input', {
+						type: 'checkbox',
+						checked: !! r.is_active,
+						onChange: () => toggleRuleActive( r ),
+					} )
+				),
+				el(
+					'td',
+					{ class: 'configkit-actions' },
+					el( 'button', { type: 'button', class: 'button', onClick: () => loadRuleForEdit( r.id ) }, 'Edit' ),
+					' ',
+					el( 'button', { type: 'button', class: 'button button-link-delete', onClick: () => deleteRule( r.id ) }, '✕' )
+				)
+			) );
+		} );
+		table.appendChild( tbody );
+		wrap.appendChild( table );
+		return wrap;
+	}
+
+	function summarizeWhen( spec ) {
+		const w = ( spec && spec.when ) || {};
+		if ( 'always' in w ) return w.always ? 'always' : 'never';
+		if ( w.all || w.any ) {
+			const arr = w.all || w.any;
+			const conj = w.all ? 'AND' : 'OR';
+			if ( Array.isArray( arr ) && arr.every( ( c ) => c && c.field ) ) {
+				return arr.map( ( c ) => atomSummary( c ) ).join( ' ' + conj + ' ' );
+			}
+			return '(complex)';
+		}
+		if ( w.not ) return 'NOT (' + ( w.not.field ? atomSummary( w.not ) : '…' ) + ')';
+		if ( w.field ) return atomSummary( w );
+		return '';
+	}
+
+	function atomSummary( c ) {
+		const v = ( c.value === undefined || c.value === null ) ? '' : ( Array.isArray( c.value ) ? c.value.join( ',' ) : String( c.value ) );
+		return c.field + ' ' + c.op + ( v !== '' ? ' ' + v : '' );
+	}
+
+	function summarizeThen( spec ) {
+		const then = ( spec && spec.then ) || [];
+		if ( ! Array.isArray( then ) || then.length === 0 ) return '';
+		return then.map( ( a ) => actionSummary( a ) ).join( ' · ' );
+	}
+
+	function actionSummary( a ) {
+		switch ( a.action ) {
+			case 'show_field':       return 'show ' + ( a.field || '' );
+			case 'hide_field':       return 'hide ' + ( a.field || '' );
+			case 'show_step':        return 'show step ' + ( a.step || '' );
+			case 'hide_step':        return 'hide step ' + ( a.step || '' );
+			case 'require_field':    return 'require ' + ( a.field || '' );
+			case 'disable_option':   return 'disable ' + ( a.field || '' ) + ':' + ( a.option || '' );
+			case 'filter_source':    return 'filter ' + ( a.field || '' );
+			case 'set_default':      return 'default ' + ( a.field || '' ) + '=' + String( a.value );
+			case 'reset_value':      return 'reset ' + ( a.field || '' );
+			case 'switch_lookup_table': return 'switch lookup ' + ( a.lookup_table_key || '' );
+			case 'add_surcharge':    return 'surcharge ' + ( a.label || '' ) + ( 'amount' in a ? ' +' + a.amount : '' ) + ( 'percent_of_base' in a ? ' +' + a.percent_of_base + '%' : '' );
+			case 'show_warning':     return 'warn: ' + ( a.message || '' ).slice( 0, 30 );
+			case 'block_add_to_cart': return 'block: ' + ( a.message || '' ).slice( 0, 30 );
+			default:                 return a.action;
+		}
+	}
+
+	function renderRuleEditor() {
+		const f = state.editingRule;
+		const wrap = el( 'div' );
+
+		if ( f.jsonMode ) {
+			wrap.appendChild( el( 'p', { class: 'description' }, 'Editing raw spec_json. The schema is enforced server-side; click "Switch to structured" to go back if your spec is flat.' ) );
+			wrap.appendChild( el(
+				'div',
+				{ class: 'configkit-field' },
+				el( 'label', null, 'spec_json' ),
+				el( 'textarea', {
+					class: 'configkit-json',
+					rows: 18,
+					value: f.jsonText,
+					onInput: ( ev ) => { f.jsonText = ev.target.value; },
+				} )
+			) );
+		} else {
+			// Basics
+			wrap.appendChild( fieldset( 'Basics', [
+				textField( 'Rule name', 'rule_name', f.name, ( v ) => {
+					f.name = v;
+					if ( ! f.rule_key && f.id === 0 ) {
+						f.rule_key = slugify( v );
+						render();
+					}
+				} ),
+				textField( 'rule_key', 'rule_key', f.rule_key, ( v ) => { f.rule_key = v; }, {
+					mono: true,
+					disabled: f.id > 0,
+					help: f.id > 0 ? 'Immutable after save.' : 'Lowercase, snake_case, 3-64 chars. Locked after save.',
+				} ),
+				numberFieldRow( 'Priority', 'priority', f.priority, ( v ) => { f.priority = v; } ),
+				checkboxField( 'Active', 'is_active', !! f.is_active, ( v ) => { f.is_active = v; } ),
+			] ) );
+
+			// WHEN
+			wrap.appendChild( renderRuleWhen( f ) );
+
+			// THEN
+			wrap.appendChild( renderRuleThen( f ) );
+		}
+
+		// Footer + JSON toggle.
+		const footerKids = [
+			el( 'button', {
+				type: 'button',
+				class: 'button button-primary',
+				disabled: state.busy,
+				onClick: saveRule,
+			}, state.busy ? 'Saving…' : ( f.id > 0 ? 'Save' : 'Create rule' ) ),
+			el( 'button', {
+				type: 'button',
+				class: 'button',
+				onClick: () => { state.editingRule = null; render(); },
+			}, 'Back to list' ),
+			f.jsonMode
+				? el( 'button', { type: 'button', class: 'button', onClick: switchRuleEditorToStructured }, 'Switch to structured' )
+				: el( 'button', { type: 'button', class: 'button', onClick: switchRuleEditorToJson }, 'Switch to JSON' ),
+		];
+		if ( f.id > 0 ) {
+			footerKids.push( el( 'button', {
+				type: 'button',
+				class: 'button button-link-delete',
+				onClick: () => deleteRule( f.id ),
+			}, 'Soft delete' ) );
+		}
+		wrap.appendChild( el( 'div', { class: 'configkit-form__footer' }, ...footerKids ) );
+
+		return wrap;
+	}
+
+	function renderRuleWhen( f ) {
+		const wrap = el( 'fieldset', { class: 'configkit-fieldset' }, el( 'legend', null, 'WHEN' ) );
+
+		// Conjunction selector (all / any / always / never).
+		wrap.appendChild( selectFieldRow(
+			'Conjunction',
+			'conjunction',
+			[
+				[ 'all',        'all conditions match (AND)' ],
+				[ 'any',        'any condition matches (OR)' ],
+				[ 'all_always', 'always (no conditions)' ],
+				[ 'all_never',  'never (rule disabled by spec)' ],
+			],
+			f.conjunction,
+			( v ) => { f.conjunction = v; render(); }
+		) );
+
+		if ( f.conjunction === 'all_always' || f.conjunction === 'all_never' ) {
+			return wrap;
+		}
+
+		const fieldChoices = ( ( state.steps.items || [] ).flatMap( () => [] ) ); // placeholder
+		const allFieldKeys = collectAllFieldKeysForTemplate();
+
+		( f.conditions || [] ).forEach( ( c, i ) => {
+			const row = el( 'div', { class: 'configkit-rule-row' } );
+			row.appendChild( selectFieldRow(
+				'Field',
+				'cond_field_' + i,
+				allFieldKeys.map( ( k ) => [ k, k ] ),
+				c.field,
+				( v ) => { c.field = v; render(); }
+			) );
+			row.appendChild( selectFieldRow(
+				'Operator',
+				'cond_op_' + i,
+				RULE_OPERATORS,
+				c.op,
+				( v ) => { c.op = v; render(); }
+			) );
+			if ( c.op !== 'is_selected' && c.op !== 'is_empty' ) {
+				row.appendChild( textField( 'Value', 'cond_val_' + i, c.value, ( v ) => { c.value = v; }, {
+					help: c.op === 'between' ? 'min,max' : ( ( c.op === 'in' || c.op === 'not_in' ) ? 'comma-separated' : '' ),
+				} ) );
+			}
+			row.appendChild( el( 'button', {
+				type: 'button',
+				class: 'button button-link-delete',
+				onClick: () => { f.conditions.splice( i, 1 ); render(); },
+				title: 'Remove condition',
+			}, '✕' ) );
+			wrap.appendChild( row );
+		} );
+
+		wrap.appendChild( el( 'button', {
+			type: 'button',
+			class: 'button',
+			onClick: () => {
+				f.conditions = ( f.conditions || [] ).slice();
+				f.conditions.push( blankCondition() );
+				render();
+			},
+		}, '+ Add condition' ) );
+
+		void fieldChoices;
+		return wrap;
+	}
+
+	function renderRuleThen( f ) {
+		const wrap = el( 'fieldset', { class: 'configkit-fieldset' }, el( 'legend', null, 'THEN' ) );
+
+		const stepChoices = ( state.steps.items || [] ).map( ( s ) => [ s.step_key, s.step_key + ' · ' + s.label ] );
+		const allFieldKeys = collectAllFieldKeysForTemplate();
+		const fieldChoices = allFieldKeys.map( ( k ) => [ k, k ] );
+
+		( f.actions || [] ).forEach( ( a, i ) => {
+			const row = el( 'div', { class: 'configkit-rule-row' } );
+			row.appendChild( selectFieldRow(
+				'Action',
+				'act_type_' + i,
+				RULE_ACTIONS,
+				a.action,
+				( v ) => { a.action = v; render(); }
+			) );
+			// Per-action target inputs.
+			if ( [ 'show_field', 'hide_field', 'require_field', 'reset_value' ].includes( a.action ) ) {
+				row.appendChild( selectFieldRow( 'Field', 'act_field_' + i, fieldChoices, a.field, ( v ) => { a.field = v; } ) );
+			} else if ( [ 'show_step', 'hide_step' ].includes( a.action ) ) {
+				row.appendChild( selectFieldRow( 'Step', 'act_step_' + i, stepChoices, a.step, ( v ) => { a.step = v; } ) );
+			} else if ( a.action === 'disable_option' ) {
+				row.appendChild( selectFieldRow( 'Field', 'act_field_' + i, fieldChoices, a.field, ( v ) => { a.field = v; } ) );
+				row.appendChild( textField( 'option_key', 'act_opt_' + i, a.option, ( v ) => { a.option = v; }, { mono: true } ) );
+			} else if ( a.action === 'filter_source' ) {
+				row.appendChild( selectFieldRow( 'Field', 'act_field_' + i, fieldChoices, a.field, ( v ) => { a.field = v; } ) );
+				row.appendChild( textField( 'Filter tag', 'act_tag_' + i, a.filter_tag, ( v ) => { a.filter_tag = v; } ) );
+			} else if ( a.action === 'set_default' ) {
+				row.appendChild( selectFieldRow( 'Field', 'act_field_' + i, fieldChoices, a.field, ( v ) => { a.field = v; } ) );
+				row.appendChild( textField( 'Value', 'act_val_' + i, a.value, ( v ) => { a.value = v; } ) );
+			} else if ( a.action === 'switch_lookup_table' ) {
+				row.appendChild( textField( 'lookup_table_key', 'act_lt_' + i, a.lookup_table_key, ( v ) => { a.lookup_table_key = v; }, { mono: true } ) );
+			} else if ( a.action === 'add_surcharge' ) {
+				row.appendChild( textField( 'Label', 'act_label_' + i, a.label, ( v ) => { a.label = v; } ) );
+				row.appendChild( numberFieldRow( 'Amount (NOK)', 'act_amt_' + i, a.amount, ( v ) => { a.amount = v; a.percent_of_base = ''; }, { allowFloat: true } ) );
+				row.appendChild( numberFieldRow( 'Percent of base', 'act_pct_' + i, a.percent_of_base, ( v ) => { a.percent_of_base = v; a.amount = ''; }, { allowFloat: true } ) );
+			} else if ( a.action === 'show_warning' ) {
+				row.appendChild( textField( 'Message', 'act_msg_' + i, a.message, ( v ) => { a.message = v; } ) );
+				row.appendChild( selectFieldRow( 'Level', 'act_lvl_' + i, [ [ 'info', 'info' ], [ 'warning', 'warning' ], [ 'error', 'error' ] ], a.level, ( v ) => { a.level = v; } ) );
+			} else if ( a.action === 'block_add_to_cart' ) {
+				row.appendChild( textField( 'Message', 'act_msg_' + i, a.message, ( v ) => { a.message = v; } ) );
+			}
+			row.appendChild( el( 'button', {
+				type: 'button',
+				class: 'button button-link-delete',
+				onClick: () => { f.actions.splice( i, 1 ); render(); },
+				title: 'Remove action',
+			}, '✕' ) );
+			wrap.appendChild( row );
+		} );
+
+		wrap.appendChild( el( 'button', {
+			type: 'button',
+			class: 'button',
+			onClick: () => {
+				f.actions = ( f.actions || [] ).slice();
+				f.actions.push( blankAction() );
+				render();
+			},
+		}, '+ Add action' ) );
+
+		return wrap;
+	}
+
+	function collectAllFieldKeysForTemplate() {
+		// Aggregate field_keys from the steps cached on state. The detail
+		// view only fetches fields for the SELECTED step; so the rules
+		// editor falls back to fetching the full template field index
+		// the first time it runs.
+		const steps = state.steps.items || [];
+		const keys = [];
+		steps.forEach( ( s ) => {
+			if ( state._allFieldsByStep && state._allFieldsByStep[ s.step_key ] ) {
+				state._allFieldsByStep[ s.step_key ].forEach( ( fk ) => keys.push( fk ) );
+			}
+		} );
+		// If we haven't built the index yet, kick off a fetch (fire and forget).
+		if ( ! state._allFieldsByStep ) {
+			state._allFieldsByStep = {};
+			Promise.all( steps.map( ( s ) =>
+				ConfigKit.request( '/templates/' + state.viewing.id + '/steps/' + s.id + '/fields' )
+					.then( ( data ) => {
+						state._allFieldsByStep[ s.step_key ] = ( data.items || [] ).map( ( f ) => f.field_key );
+					} )
+					.catch( () => { state._allFieldsByStep[ s.step_key ] = []; } )
+			) ).then( render );
+		}
+		return Array.from( new Set( keys ) );
 	}
 
 	function init() {

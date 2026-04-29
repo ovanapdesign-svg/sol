@@ -28,6 +28,7 @@ use ConfigKit\Repository\LibraryRepository;
 use ConfigKit\Repository\LookupCellRepository;
 use ConfigKit\Repository\LookupTableRepository;
 use ConfigKit\Repository\ModuleRepository;
+use ConfigKit\Repository\RuleRepository;
 use ConfigKit\Repository\StepRepository;
 use ConfigKit\Repository\TemplateRepository;
 use ConfigKit\Rest\Controllers\FamiliesController;
@@ -38,6 +39,7 @@ use ConfigKit\Rest\Controllers\LibraryItemsController;
 use ConfigKit\Rest\Controllers\LookupCellsController;
 use ConfigKit\Rest\Controllers\LookupTablesController;
 use ConfigKit\Rest\Controllers\ModulesController;
+use ConfigKit\Rest\Controllers\RulesController;
 use ConfigKit\Rest\Controllers\StepsController;
 use ConfigKit\Rest\Controllers\TemplatesController;
 use ConfigKit\Rest\Router;
@@ -49,6 +51,7 @@ use ConfigKit\Service\LibraryService;
 use ConfigKit\Service\LookupCellService;
 use ConfigKit\Service\LookupTableService;
 use ConfigKit\Service\ModuleService;
+use ConfigKit\Service\RuleService;
 use ConfigKit\Service\StepService;
 use ConfigKit\Service\TemplateService;
 use ConfigKit\Settings\GeneralSettings;
@@ -144,6 +147,14 @@ final class Plugin {
 		$router->add( new StepsController( new StepService( $step_repo, $template_repo ) ) );
 		$router->add( new FieldsController( new FieldService( $field_repo, $step_repo, $template_repo ) ) );
 		$router->add( new FieldOptionsController( new FieldOptionService( $field_option_repo, $field_repo ) ) );
+		$rule_repo = new RuleRepository( $wpdb );
+		$router->add( new RulesController( new RuleService(
+			$rule_repo,
+			$template_repo,
+			$field_repo,
+			$step_repo,
+			$field_option_repo
+		) ) );
 		return $router;
 	}
 
