@@ -138,7 +138,58 @@ writes, no WP function calls inside engine methods.
 
 ## Phase 3 — Admin UI core
 
-(Nothing started.)
+**Status:** in progress, partial. Foundation + 2 of 10 in-scope pages
+landed in this session; remaining work is multi-session (the template
+builder alone is multi-session). Owner direction needed on next-chunk
+priority.
+
+### Phase 3 questions
+
+1. **Custom roles `content_editor` / `viewer`.** `ADMIN_SITEMAP.md §4.1`
+   maps caps to four roles, but `content_editor` and `viewer` are not
+   standard WP roles. → Phase 3 populates `administrator` and
+   `shop_manager` only; custom-role provisioning is deferred to Phase 4
+   per the spec ("Custom roles configurable via Settings → Permissions
+   in Phase 4+").
+2. **Frontend mode select on Settings → General.** Spec says "Phase 4+,
+   hidden in Phase 3". → Field omitted from the General settings form.
+3. **Plugin options vs entity REST.** WP has two reasonable patterns
+   (Settings API for plugin options; custom REST for entity CRUD). →
+   Phase 3 uses WP Settings API for plugin-level options
+   (Settings → General) and the custom `configkit/v1/*` REST namespace
+   for entity CRUD (modules, libraries, etc.) once those land.
+
+### Progress
+
+| Item                                                  | Status   | Notes                                                                  |
+|-------------------------------------------------------|----------|------------------------------------------------------------------------|
+| Capability registration on activation                 | complete | `Capabilities\Registrar` — 9 caps mapped to administrator + shop_manager. |
+| Admin menu shell                                      | complete | `Admin\Menu` — incremental sub-page registration; no fake / placeholder pages. |
+| AbstractPage base + capability guard                  | complete |                                                                        |
+| Asset loader + admin.css / admin.js bootstrap         | complete | `ConfigKit.request()` wraps `fetch` with REST URL + wp_rest nonce.     |
+| REST namespace + `AbstractController` + `Router`      | complete | `configkit/v1`. Controllers added per chunk.                           |
+| `CountsService` (read-only)                           | complete | Used by Dashboard. Table-existence guards so renders before/between migrations. |
+| Dashboard page (real-data counts)                     | complete | No fake activity entries; section hidden when no data.                 |
+| Settings → General                                    | complete | 6 fields per `ADMIN_SITEMAP §2.8.1` via WP Settings API. Allow-list sanitization. Frontend mode deferred. |
+| Settings → Modules CRUD                               | pending  | Next chunk; requires `ModuleRepository` + REST controller + admin JS.  |
+| Settings → Logs (read-only viewer)                    | pending  |                                                                        |
+| Libraries list + detail + item editor                 | pending  | Largest CRUD; capability-driven form generation from `attribute_schema_json`. |
+| Lookup Tables list + cells editor                     | pending  | Custom grid UI.                                                        |
+| Products list + binding edit                          | pending  | Cross-references families / templates / lookup tables.                 |
+| Families CRUD                                         | pending  |                                                                        |
+| Templates list                                        | pending  |                                                                        |
+| Template builder (3-pane + field wizard + rules)      | pending  | Per `TEMPLATE_BUILDER_UX.md §14` — multi-session by itself.            |
+| Rules basic CRUD                                      | pending  |                                                                        |
+| Diagnostics (critical issues only)                    | pending  |                                                                        |
+| Optimistic locking via `version_hash` everywhere      | partial  | Foundation hooks exist; per-entity wiring lands with each repo.        |
+
+**Engine purity preserved.** `grep -rE "wp_\|get_option\|WP_Query\|\\$wpdb" src/Engines/`
+returns zero matches. Phase 2 PHPUnit tests still green (78 / 163).
+
+**Honest scope note.** This phase has 14 suggested commits and ten
+admin pages. Two are landed; the remaining twelve are each a focused
+chunk and the template builder is multi-session in itself. Continuing
+in subsequent sessions per owner direction.
 
 ---
 
@@ -168,10 +219,10 @@ writes, no WP function calls inside engine methods.
 
 ## Last updated
 
-2026-04-29 — Phase 2 engines implemented. RuleEngine, LookupEngine,
-PricingEngine, ValidationEngine pure-PHP, no WP dependencies.
-PHPUnit: 78 tests / 163 assertions, all green. Awaiting owner approval
-to enter Phase 3.
+2026-04-29 — Phase 3 started. Foundation + Dashboard + Settings →
+General landed (2 of 10 in-scope pages). Engines remain pure; 78
+PHPUnit tests still green. Phase 3 is multi-session work; awaiting
+owner direction on next-chunk priority.
 
 ---
 
