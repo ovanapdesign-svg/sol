@@ -48,13 +48,14 @@ Phase 1.
 | 16 migration files (0001–0016)                      | complete | Schemas per `DATA_MODEL.md §3`. No seed migration — `wp_configkit_modules` ships empty (owner adds modules in Phase 3). |
 | WP-CLI command `wp configkit migrate`               | complete | `src/CLI/Command.php`. Supports `--dry-run` and `--status`.            |
 | PHPUnit unit tests                                  | complete | `tests/unit/Migration/RunnerTest.php`. 4 tests / 16 assertions, green. |
-| Apply migrations on staging DB                      | pending  | Owner activates plugin to trigger migrations, or runs `wp configkit migrate`. |
-| Verify idempotent re-run                            | pending  | Owner: `wp configkit migrate` twice — second run reports no pending.   |
-| Verify tables via `SHOW TABLES LIKE 'wp_configkit%'` | pending  | Owner verifies 16 tables present.                                      |
+| Apply migrations on staging DB                      | complete | Owner verified 2026-04-29. `wp_configkit_migrations` shows 16 rows, all `status='applied'`. |
+| Verify idempotent re-run                            | complete | Second run of `wp configkit migrate` reported no pending migrations.   |
+| Verify tables via `SHOW TABLES LIKE 'wp_configkit%'` | complete | 16 tables present on staging.                                          |
 
-**Phase 1 status:** code complete, tests green; awaiting owner DB
-activation to satisfy operational exit criteria. No `INSERT`/`UPDATE`
-issued by this codebase yet beyond the migrations table itself.
+**Phase 1 verified on staging 2026-04-29.** 16 tables created, migration
+runner operational, idempotent confirmed. Total migration duration on
+staging: ~140 ms. `wp_configkit_modules` is empty by design — owner will
+add modules in Phase 3.
 
 ---
 
@@ -96,8 +97,9 @@ issued by this codebase yet beyond the migrations table itself.
 
 ## Last updated
 
-2026-04-29 — Owner approved Batch 1 v2. All four Batch 1 spec rows marked
-`complete`. Phase 0 closed; awaiting owner approval to enter Phase 1.
+2026-04-29 — Phase 1 verified on staging. 16 ConfigKit tables created,
+migration runner operational, idempotency confirmed (~140 ms total).
+Phase 1 closed; awaiting owner approval to enter Phase 2.
 
 ---
 
