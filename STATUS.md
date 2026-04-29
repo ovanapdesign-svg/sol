@@ -192,20 +192,20 @@ priority.
 | Families CRUD                                         | complete | Pattern copy. New capability `configkit_manage_families` (admin + shop_manager). `CAPS_VERSION` bumped to 2 so the admin_init safety net replays registration. Form ships only schema-backed fields — see Phase 3 question 4 below for the family_kind / sort_order gap. |
 | Products list + binding edit                          | pending  | Cross-references families / templates / lookup tables.                 |
 | Templates B1: list + metadata CRUD                    | complete | Pattern copy. Soft delete sets `status='archived'` (schema has no `is_active`; the brief's `is_active` checkbox was substituted with the status dropdown per `DATA_MODEL.md §3.5`). family_key is optional and KeyValidator-checked when provided. "Open template" routes to a placeholder detail view; no fake builder. |
-| Templates B2: steps CRUD inside template              | pending  | Next sub-chunk. Steps live in `wp_configkit_steps` per `DATA_MODEL.md §3.7`. |
+| Templates B2: steps CRUD inside template              | complete | StepRepository / StepService / StepsController + reorder endpoint. Detail view replaced placeholder with single-column header + Steps panel. step_key unique per template (different templates can share keys). Real DELETE (no is_active in schema; B5 publish will snapshot history). Reorder UI is up/down arrow buttons; HTML5 drag-drop deferred to B3 with the three-pane layout. |
 | Templates B3: fields CRUD + 3-pane builder layout     | pending  |                                                                        |
 | Templates B4: rules drawer (basic CRUD)               | pending  |                                                                        |
 | Templates B5: publish workflow + version snapshot     | pending  | Touches `wp_configkit_template_versions` per `DATA_MODEL.md §3.6`.     |
 | Rules basic CRUD                                      | pending  |                                                                        |
 | Diagnostics (critical issues only)                    | pending  |                                                                        |
-| Optimistic locking via `version_hash` everywhere      | partial  | Wired for Modules, Libraries, Library Items, Lookup Tables, Families, Templates (returns 409 on stale hash). Cells intentionally have no version_hash per schema. Other entities wire on landing. |
-| Save-button freeze guard                              | complete | All six save handlers (Modules, Libraries, Library Items, Lookup Tables, Families, Templates) use try/catch/finally; showError() is defensive against missing `ConfigKit.describeError`. Button always re-enables on validation error. |
+| Optimistic locking via `version_hash` everywhere      | partial  | Wired for Modules, Libraries, Library Items, Lookup Tables, Families, Templates, Steps (returns 409 on stale hash). Cells intentionally have no version_hash per schema. Other entities wire on landing. |
+| Save-button freeze guard                              | complete | All seven save handlers (Modules, Libraries, Library Items, Lookup Tables, Families, Templates, Steps) use try/catch/finally; showError() is defensive against missing `ConfigKit.describeError`. Button always re-enables on validation error. |
 | Capability auto-assign on activation + safety net     | complete | `Capabilities\Registrar::register / deregister / ensure_registered`. `register_deactivation_hook` clears caps + version flag; `admin_init` re-runs registration once when option `configkit_caps_version` ≠ current. Bumped to v2 with the addition of `configkit_manage_families`. |
 | Shared key validation (`Validation\KeyValidator`)     | complete | One source of truth for `*_key` rules across Modules, Libraries, Library Items, Lookup Tables, Families: 3–64 chars, lowercase ASCII, must start with letter, reserved-word block list. |
 | User-friendly REST error display                      | complete | `ConfigKit.describeError()` in admin.js maps 404 / 401-403 / 409 / 400-422 / 5xx to natural-language messages. Each banner has a "Show technical details" collapsible with the raw message + code + status. |
 
 **Engine purity preserved.** `grep -rE "wp_\|get_option\|WP_Query\|\\$wpdb" src/Engines/`
-returns zero matches. Phase 2 + 3 PHPUnit tests green (208 / 448).
+returns zero matches. Phase 2 + 3 PHPUnit tests green (231 / 498).
 
 **Honest scope note.** This phase has 14 suggested commits and ten
 admin pages. Two are landed; the remaining twelve are each a focused
@@ -241,14 +241,12 @@ in subsequent sessions per owner direction.
 ## Last updated
 
 2026-04-30 — Phase 3 progress: Modules + Libraries + Lookup Tables
-+ Families + Templates B1 (list + metadata) CRUD complete. 5 of 7
-in-scope entities started. Templates is sub-chunked: B1 done; B2
-(steps), B3 (fields + 3-pane builder), B4 (rules drawer), B5
-(publish + version snapshot) pending. Save-freeze guard applied to
-all six save handlers (try/catch/finally + defensive showError).
-Engines remain pure; 208 PHPUnit tests / 448 assertions green.
-Awaiting owner direction on next chunk: Templates B2, Products,
-Rules, or Diagnostics.
++ Families + Templates B1 (metadata) + Templates B2 (steps editor
+inside template) CRUD complete. Templates B3 (fields + 3-pane
+builder layout + drag-drop), B4 (rules drawer), B5 (publish + version
+snapshot) pending. Engines remain pure; 231 PHPUnit tests / 498
+assertions green. Awaiting owner direction on next chunk: Templates
+B3, Products, Rules, or Diagnostics.
 
 ---
 
