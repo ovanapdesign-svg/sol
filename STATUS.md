@@ -174,18 +174,18 @@ priority.
 | Settings → Modules CRUD                               | complete | `ModuleRepository`, `ModuleService`, `ModulesController`, `ModulesPage`, `modules.js`. Pattern-establishing chunk. Save now redirects to list with one-shot success toast. |
 | Settings → Logs (read-only viewer)                    | pending  |                                                                        |
 | Libraries list + detail + item editor                 | complete | Two repositories, two services, two REST controllers, single page with four JS views (list / library form / library detail / item form). Capability-conditional fields driven by parent module. attribute_schema enforcement for items. |
-| Lookup Tables list + cells editor                     | pending  | Custom grid UI.                                                        |
+| Lookup Tables list + cells editor                     | complete | Two repositories, two services, two REST controllers (incl. POST /cells/bulk for Phase-4 grid editor). Phase 3 cell editor is paginated table + form (pivot grid deferred to Phase 4). Cells use real DELETE; tables use soft-delete + version_hash. supports_price_group → cells_have_price_groups guard prevents orphaning grouped cells. |
 | Products list + binding edit                          | pending  | Cross-references families / templates / lookup tables.                 |
 | Families CRUD                                         | pending  |                                                                        |
 | Templates list                                        | pending  |                                                                        |
 | Template builder (3-pane + field wizard + rules)      | pending  | Per `TEMPLATE_BUILDER_UX.md §14` — multi-session by itself.            |
 | Rules basic CRUD                                      | pending  |                                                                        |
 | Diagnostics (critical issues only)                    | pending  |                                                                        |
-| Optimistic locking via `version_hash` everywhere      | partial  | Wired for Modules, Libraries, Library Items (returns 409 on stale hash). Other entities wire on landing. |
+| Optimistic locking via `version_hash` everywhere      | partial  | Wired for Modules, Libraries, Library Items, Lookup Tables (returns 409 on stale hash). Cells intentionally have no version_hash per schema. Other entities wire on landing. |
 | Capability auto-assign on activation + safety net     | complete | `Capabilities\Registrar::register / deregister / ensure_registered`. `register_deactivation_hook` clears caps + version flag; `admin_init` re-runs registration once when option `configkit_caps_version` ≠ current. |
 
 **Engine purity preserved.** `grep -rE "wp_\|get_option\|WP_Query\|\\$wpdb" src/Engines/`
-returns zero matches. Phase 2 + 3 PHPUnit tests green (125 / 262).
+returns zero matches. Phase 2 + 3 PHPUnit tests green (155 / 327).
 
 **Honest scope note.** This phase has 14 suggested commits and ten
 admin pages. Two are landed; the remaining twelve are each a focused
@@ -221,13 +221,12 @@ in subsequent sessions per owner direction.
 ## Last updated
 
 2026-04-29 — Phase 3 progress: Foundation + Dashboard + Settings →
-General + Settings → Modules CRUD + Libraries CRUD (incl. items).
-Pattern (repo → service → REST → admin page → JS) established and
-copied. Caps auto-assign on activation + safety net so administrators
-get caps without manual `wp cap add`. Engines remain pure; 125
-PHPUnit tests / 262 assertions green. Awaiting owner direction on
-next chunk: Lookup Tables, Families, Templates, Products, or
-Diagnostics.
+General + Modules CRUD + Libraries CRUD (incl. items) + Lookup
+Tables CRUD (incl. cells with bulk-upsert endpoint). Pattern (repo →
+service → REST → admin page → JS) applied three times and stable.
+Engines remain pure; 155 PHPUnit tests / 327 assertions green.
+Awaiting owner direction on next chunk: Families, Templates, Products,
+or Diagnostics.
 
 ---
 
