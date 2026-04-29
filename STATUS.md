@@ -172,6 +172,26 @@ priority.
    (`default_template_key`, `allowed_modules_json`,
    `default_step_order_json`) are deferred until Templates CRUD
    exists, since they reference templates and modules.
+5. **Product binding: where validation ends and diagnostics begins.**
+   `PRODUCT_BINDING_SPEC.md §10` lists 11 readiness checks for the
+   status badge. ProductBindingService.validate intentionally accepts
+   dangling references (unknown template_key / lookup_table_key /
+   library_key, defaults that point at since-deleted fields) so an
+   owner can save partial state and fix forward. All cross-reference
+   verification lives in ProductDiagnosticsService.run, which the UI
+   refreshes on load + after every save. Decision recorded so a future
+   reader does not "tighten" the binding service and break the
+   half-saved-state workflow.
+6. **Phase 3 minimums for two diagnostic checks.** Two checks are
+   shipped at the minimum bar permitted by the spec:
+   - `excluded_items_format` (§10.1.6) verifies `library_key:item_key`
+     format only; full existence verification waits for a unified
+     library-items index that is out of scope here.
+   - `price_resolvable` (§10.1.8) accepts when `cells_ok` and there are
+     either width/height defaults or no defaults yet; it does not run
+     the full LookupEngine. PricingEngine is pure but reaching it from
+     here would require synthesizing a config snapshot — owner-confirm
+     before doing that work.
 
 ### Progress
 
@@ -190,7 +210,7 @@ priority.
 | Libraries list + detail + item editor                 | complete | Two repositories, two services, two REST controllers, single page with four JS views (list / library form / library detail / item form). Capability-conditional fields driven by parent module. attribute_schema enforcement for items. |
 | Lookup Tables list + cells editor                     | complete | Two repositories, two services, two REST controllers (incl. POST /cells/bulk for Phase-4 grid editor). Phase 3 cell editor is paginated table + form (pivot grid deferred to Phase 4). Cells use real DELETE; tables use soft-delete + version_hash. supports_price_group → cells_have_price_groups guard prevents orphaning grouped cells. |
 | Families CRUD                                         | complete | Pattern copy. New capability `configkit_manage_families` (admin + shop_manager). `CAPS_VERSION` bumped to 2 so the admin_init safety net replays registration. Form ships only schema-backed fields — see Phase 3 question 4 below for the family_kind / sort_order gap. |
-| Products list + binding edit                          | pending  | Cross-references families / templates / lookup tables.                 |
+| Products list + binding edit                          | complete | ProductBindingRepository (only `get_post_meta`/`update_post_meta` toucher in code; 10 storage keys per `PRODUCT_BINDING_SPEC.md §12` + version_hash + updated_at), ProductBindingService (validates frontend_mode/sale_mode/vat_display allow-lists, numeric pricing fields, structural shape of allowed_sources / pricing_overrides / field_overrides — cross-refs deferred to diagnostics), ProductDiagnosticsService (all 11 readiness checks per §10.1 + §10.3 status derivation), ProductsController (4 endpoints: GET /products, GET+PUT /products/{id}/binding, POST /products/{id}/diagnostics, GET /products/{id}/template-fields), WooIntegration (Woo product-data tab + panel shell), ProductsPage (read-only-with-jumps overview), product-binding.js (8 sections: enable/status badge, base setup, defaults, allowed sources, pricing overrides, visibility/locking, diagnostics, preview placeholder; sticky save bar; deep-link `#configkit_product_data` fragment), products.js (filterable overview list with deep-link "Edit binding" buttons). Diagnostics-derived status badge: ready / disabled / missing_template / missing_lookup_table / invalid_defaults / pricing_unresolved. |
 | Templates B1: list + metadata CRUD                    | complete | Pattern copy. Soft delete sets `status='archived'` (schema has no `is_active`; the brief's `is_active` checkbox was substituted with the status dropdown per `DATA_MODEL.md §3.5`). family_key is optional and KeyValidator-checked when provided. "Open template" routes to a placeholder detail view; no fake builder. |
 | Templates B2: steps CRUD inside template              | complete | StepRepository / StepService / StepsController + reorder endpoint. Detail view replaced placeholder with single-column header + Steps panel. step_key unique per template (different templates can share keys). Real DELETE (no is_active in schema; B5 publish will snapshot history). Reorder UI is up/down arrow buttons; HTML5 drag-drop deferred to B3 with the three-pane layout. |
 | Templates B3: fields CRUD + 3-pane builder layout     | complete | FieldRepository, FieldOptionRepository, FieldService (full `FIELD_MODEL.md §8` axis-combination matrix + per-source `source_config` validation), FieldOptionService, FieldsController, FieldOptionsController. Detail view is a three-pane CSS-grid (steps / fields / settings) collapsing to single-column below 1024px. 3-step modal wizard for field creation (owner-friendly choices; no raw axis labels). Right-pane field editor: Basics, Source, Display style, Pricing, "Show in" flags, Required+default, Advanced. Manual options inline editor. Reorder via up/down buttons. fields use real DELETE; field_options soft-delete (per schema). Mobile tab-bar layout deferred. |
@@ -205,12 +225,12 @@ priority.
 | User-friendly REST error display                      | complete | `ConfigKit.describeError()` in admin.js maps 404 / 401-403 / 409 / 400-422 / 5xx to natural-language messages. Each banner has a "Show technical details" collapsible with the raw message + code + status. |
 
 **Engine purity preserved.** `grep -rE "wp_\|get_option\|WP_Query\|\\$wpdb" src/Engines/`
-returns zero matches. Phase 2 + 3 PHPUnit tests green (305 / 659).
+returns zero matches. Phase 2 + 3 PHPUnit tests green (331 / 747).
 
-**Honest scope note.** This phase has 14 suggested commits and ten
-admin pages. Two are landed; the remaining twelve are each a focused
-chunk and the template builder is multi-session in itself. Continuing
-in subsequent sessions per owner direction.
+**Honest scope note.** Six of seven in-scope entities are landed
+(Modules, Libraries, Lookup Tables, Families, Templates, Products);
+Rules admin page and Diagnostics are still pending. Continuing in
+subsequent sessions per owner direction.
 
 ---
 
@@ -240,13 +260,16 @@ in subsequent sessions per owner direction.
 
 ## Last updated
 
-2026-04-30 — Phase 3 progress: Modules + Libraries + Lookup Tables
+2026-04-29 — Phase 3 progress: Modules + Libraries + Lookup Tables
 + Families + **Templates feature-complete (B1 metadata + B2 steps
 + B3 fields/wizard/three-pane + B4 rules drawer + B5 publish/
-version snapshot)** per `TEMPLATE_BUILDER_UX.md §14`. 5 of 7 Phase 3
-entities done. Engines remain pure; 305 PHPUnit tests / 659
-assertions green. Awaiting owner direction on next chunk: Products
-binding, Rules admin page, or Diagnostics.
+version snapshot)** + **Products binding** (Woo product-data tab +
+ConfigKit → Products overview, 4 REST endpoints, 11 diagnostics
+checks per `PRODUCT_BINDING_SPEC.md §10.1`, 10 post-meta keys per
+§12, status derivation per §10.3). 6 of 7 Phase 3 entities done.
+Engines remain pure; 331 PHPUnit tests / 747 assertions green.
+Awaiting owner direction on next chunk: Rules admin page or
+Diagnostics.
 
 ---
 
