@@ -72,6 +72,13 @@ final class AssetLoader {
 			'configkit-families',
 			'assets/admin/js/families.js'
 		);
+
+		$this->maybe_enqueue_page_script(
+			$hook_suffix,
+			'configkit-templates',
+			'configkit-templates',
+			'assets/admin/js/templates.js'
+		);
 	}
 
 	private function maybe_enqueue_page_script(

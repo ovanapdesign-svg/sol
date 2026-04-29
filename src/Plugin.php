@@ -15,6 +15,7 @@ use ConfigKit\Admin\Pages\LibrariesPage;
 use ConfigKit\Admin\Pages\LookupTablesPage;
 use ConfigKit\Admin\Pages\ModulesPage;
 use ConfigKit\Admin\Pages\SettingsPage;
+use ConfigKit\Admin\Pages\TemplatesPage;
 use ConfigKit\Capabilities\Registrar;
 use ConfigKit\CLI\Command;
 use ConfigKit\Migration\Runner;
@@ -25,12 +26,14 @@ use ConfigKit\Repository\LibraryRepository;
 use ConfigKit\Repository\LookupCellRepository;
 use ConfigKit\Repository\LookupTableRepository;
 use ConfigKit\Repository\ModuleRepository;
+use ConfigKit\Repository\TemplateRepository;
 use ConfigKit\Rest\Controllers\FamiliesController;
 use ConfigKit\Rest\Controllers\LibrariesController;
 use ConfigKit\Rest\Controllers\LibraryItemsController;
 use ConfigKit\Rest\Controllers\LookupCellsController;
 use ConfigKit\Rest\Controllers\LookupTablesController;
 use ConfigKit\Rest\Controllers\ModulesController;
+use ConfigKit\Rest\Controllers\TemplatesController;
 use ConfigKit\Rest\Router;
 use ConfigKit\Service\FamilyService;
 use ConfigKit\Service\LibraryItemService;
@@ -38,6 +41,7 @@ use ConfigKit\Service\LibraryService;
 use ConfigKit\Service\LookupCellService;
 use ConfigKit\Service\LookupTableService;
 use ConfigKit\Service\ModuleService;
+use ConfigKit\Service\TemplateService;
 use ConfigKit\Settings\GeneralSettings;
 
 final class Plugin {
@@ -104,6 +108,7 @@ final class Plugin {
 			new LibrariesPage(),
 			new LookupTablesPage(),
 			new FamiliesPage(),
+			new TemplatesPage(),
 		];
 	}
 
@@ -122,6 +127,7 @@ final class Plugin {
 		$router->add( new LookupTablesController( new LookupTableService( $lookup_repo, $cell_repo ) ) );
 		$router->add( new LookupCellsController( new LookupCellService( $cell_repo, $lookup_repo ) ) );
 		$router->add( new FamiliesController( new FamilyService( new FamilyRepository( $wpdb ) ) ) );
+		$router->add( new TemplatesController( new TemplateService( new TemplateRepository( $wpdb ) ) ) );
 		return $router;
 	}
 
