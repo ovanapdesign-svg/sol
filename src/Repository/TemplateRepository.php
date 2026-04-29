@@ -126,6 +126,30 @@ class TemplateRepository {
 	}
 
 	/**
+	 * Mark a template as published and point at a specific
+	 * `template_versions` row. Bypasses dehydrate/sanitize because the
+	 * status transition is server-driven (validated publish flow), not
+	 * a user-supplied form.
+	 */
+	public function mark_published( int $id, int $published_version_id ): void {
+		$table  = $this->table();
+		$now    = $this->now();
+		$result = $this->wpdb->update(
+			$table,
+			[
+				'status'               => 'published',
+				'published_version_id' => $published_version_id,
+				'updated_at'           => $now,
+				'version_hash'         => sha1( $now . (string) $id ),
+			],
+			[ 'id' => $id ]
+		);
+		if ( $result === false ) {
+			throw new \RuntimeException( 'Failed to mark template published: ' . (string) $this->wpdb->last_error );
+		}
+	}
+
+	/**
 	 * Soft delete = set status to 'archived'. The schema has no is_active
 	 * column for templates; status='archived' is the intended signal per
 	 * DATA_MODEL.md §3.5.

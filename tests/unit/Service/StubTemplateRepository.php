@@ -87,4 +87,15 @@ final class StubTemplateRepository extends TemplateRepository {
 		$this->records[ $id ]['updated_at']   = $now;
 		$this->records[ $id ]['version_hash'] = sha1( $now . $id );
 	}
+
+	public function mark_published( int $id, int $published_version_id ): void {
+		if ( ! isset( $this->records[ $id ] ) ) {
+			return;
+		}
+		$now = '2026-04-30 13:00:00';
+		$this->records[ $id ]['status']               = 'published';
+		$this->records[ $id ]['published_version_id'] = $published_version_id;
+		$this->records[ $id ]['updated_at']           = $now;
+		$this->records[ $id ]['version_hash']         = sha1( $now . $id );
+	}
 }

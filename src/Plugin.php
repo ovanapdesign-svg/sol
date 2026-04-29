@@ -31,6 +31,7 @@ use ConfigKit\Repository\ModuleRepository;
 use ConfigKit\Repository\RuleRepository;
 use ConfigKit\Repository\StepRepository;
 use ConfigKit\Repository\TemplateRepository;
+use ConfigKit\Repository\TemplateVersionRepository;
 use ConfigKit\Rest\Controllers\FamiliesController;
 use ConfigKit\Rest\Controllers\FieldOptionsController;
 use ConfigKit\Rest\Controllers\FieldsController;
@@ -42,6 +43,7 @@ use ConfigKit\Rest\Controllers\ModulesController;
 use ConfigKit\Rest\Controllers\RulesController;
 use ConfigKit\Rest\Controllers\StepsController;
 use ConfigKit\Rest\Controllers\TemplatesController;
+use ConfigKit\Rest\Controllers\TemplateVersionsController;
 use ConfigKit\Rest\Router;
 use ConfigKit\Service\FamilyService;
 use ConfigKit\Service\FieldOptionService;
@@ -54,6 +56,8 @@ use ConfigKit\Service\ModuleService;
 use ConfigKit\Service\RuleService;
 use ConfigKit\Service\StepService;
 use ConfigKit\Service\TemplateService;
+use ConfigKit\Service\TemplateValidator;
+use ConfigKit\Service\TemplateVersionService;
 use ConfigKit\Settings\GeneralSettings;
 
 final class Plugin {
@@ -155,6 +159,24 @@ final class Plugin {
 			$step_repo,
 			$field_option_repo
 		) ) );
+		$version_repo = new TemplateVersionRepository( $wpdb );
+		$template_validator = new TemplateValidator(
+			$template_repo,
+			$step_repo,
+			$field_repo,
+			$field_option_repo,
+			$rule_repo
+		);
+		$version_service = new TemplateVersionService(
+			$version_repo,
+			$template_repo,
+			$step_repo,
+			$field_repo,
+			$field_option_repo,
+			$rule_repo,
+			$template_validator
+		);
+		$router->add( new TemplateVersionsController( $version_service, $template_validator ) );
 		return $router;
 	}
 

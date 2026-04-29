@@ -70,6 +70,13 @@
 		rulesOpen: false,
 		rules: { items: [], total: 0 },
 		editingRule: null, // structured form: { id, rule_key, name, priority, is_active, conjunction, conditions[], actions[], spec, version_hash, jsonMode, jsonText, jsonLocked }
+		// B5 additions — publish + versions
+		versionsOpen: false,
+		versions: { items: [], total: 0 },
+		viewingVersion: null,
+		validation: null, // { valid, errors[], warnings[] } or null
+		validationOpen: false,
+		publishConfirm: null, // null or { nextVersion, validation }
 		dirty: false,
 		message: null,
 		fieldErrors: {},
@@ -277,6 +284,14 @@
 			urlParams.field_id = state.editingField ? state.editingField.id : null;
 			urlParams.id = id;
 			setUrl( urlParams );
+			// Refresh versions in the background so the "Publish v(N+1)"
+			// label and rules count are accurate before any drawer opens.
+			refreshVersions().then( () => {
+				if ( state.view === 'detail' ) render();
+			} );
+			refreshRules().then( () => {
+				if ( state.view === 'detail' ) render();
+			} );
 			render();
 		} catch ( err ) {
 			showError( err );
@@ -1030,18 +1045,44 @@
 			' · Status: ' + t.status
 		) );
 		if ( state.message ) header.appendChild( messageBanner( state.message ) );
+		const publishedLabel = t.published_version_id
+			? 'Published v' + t.published_version_id
+			: ( t.status === 'published' ? 'Published' : 'Draft' );
+
+		const nextVersionDisplay = ( ( state.versions && state.versions.items && state.versions.items.length > 0 )
+			? ( state.versions.items[ 0 ].version_number + 1 )
+			: 1 );
+
 		header.appendChild( el(
 			'div',
-			{ class: 'configkit-form__footer' },
+			{ class: 'configkit-form__footer configkit-detail-toolbar' },
+			el( 'span', { class: 'configkit-saved-indicator' }, publishedLabel ),
 			el( 'button', { type: 'button', class: 'button', onClick: () => loadTemplateForEdit( t.id ) }, 'Edit metadata' ),
 			el(
 				'button',
 				{ type: 'button', class: 'button', onClick: openRulesDrawer },
 				'Rules (' + ( state.rules.total || 0 ) + ')'
 			),
+			el( 'button', { type: 'button', class: 'button', onClick: openVersionsDrawer }, 'Versions' ),
+			el( 'button', { type: 'button', class: 'button', onClick: runValidation }, 'Validate' ),
+			el(
+				'button',
+				{ type: 'button', class: 'button button-primary', onClick: requestPublish },
+				'Publish v' + nextVersionDisplay
+			),
 			el( 'button', { type: 'button', class: 'button', onClick: cancelToList }, 'Back to list' )
 		) );
 		wrap.appendChild( header );
+
+		if ( state.validationOpen && state.validation ) {
+			wrap.appendChild( renderValidationPanel() );
+		}
+		if ( state.versionsOpen ) {
+			wrap.appendChild( renderVersionsDrawer() );
+		}
+		if ( state.publishConfirm ) {
+			wrap.appendChild( renderPublishConfirm() );
+		}
 
 		// Three-pane builder.
 		const panes = el( 'div', { class: 'configkit-builder' } );
@@ -2471,6 +2512,305 @@
 			) ).then( render );
 		}
 		return Array.from( new Set( keys ) );
+	}
+
+	// ---- Validation, publish, version history ----
+
+	async function runValidation() {
+		if ( ! state.viewing ) return;
+		state.busy = true;
+		render();
+		try {
+			const data = await ConfigKit.request(
+				'/templates/' + state.viewing.id + '/validate',
+				{ method: 'POST', body: {} }
+			);
+			state.validation = data;
+			state.validationOpen = true;
+			clearMessages();
+		} catch ( err ) {
+			showError( err );
+		} finally {
+			state.busy = false;
+		}
+		render();
+	}
+
+	function closeValidation() {
+		state.validationOpen = false;
+		render();
+	}
+
+	async function requestPublish() {
+		if ( ! state.viewing ) return;
+		state.busy = true;
+		render();
+		try {
+			const data = await ConfigKit.request(
+				'/templates/' + state.viewing.id + '/validate',
+				{ method: 'POST', body: {} }
+			);
+			state.validation = data;
+			if ( ! data.valid ) {
+				state.validationOpen = true;
+				state.message = { kind: 'error', text: 'Cannot publish — fix the errors below first.' };
+			} else {
+				state.publishConfirm = { validation: data };
+			}
+		} catch ( err ) {
+			showError( err );
+		} finally {
+			state.busy = false;
+		}
+		render();
+	}
+
+	function cancelPublishConfirm() {
+		state.publishConfirm = null;
+		render();
+	}
+
+	async function confirmPublish() {
+		if ( ! state.viewing || ! state.publishConfirm ) return;
+		state.busy = true;
+		render();
+		try {
+			const data = await ConfigKit.request(
+				'/templates/' + state.viewing.id + '/publish',
+				{ method: 'POST', body: {} }
+			);
+			state.publishConfirm = null;
+			state.viewing = Object.assign( {}, state.viewing, {
+				status: 'published',
+				published_version_id: data.record.id,
+			} );
+			state.message = { kind: 'success', text: 'Published version ' + data.record.version_number + '.' };
+			await refreshVersions();
+		} catch ( err ) {
+			showError( err );
+		} finally {
+			state.busy = false;
+		}
+		render();
+	}
+
+	async function openVersionsDrawer() {
+		state.versionsOpen = true;
+		await refreshVersions();
+		render();
+	}
+
+	function closeVersionsDrawer() {
+		state.versionsOpen = false;
+		state.viewingVersion = null;
+		render();
+	}
+
+	async function refreshVersions() {
+		if ( ! state.viewing ) return;
+		try {
+			const data = await ConfigKit.request( '/templates/' + state.viewing.id + '/versions' );
+			state.versions = data;
+		} catch ( err ) {
+			showError( err );
+		}
+	}
+
+	async function viewVersionSnapshot( versionId ) {
+		try {
+			const data = await ConfigKit.request(
+				'/templates/' + state.viewing.id + '/versions/' + versionId
+			);
+			state.viewingVersion = data.record;
+			render();
+		} catch ( err ) {
+			showError( err );
+			render();
+		}
+	}
+
+	function renderValidationPanel() {
+		const v = state.validation;
+		const wrap = el( 'div', { class: 'configkit-form configkit-validation-panel' } );
+		const cls  = v.valid && v.warnings.length === 0
+			? 'notice notice-success inline'
+			: ( v.valid ? 'notice notice-warning inline' : 'notice notice-error inline' );
+		wrap.appendChild( el(
+			'div',
+			{ class: 'configkit-list__header' },
+			el( 'h3', null, v.valid ? ( v.warnings.length === 0 ? 'All clean' : 'Valid (with warnings)' ) : 'Pre-publish issues' ),
+			el( 'button', { type: 'button', class: 'button', onClick: closeValidation }, 'Close' )
+		) );
+		wrap.appendChild( el( 'p', { class: cls }, el( 'strong', null,
+			v.valid ? ( v.warnings.length === 0 ? 'No errors and no warnings.' : v.warnings.length + ' warning(s).' )
+			        : v.errors.length + ' error(s) and ' + v.warnings.length + ' warning(s).'
+		) ) );
+
+		if ( v.errors.length > 0 ) {
+			wrap.appendChild( renderIssueList( 'Errors', v.errors, 'error' ) );
+		}
+		if ( v.warnings.length > 0 ) {
+			wrap.appendChild( renderIssueList( 'Warnings', v.warnings, 'warning' ) );
+		}
+		return wrap;
+	}
+
+	function renderIssueList( title, issues, kind ) {
+		const list = el( 'ul', { class: 'configkit-issue-list configkit-issue-list--' + kind } );
+		issues.forEach( ( i ) => {
+			list.appendChild( el(
+				'li',
+				null,
+				el( 'span', { class: 'configkit-issue-list__type' }, ( i.object_type || '' ) + ':' ),
+				' ',
+				el( 'code', null, i.object_key || '' ),
+				' — ',
+				i.message
+			) );
+		} );
+		return el( 'div', null,
+			el( 'h4', null, title ),
+			list
+		);
+	}
+
+	function renderPublishConfirm() {
+		const overlay = el( 'div', { class: 'configkit-modal-overlay' } );
+		const modal   = el( 'div', { class: 'configkit-modal' } );
+		overlay.appendChild( modal );
+		const next = ( state.versions && state.versions.items && state.versions.items.length > 0 )
+			? ( state.versions.items[ 0 ].version_number + 1 )
+			: 1;
+		modal.appendChild( el( 'h2', null, 'Publish version ' + next + '?' ) );
+		modal.appendChild( el( 'p', null,
+			'Validation passed. Publishing creates an immutable snapshot of the current draft. Existing carts keep their pinned version; new configurations use this new version.'
+		) );
+		if ( state.publishConfirm.validation && state.publishConfirm.validation.warnings.length > 0 ) {
+			modal.appendChild( el( 'p', { class: 'description' },
+				state.publishConfirm.validation.warnings.length + ' warning(s) present — review them in the Validate panel before publishing.'
+			) );
+		}
+		modal.appendChild( el(
+			'div',
+			{ class: 'configkit-form__footer' },
+			el( 'button', {
+				type: 'button',
+				class: 'button button-primary',
+				disabled: state.busy,
+				onClick: confirmPublish,
+			}, state.busy ? 'Publishing…' : 'Publish' ),
+			el( 'button', { type: 'button', class: 'button', onClick: cancelPublishConfirm }, 'Cancel' )
+		) );
+		return overlay;
+	}
+
+	function renderVersionsDrawer() {
+		const overlay = el( 'div', { class: 'configkit-modal-overlay configkit-versions-drawer' } );
+		const drawer  = el( 'div', { class: 'configkit-modal configkit-versions-drawer__panel' } );
+		overlay.appendChild( drawer );
+
+		drawer.appendChild( el(
+			'div',
+			{ class: 'configkit-builder__pane-header' },
+			el( 'h2', null, state.viewingVersion ? 'Version v' + state.viewingVersion.version_number : 'Version history' ),
+			el( 'button', { type: 'button', class: 'button', onClick: closeVersionsDrawer }, 'Close' )
+		) );
+
+		if ( state.viewingVersion ) {
+			drawer.appendChild( renderVersionSnapshot() );
+		} else {
+			drawer.appendChild( renderVersionList() );
+		}
+
+		return overlay;
+	}
+
+	function renderVersionList() {
+		const wrap = el( 'div' );
+		const items = state.versions.items || [];
+		if ( items.length === 0 ) {
+			wrap.appendChild( el(
+				'div',
+				{ class: 'configkit-empty' },
+				el( 'p', null, 'No published versions yet.' ),
+				el( 'p', { class: 'configkit-empty__hint' }, 'Click "Publish" to create version 1.' )
+			) );
+			return wrap;
+		}
+
+		const table = el(
+			'table',
+			{ class: 'wp-list-table widefat striped' },
+			el( 'thead', null, el(
+				'tr',
+				null,
+				el( 'th', null, 'Version' ),
+				el( 'th', null, 'Status' ),
+				el( 'th', null, 'Published' ),
+				el( 'th', null, 'Used by' ),
+				el( 'th', null, '' )
+			) )
+		);
+		const tbody = el( 'tbody' );
+		items.forEach( ( v ) => {
+			tbody.appendChild( el(
+				'tr',
+				null,
+				el( 'td', null, 'v' + v.version_number ),
+				el(
+					'td',
+					null,
+					el(
+						'span',
+						{ class: 'configkit-badge configkit-badge--' + ( v.status === 'published' ? 'active' : 'inactive' ) },
+						v.status
+					)
+				),
+				el( 'td', null, v.published_at || '—' ),
+				el( 'td', null, '— / —' ),
+				el(
+					'td',
+					{ class: 'configkit-actions' },
+					el(
+						'button',
+						{ type: 'button', class: 'button', onClick: () => viewVersionSnapshot( v.id ) },
+						'View'
+					)
+				)
+			) );
+		} );
+		table.appendChild( tbody );
+		wrap.appendChild( table );
+		return wrap;
+	}
+
+	function renderVersionSnapshot() {
+		const v = state.viewingVersion;
+		const wrap = el( 'div' );
+		wrap.appendChild( el( 'p', { class: 'description' },
+			'Read-only snapshot. Published ' + ( v.published_at || '—' ) + ' · ' + v.status
+		) );
+		const snap = v.snapshot || {};
+		wrap.appendChild( el( 'h4', null, 'Template' ) );
+		wrap.appendChild( el( 'pre', { class: 'configkit-json' }, JSON.stringify( snap.template || {}, null, 2 ) ) );
+		wrap.appendChild( el( 'h4', null, 'Steps (' + ( ( snap.steps || [] ).length ) + ')' ) );
+		wrap.appendChild( el( 'pre', { class: 'configkit-json' }, JSON.stringify( snap.steps || [], null, 2 ) ) );
+		wrap.appendChild( el( 'h4', null, 'Fields (' + ( ( snap.fields || [] ).length ) + ')' ) );
+		wrap.appendChild( el( 'pre', { class: 'configkit-json' }, JSON.stringify( snap.fields || [], null, 2 ) ) );
+		wrap.appendChild( el( 'h4', null, 'Field options (' + ( ( snap.field_options || [] ).length ) + ')' ) );
+		wrap.appendChild( el( 'pre', { class: 'configkit-json' }, JSON.stringify( snap.field_options || [], null, 2 ) ) );
+		wrap.appendChild( el( 'h4', null, 'Rules (' + ( ( snap.rules || [] ).length ) + ')' ) );
+		wrap.appendChild( el( 'pre', { class: 'configkit-json' }, JSON.stringify( snap.rules || [], null, 2 ) ) );
+		wrap.appendChild( el(
+			'div',
+			{ class: 'configkit-form__footer' },
+			el( 'button', {
+				type: 'button',
+				class: 'button',
+				onClick: () => { state.viewingVersion = null; render(); },
+			}, 'Back to versions list' )
+		) );
+		return wrap;
 	}
 
 	function init() {
