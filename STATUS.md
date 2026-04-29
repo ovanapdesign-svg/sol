@@ -41,7 +41,20 @@ Phase 1.
 
 ## Phase 1 — Schema migrations
 
-(Nothing started. All `pending`.)
+| Item                                                | Status   | Notes                                                                  |
+|-----------------------------------------------------|----------|------------------------------------------------------------------------|
+| Plugin bootstrap + Composer/PSR-4 autoloader        | complete | `configkit.php`, `src/Plugin.php`, `composer.json`. Fallback autoloader if `vendor/` absent. |
+| Migration interface + Runner                        | complete | `src/Migration/Migration.php`, `src/Migration/Runner.php`. Uses `microtime(true)`; logs applied/failed to `wp_configkit_migrations`. |
+| 16 migration files (0001–0016)                      | complete | Schemas per `DATA_MODEL.md §3`. No seed migration — `wp_configkit_modules` ships empty (owner adds modules in Phase 3). |
+| WP-CLI command `wp configkit migrate`               | complete | `src/CLI/Command.php`. Supports `--dry-run` and `--status`.            |
+| PHPUnit unit tests                                  | complete | `tests/unit/Migration/RunnerTest.php`. 4 tests / 16 assertions, green. |
+| Apply migrations on staging DB                      | pending  | Owner activates plugin to trigger migrations, or runs `wp configkit migrate`. |
+| Verify idempotent re-run                            | pending  | Owner: `wp configkit migrate` twice — second run reports no pending.   |
+| Verify tables via `SHOW TABLES LIKE 'wp_configkit%'` | pending  | Owner verifies 16 tables present.                                      |
+
+**Phase 1 status:** code complete, tests green; awaiting owner DB
+activation to satisfy operational exit criteria. No `INSERT`/`UPDATE`
+issued by this codebase yet beyond the migrations table itself.
 
 ---
 
