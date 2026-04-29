@@ -10,12 +10,16 @@ use ConfigKit\Admin\AssetLoader;
 use ConfigKit\Admin\Menu;
 use ConfigKit\Admin\Pages\AbstractPage;
 use ConfigKit\Admin\Pages\DashboardPage;
+use ConfigKit\Admin\Pages\ModulesPage;
 use ConfigKit\Admin\Pages\SettingsPage;
 use ConfigKit\Capabilities\Registrar;
 use ConfigKit\CLI\Command;
 use ConfigKit\Migration\Runner;
 use ConfigKit\Repository\CountsService;
+use ConfigKit\Repository\ModuleRepository;
+use ConfigKit\Rest\Controllers\ModulesController;
 use ConfigKit\Rest\Router;
+use ConfigKit\Service\ModuleService;
 use ConfigKit\Settings\GeneralSettings;
 
 final class Plugin {
@@ -72,11 +76,15 @@ final class Plugin {
 		return [
 			new DashboardPage( new CountsService( $wpdb ) ),
 			new SettingsPage( $this->build_general_settings() ),
+			new ModulesPage(),
 		];
 	}
 
 	private function build_rest_router(): Router {
-		return new Router();
+		global $wpdb;
+		$router = new Router();
+		$router->add( new ModulesController( new ModuleService( new ModuleRepository( $wpdb ) ) ) );
+		return $router;
 	}
 
 	private function build_asset_loader(): AssetLoader {

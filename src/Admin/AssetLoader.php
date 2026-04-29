@@ -44,6 +44,31 @@ final class AssetLoader {
 		);
 
 		\wp_enqueue_script( 'configkit-admin' );
+
+		$this->maybe_enqueue_page_script(
+			$hook_suffix,
+			'configkit-modules',
+			'configkit-modules',
+			'assets/admin/js/modules.js'
+		);
+	}
+
+	private function maybe_enqueue_page_script(
+		string $hook_suffix,
+		string $page_slug_match,
+		string $handle,
+		string $relative_path
+	): void {
+		if ( ! str_contains( $hook_suffix, $page_slug_match ) ) {
+			return;
+		}
+		\wp_enqueue_script(
+			$handle,
+			$this->plugin_url . $relative_path,
+			[ 'configkit-admin' ],
+			$this->version,
+			true
+		);
 	}
 
 	private function is_configkit_page( string $hook_suffix ): bool {

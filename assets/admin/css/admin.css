@@ -48,3 +48,155 @@
 	font-weight: 600;
 	color: #1d2327;
 }
+
+/* App shell (REST-driven pages) */
+.configkit-app[ data-loading="true" ] .configkit-app__loading {
+	color: #50575e;
+}
+
+.configkit-list__header {
+	margin: 16px 0;
+	display: flex;
+	gap: 8px;
+}
+
+.configkit-empty {
+	background: #fff;
+	border: 1px dashed #c3c4c7;
+	border-radius: 4px;
+	padding: 32px;
+	text-align: center;
+	margin-top: 16px;
+}
+
+.configkit-empty__hint {
+	color: #50575e;
+	max-width: 480px;
+	margin: 8px auto 0;
+}
+
+.configkit-modules-table .configkit-actions {
+	width: 80px;
+	text-align: right;
+}
+
+.configkit-badge {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 12px;
+	font-size: 12px;
+	font-weight: 500;
+}
+
+.configkit-badge--active {
+	background: #d5e7d4;
+	color: #1d4f1d;
+}
+
+.configkit-badge--inactive {
+	background: #f1c6c6;
+	color: #6f1414;
+}
+
+.configkit-form {
+	max-width: 800px;
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	padding: 24px;
+	margin-top: 16px;
+}
+
+.configkit-form > h2 {
+	margin-top: 0;
+}
+
+.configkit-fieldset {
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	padding: 12px 16px 16px;
+	margin: 12px 0;
+}
+
+.configkit-fieldset > legend {
+	font-weight: 600;
+	padding: 0 6px;
+}
+
+.configkit-field {
+	margin-bottom: 12px;
+}
+
+.configkit-field > label {
+	display: block;
+	font-weight: 500;
+	margin-bottom: 4px;
+}
+
+.configkit-field--inline {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.configkit-field--inline > label {
+	margin-bottom: 0;
+}
+
+.configkit-grid {
+	display: grid;
+	gap: 8px 16px;
+}
+
+.configkit-grid--3 {
+	grid-template-columns: repeat( 3, minmax( 0, 1fr ) );
+}
+
+.configkit-grid--5 {
+	grid-template-columns: repeat( auto-fit, minmax( 120px, 1fr ) );
+}
+
+.configkit-checkbox {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.configkit-toggle {
+	margin: 8px 0;
+}
+
+.configkit-json {
+	width: 100%;
+	font-family: ui-monospace, Menlo, Consolas, monospace;
+	font-size: 12px;
+}
+
+.configkit-form__footer {
+	margin-top: 16px;
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+
+.configkit-form__footer .button-link-delete {
+	margin-left: auto;
+	color: #b32d2e;
+}
+
+.configkit-errors {
+	color: #b32d2e;
+	margin: 4px 0 0 0;
+	padding-left: 18px;
+	font-size: 12px;
+}
+
+.configkit-error {
+	color: #b32d2e;
+	font-size: 12px;
+	margin-top: 4px;
+}
+
+.configkit-notice {
+	margin: 8px 0 16px;
+}
