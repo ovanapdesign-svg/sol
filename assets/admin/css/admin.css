@@ -764,3 +764,119 @@
 	font-size: 13px;
 	margin-right: auto;
 }
+
+/* ---- Diagnostics page ---- */
+
+.configkit-diagnostics__toolbar {
+	display: flex;
+	gap: 16px;
+	align-items: center;
+	margin: 12px 0;
+	padding: 8px 12px;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+}
+
+.configkit-diagnostics__counts {
+	display: flex;
+	gap: 8px;
+	margin-left: auto;
+}
+
+.configkit-diagnostics__count {
+	font-size: 12px;
+	padding: 2px 8px;
+	border-radius: 3px;
+	font-weight: 600;
+}
+
+.configkit-diagnostics__count--critical {
+	background: #fdf0f0;
+	color: #b32d2e;
+	border: 1px solid #e3b3b3;
+}
+
+.configkit-diagnostics__count--warning {
+	background: #fcf9e8;
+	color: #614500;
+	border: 1px solid #d3ba50;
+}
+
+.configkit-diagnostics__count--acknowledged {
+	background: #f0f0f1;
+	color: #50575e;
+	border: 1px solid #c3c4c7;
+}
+
+.configkit-diagnostics__tabs {
+	margin: 16px 0 0;
+}
+
+.configkit-diagnostics__list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.configkit-diagnostics__issue {
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-left-width: 4px;
+	border-radius: 3px;
+	padding: 12px 16px;
+	margin: 6px 0;
+}
+
+.configkit-diagnostics__issue--critical {
+	border-left-color: #b32d2e;
+}
+
+.configkit-diagnostics__issue--warning {
+	border-left-color: #b08c00;
+}
+
+.configkit-diagnostics__issue--acknowledged {
+	opacity: 0.7;
+	background: #fafafa;
+}
+
+.configkit-diagnostics__issue-head {
+	display: flex;
+	gap: 8px;
+	align-items: baseline;
+	flex-wrap: wrap;
+}
+
+.configkit-diagnostics__issue-object {
+	color: #50575e;
+	font-size: 13px;
+}
+
+.configkit-diagnostics__issue-message {
+	margin: 6px 0;
+	color: #2c3338;
+}
+
+.configkit-diagnostics__issue-actions {
+	display: flex;
+	gap: 8px;
+}
+
+.configkit-diagnostics__ack {
+	color: #50575e;
+	font-size: 12px;
+	font-style: italic;
+}
+
+.configkit-diagnostics__meta {
+	color: #50575e;
+	font-size: 12px;
+	margin-top: 16px;
+}
+
+.configkit-badge--error {
+	background: #fdf0f0;
+	color: #b32d2e;
+	border: 1px solid #e3b3b3;
+}

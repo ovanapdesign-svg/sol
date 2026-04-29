@@ -10,6 +10,7 @@ use ConfigKit\Admin\AssetLoader;
 use ConfigKit\Admin\Menu;
 use ConfigKit\Admin\Pages\AbstractPage;
 use ConfigKit\Admin\Pages\DashboardPage;
+use ConfigKit\Admin\Pages\DiagnosticsPage;
 use ConfigKit\Admin\Pages\FamiliesPage;
 use ConfigKit\Admin\Pages\LibrariesPage;
 use ConfigKit\Admin\Pages\LookupTablesPage;
@@ -27,6 +28,7 @@ use ConfigKit\Repository\FieldOptionRepository;
 use ConfigKit\Repository\FieldRepository;
 use ConfigKit\Repository\LibraryItemRepository;
 use ConfigKit\Repository\LibraryRepository;
+use ConfigKit\Repository\LogRepository;
 use ConfigKit\Repository\LookupCellRepository;
 use ConfigKit\Repository\LookupTableRepository;
 use ConfigKit\Repository\ModuleRepository;
@@ -35,6 +37,7 @@ use ConfigKit\Repository\RuleRepository;
 use ConfigKit\Repository\StepRepository;
 use ConfigKit\Repository\TemplateRepository;
 use ConfigKit\Repository\TemplateVersionRepository;
+use ConfigKit\Rest\Controllers\DiagnosticsController;
 use ConfigKit\Rest\Controllers\FamiliesController;
 use ConfigKit\Rest\Controllers\FieldOptionsController;
 use ConfigKit\Rest\Controllers\FieldsController;
@@ -61,6 +64,7 @@ use ConfigKit\Service\ProductBindingService;
 use ConfigKit\Service\ProductDiagnosticsService;
 use ConfigKit\Service\RuleService;
 use ConfigKit\Service\StepService;
+use ConfigKit\Service\SystemDiagnosticsService;
 use ConfigKit\Service\TemplateService;
 use ConfigKit\Service\TemplateValidator;
 use ConfigKit\Service\TemplateVersionService;
@@ -133,6 +137,7 @@ final class Plugin {
 			new FamiliesPage(),
 			new TemplatesPage(),
 			new ProductsPage(),
+			new DiagnosticsPage(),
 		];
 	}
 
@@ -207,6 +212,23 @@ final class Plugin {
 			$step_repo,
 			$field_repo
 		) );
+
+		$log_repo = new LogRepository( $wpdb );
+		$system_diagnostics = new SystemDiagnosticsService(
+			$binding_repo,
+			$template_repo,
+			$step_repo,
+			$field_repo,
+			$field_option_repo,
+			$lookup_repo,
+			$cell_repo,
+			$library_repo,
+			$item_repo,
+			$module_repo,
+			$rule_repo,
+			$log_repo
+		);
+		$router->add( new DiagnosticsController( $system_diagnostics ) );
 		return $router;
 	}
 

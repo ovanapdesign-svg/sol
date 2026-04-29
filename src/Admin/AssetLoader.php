@@ -99,6 +99,13 @@ final class AssetLoader {
 			'configkit-products',
 			'assets/admin/js/products.js'
 		);
+
+		$this->maybe_enqueue_page_script(
+			$hook_suffix,
+			'configkit-diagnostics',
+			'configkit-diagnostics',
+			'assets/admin/js/diagnostics.js'
+		);
 	}
 
 	private function is_product_edit_screen( string $hook_suffix ): bool {
