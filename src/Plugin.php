@@ -14,8 +14,10 @@ use ConfigKit\Admin\Pages\FamiliesPage;
 use ConfigKit\Admin\Pages\LibrariesPage;
 use ConfigKit\Admin\Pages\LookupTablesPage;
 use ConfigKit\Admin\Pages\ModulesPage;
+use ConfigKit\Admin\Pages\ProductsPage;
 use ConfigKit\Admin\Pages\SettingsPage;
 use ConfigKit\Admin\Pages\TemplatesPage;
+use ConfigKit\Admin\WooIntegration;
 use ConfigKit\Capabilities\Registrar;
 use ConfigKit\CLI\Command;
 use ConfigKit\Migration\Runner;
@@ -28,6 +30,7 @@ use ConfigKit\Repository\LibraryRepository;
 use ConfigKit\Repository\LookupCellRepository;
 use ConfigKit\Repository\LookupTableRepository;
 use ConfigKit\Repository\ModuleRepository;
+use ConfigKit\Repository\ProductBindingRepository;
 use ConfigKit\Repository\RuleRepository;
 use ConfigKit\Repository\StepRepository;
 use ConfigKit\Repository\TemplateRepository;
@@ -40,6 +43,7 @@ use ConfigKit\Rest\Controllers\LibraryItemsController;
 use ConfigKit\Rest\Controllers\LookupCellsController;
 use ConfigKit\Rest\Controllers\LookupTablesController;
 use ConfigKit\Rest\Controllers\ModulesController;
+use ConfigKit\Rest\Controllers\ProductsController;
 use ConfigKit\Rest\Controllers\RulesController;
 use ConfigKit\Rest\Controllers\StepsController;
 use ConfigKit\Rest\Controllers\TemplatesController;
@@ -53,6 +57,8 @@ use ConfigKit\Service\LibraryService;
 use ConfigKit\Service\LookupCellService;
 use ConfigKit\Service\LookupTableService;
 use ConfigKit\Service\ModuleService;
+use ConfigKit\Service\ProductBindingService;
+use ConfigKit\Service\ProductDiagnosticsService;
 use ConfigKit\Service\RuleService;
 use ConfigKit\Service\StepService;
 use ConfigKit\Service\TemplateService;
@@ -76,6 +82,7 @@ final class Plugin {
 			\add_action( 'admin_menu', [ $this, 'register_admin_menu' ] );
 			\add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_admin_assets' ] );
 			\add_action( 'admin_init', [ $this, 'register_admin_init' ] );
+			( new WooIntegration() )->register();
 		}
 
 		$this->build_rest_router()->init();
@@ -125,6 +132,7 @@ final class Plugin {
 			new LookupTablesPage(),
 			new FamiliesPage(),
 			new TemplatesPage(),
+			new ProductsPage(),
 		];
 	}
 
@@ -177,6 +185,28 @@ final class Plugin {
 			$template_validator
 		);
 		$router->add( new TemplateVersionsController( $version_service, $template_validator ) );
+
+		$binding_repo        = new ProductBindingRepository( $wpdb );
+		$binding_service     = new ProductBindingService( $binding_repo );
+		$diagnostics_service = new ProductDiagnosticsService(
+			$binding_repo,
+			$template_repo,
+			$step_repo,
+			$field_repo,
+			$field_option_repo,
+			$lookup_repo,
+			$cell_repo,
+			$library_repo,
+			$item_repo,
+			$rule_repo
+		);
+		$router->add( new ProductsController(
+			$binding_service,
+			$diagnostics_service,
+			$template_repo,
+			$step_repo,
+			$field_repo
+		) );
 		return $router;
 	}
 

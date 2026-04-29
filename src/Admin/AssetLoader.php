@@ -15,7 +15,9 @@ final class AssetLoader {
 	) {}
 
 	public function enqueue( string $hook_suffix ): void {
-		if ( ! $this->is_configkit_page( $hook_suffix ) ) {
+		$is_configkit_page = $this->is_configkit_page( $hook_suffix );
+		$is_product_edit   = $this->is_product_edit_screen( $hook_suffix );
+		if ( ! $is_configkit_page && ! $is_product_edit ) {
 			return;
 		}
 
@@ -44,6 +46,17 @@ final class AssetLoader {
 		);
 
 		\wp_enqueue_script( 'configkit-admin' );
+
+		if ( $is_product_edit ) {
+			\wp_enqueue_script(
+				'configkit-product-binding',
+				$this->plugin_url . 'assets/admin/js/product-binding.js',
+				[ 'configkit-admin' ],
+				$this->version,
+				true
+			);
+			return;
+		}
 
 		$this->maybe_enqueue_page_script(
 			$hook_suffix,
@@ -79,6 +92,24 @@ final class AssetLoader {
 			'configkit-templates',
 			'assets/admin/js/templates.js'
 		);
+
+		$this->maybe_enqueue_page_script(
+			$hook_suffix,
+			'configkit-products',
+			'configkit-products',
+			'assets/admin/js/products.js'
+		);
+	}
+
+	private function is_product_edit_screen( string $hook_suffix ): bool {
+		if ( $hook_suffix !== 'post.php' && $hook_suffix !== 'post-new.php' ) {
+			return false;
+		}
+		$screen = function_exists( 'get_current_screen' ) ? \get_current_screen() : null;
+		if ( $screen === null ) {
+			return false;
+		}
+		return ( $screen->post_type ?? '' ) === 'product';
 	}
 
 	private function maybe_enqueue_page_script(
