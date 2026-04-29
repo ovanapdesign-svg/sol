@@ -28,6 +28,7 @@ final class Plugin {
 
 	public function boot(): void {
 		\register_activation_hook( $this->plugin_file, [ $this, 'on_activation' ] );
+		\register_deactivation_hook( $this->plugin_file, [ $this, 'on_deactivation' ] );
 
 		if ( defined( 'WP_CLI' ) && \WP_CLI ) {
 			\WP_CLI::add_command( 'configkit', new Command( $this->build_runner() ) );
@@ -47,6 +48,10 @@ final class Plugin {
 		( new Registrar() )->register();
 	}
 
+	public function on_deactivation(): void {
+		( new Registrar() )->deregister();
+	}
+
 	public function register_admin_menu(): void {
 		( new Menu( $this->build_admin_pages() ) )->register();
 	}
@@ -57,6 +62,7 @@ final class Plugin {
 
 	public function register_admin_init(): void {
 		$this->build_general_settings()->register();
+		( new Registrar() )->ensure_registered();
 	}
 
 	private function build_general_settings(): GeneralSettings {

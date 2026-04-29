@@ -36,6 +36,9 @@ final class Registrar {
 		],
 	];
 
+	public const CAPS_VERSION_OPTION = 'configkit_caps_version';
+	public const CAPS_VERSION        = '1';
+
 	public function register(): void {
 		foreach ( self::ROLE_MAP as $role_name => $caps ) {
 			$role = \get_role( $role_name );
@@ -48,5 +51,37 @@ final class Registrar {
 				}
 			}
 		}
+		\update_option( self::CAPS_VERSION_OPTION, self::CAPS_VERSION );
+	}
+
+	public function deregister(): void {
+		$all_roles = array_unique( array_merge(
+			array_keys( self::ROLE_MAP ),
+			[ 'administrator', 'shop_manager' ]
+		) );
+		foreach ( $all_roles as $role_name ) {
+			$role = \get_role( $role_name );
+			if ( $role === null ) {
+				continue;
+			}
+			foreach ( self::CAPS as $cap ) {
+				if ( $role->has_cap( $cap ) ) {
+					$role->remove_cap( $cap );
+				}
+			}
+		}
+		\delete_option( self::CAPS_VERSION_OPTION );
+	}
+
+	/**
+	 * Idempotent safety net: ensure caps are present even when the
+	 * activation hook never ran (plugin file copied in place, or the
+	 * plugin was first activated before this Registrar shipped).
+	 */
+	public function ensure_registered(): void {
+		if ( \get_option( self::CAPS_VERSION_OPTION ) === self::CAPS_VERSION ) {
+			return;
+		}
+		$this->register();
 	}
 }
