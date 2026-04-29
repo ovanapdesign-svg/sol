@@ -1,0 +1,27 @@
+{
+    "name": "ovanap/configkit",
+    "description": "Dynamic schema-driven WooCommerce product configurator.",
+    "type": "wordpress-plugin",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.1"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.6"
+    },
+    "autoload": {
+        "psr-4": {
+            "ConfigKit\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "ConfigKit\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "optimize-autoloader": true
+    },
+    "minimum-stability": "stable"
+}
