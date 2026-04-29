@@ -21,10 +21,13 @@ Phase N+1 until Phase N is marked `complete` in `STATUS.md`.
 
 ### Exit criteria
 - All four Batch 1 specs approved (TARGET, DATA, FIELD, MODULE_LIBRARY).
-- All six Batch 2 specs approved (RULE, PRICING, VERSIONING, MIGRATION,
-  MULTILANG, AUDIT).
-- UX roadmap approved (8 docs).
 - Owner explicitly signs off entry to Phase 1.
+
+**Notes:**
+- Batch 2 specs (RULE_ENGINE_CONTRACT, PRICING_CONTRACT,
+  TEMPLATE_VERSIONING, MIGRATION_STRATEGY, MULTILANGUAGE_MODEL,
+  AUDIT_CHECKLIST) must be approved before Phase 2 entry.
+- UX roadmap (8 docs) must be approved before Phase 3 entry.
 
 ---
 
@@ -69,6 +72,12 @@ Phase N+1 until Phase N is marked `complete` in `STATUS.md`.
 
 Pure-PHP engines, no WP dependencies, fully unit-testable.
 
+### Entry criteria
+- Phase 1 marked `complete` in `STATUS.md`.
+- All Batch 2 specs approved (RULE_ENGINE_CONTRACT, PRICING_CONTRACT,
+  TEMPLATE_VERSIONING, MIGRATION_STRATEGY, MULTILANGUAGE_MODEL,
+  AUDIT_CHECKLIST).
+
 ### Allowed
 - `ConfigKit\Engines\RuleEngine`
 - `ConfigKit\Engines\PricingEngine`
@@ -98,6 +107,7 @@ before Excel import and frontend polish arrive in later phases.
 
 ### Entry criteria
 - WooCommerce installed and active.
+- UX roadmap approved (8 docs).
 - Phase 2 marked `complete` in `STATUS.md`.
 
 ### Allowed
