@@ -51,6 +51,13 @@ final class AssetLoader {
 			'configkit-modules',
 			'assets/admin/js/modules.js'
 		);
+
+		$this->maybe_enqueue_page_script(
+			$hook_suffix,
+			'configkit-libraries',
+			'configkit-libraries',
+			'assets/admin/js/libraries.js'
+		);
 	}
 
 	private function maybe_enqueue_page_script(

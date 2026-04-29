@@ -10,15 +10,22 @@ use ConfigKit\Admin\AssetLoader;
 use ConfigKit\Admin\Menu;
 use ConfigKit\Admin\Pages\AbstractPage;
 use ConfigKit\Admin\Pages\DashboardPage;
+use ConfigKit\Admin\Pages\LibrariesPage;
 use ConfigKit\Admin\Pages\ModulesPage;
 use ConfigKit\Admin\Pages\SettingsPage;
 use ConfigKit\Capabilities\Registrar;
 use ConfigKit\CLI\Command;
 use ConfigKit\Migration\Runner;
 use ConfigKit\Repository\CountsService;
+use ConfigKit\Repository\LibraryItemRepository;
+use ConfigKit\Repository\LibraryRepository;
 use ConfigKit\Repository\ModuleRepository;
+use ConfigKit\Rest\Controllers\LibrariesController;
+use ConfigKit\Rest\Controllers\LibraryItemsController;
 use ConfigKit\Rest\Controllers\ModulesController;
 use ConfigKit\Rest\Router;
+use ConfigKit\Service\LibraryItemService;
+use ConfigKit\Service\LibraryService;
 use ConfigKit\Service\ModuleService;
 use ConfigKit\Settings\GeneralSettings;
 
@@ -83,13 +90,20 @@ final class Plugin {
 			new DashboardPage( new CountsService( $wpdb ) ),
 			new SettingsPage( $this->build_general_settings() ),
 			new ModulesPage(),
+			new LibrariesPage(),
 		];
 	}
 
 	private function build_rest_router(): Router {
 		global $wpdb;
+		$module_repo  = new ModuleRepository( $wpdb );
+		$library_repo = new LibraryRepository( $wpdb );
+		$item_repo    = new LibraryItemRepository( $wpdb );
+
 		$router = new Router();
-		$router->add( new ModulesController( new ModuleService( new ModuleRepository( $wpdb ) ) ) );
+		$router->add( new ModulesController( new ModuleService( $module_repo ) ) );
+		$router->add( new LibrariesController( new LibraryService( $library_repo, $module_repo ) ) );
+		$router->add( new LibraryItemsController( new LibraryItemService( $item_repo, $library_repo, $module_repo ) ) );
 		return $router;
 	}
 

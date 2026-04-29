@@ -200,3 +200,51 @@
 .configkit-notice {
 	margin: 8px 0 16px;
 }
+
+.configkit-group {
+	margin: 24px 0 8px;
+	font-size: 14px;
+	font-weight: 600;
+	color: #1d2327;
+}
+
+.configkit-libraries-table .configkit-actions,
+.configkit-items-table .configkit-actions {
+	width: 80px;
+	text-align: right;
+}
+
+.configkit-items {
+	margin-top: 24px;
+}
+
+.configkit-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin: 4px 0 8px;
+}
+
+.configkit-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 8px;
+	background: #e7eaf0;
+	border-radius: 12px;
+	font-size: 12px;
+}
+
+.configkit-chip__remove {
+	background: transparent;
+	border: 0;
+	color: #50575e;
+	cursor: pointer;
+	font-size: 14px;
+	line-height: 1;
+	padding: 0 2px;
+}
+
+.configkit-chip__remove:hover {
+	color: #b32d2e;
+}
