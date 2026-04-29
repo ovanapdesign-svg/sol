@@ -95,7 +95,22 @@
 	}
 
 	function showError( err ) {
-		const desc = window.ConfigKit.describeError( err );
+		let desc;
+		try {
+			desc = window.ConfigKit && window.ConfigKit.describeError
+				? window.ConfigKit.describeError( err )
+				: null;
+		} catch ( e ) {
+			desc = null;
+		}
+		if ( ! desc ) {
+			desc = {
+				kind: 'error',
+				friendly: ( err && err.message ) || 'Something went wrong.',
+				technical: ( err && err.message ) || '',
+				showFieldErrors: true,
+			};
+		}
 		state.fieldErrors = {};
 		if ( desc.showFieldErrors ) {
 			const errors = ( err && err.data && err.data.errors ) || [];
@@ -272,6 +287,7 @@
 			sort_order: rec.sort_order,
 		};
 
+		let success = false;
 		try {
 			if ( rec.id > 0 ) {
 				payload.version_hash = rec.version_hash;
@@ -279,13 +295,17 @@
 			} else {
 				await ConfigKit.request( '/libraries', { method: 'POST', body: payload } );
 			}
-			redirectToList( wasNew ? 'lib_created' : 'lib_updated' );
-			return;
+			success = true;
 		} catch ( err ) {
 			showError( err );
+		} finally {
+			state.busy = false;
 		}
 
-		state.busy = false;
+		if ( success ) {
+			redirectToList( wasNew ? 'lib_created' : 'lib_updated' );
+			return;
+		}
 		render();
 	}
 
@@ -331,6 +351,7 @@
 		if ( module.supports_filters ) payload.filters = rec.filters || [];
 		if ( module.supports_compatibility ) payload.compatibility = rec.compatibility || [];
 
+		let success = false;
 		try {
 			if ( rec.id > 0 ) {
 				payload.version_hash = rec.version_hash;
@@ -344,13 +365,17 @@
 					{ method: 'POST', body: payload }
 				);
 			}
-			redirectToLibrary( state.library.id, wasNew ? 'item_created' : 'item_updated' );
-			return;
+			success = true;
 		} catch ( err ) {
 			showError( err );
+		} finally {
+			state.busy = false;
 		}
 
-		state.busy = false;
+		if ( success ) {
+			redirectToLibrary( state.library.id, wasNew ? 'item_created' : 'item_updated' );
+			return;
+		}
 		render();
 	}
 

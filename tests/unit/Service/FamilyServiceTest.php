@@ -65,6 +65,27 @@ final class FamilyServiceTest extends TestCase {
 		$this->assertContains( 'invalid_chars', $codes );
 	}
 
+	public function test_create_family_key_with_dot_is_rejected(): void {
+		$result = $this->service->create( $this->valid_input( [ 'family_key' => 'foo.bar' ] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'invalid_chars', $codes );
+	}
+
+	public function test_create_family_key_with_dash_is_rejected(): void {
+		$result = $this->service->create( $this->valid_input( [ 'family_key' => 'foo-bar' ] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'invalid_chars', $codes );
+	}
+
+	public function test_create_family_key_with_space_is_rejected(): void {
+		$result = $this->service->create( $this->valid_input( [ 'family_key' => 'foo bar' ] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'invalid_chars', $codes );
+	}
+
 	public function test_create_duplicate_family_key_returns_duplicate(): void {
 		$this->service->create( $this->valid_input() );
 		$result = $this->service->create( $this->valid_input() );

@@ -88,7 +88,22 @@
 	}
 
 	function showError( err ) {
-		const desc = window.ConfigKit.describeError( err );
+		let desc;
+		try {
+			desc = window.ConfigKit && window.ConfigKit.describeError
+				? window.ConfigKit.describeError( err )
+				: null;
+		} catch ( e ) {
+			desc = null;
+		}
+		if ( ! desc ) {
+			desc = {
+				kind: 'error',
+				friendly: ( err && err.message ) || 'Something went wrong.',
+				technical: ( err && err.message ) || '',
+				showFieldErrors: true,
+			};
+		}
 		state.fieldErrors = {};
 		if ( desc.showFieldErrors ) {
 			const errors = ( err && err.data && err.data.errors ) || [];
@@ -239,6 +254,7 @@
 			is_active: !! rec.is_active,
 		};
 
+		let success = false;
 		try {
 			if ( rec.id > 0 ) {
 				payload.version_hash = rec.version_hash;
@@ -246,12 +262,16 @@
 			} else {
 				await ConfigKit.request( '/lookup-tables', { method: 'POST', body: payload } );
 			}
-			redirectToList( wasNew ? 'tbl_created' : 'tbl_updated' );
-			return;
+			success = true;
 		} catch ( err ) {
 			showError( err );
+		} finally {
+			state.busy = false;
 		}
-		state.busy = false;
+		if ( success ) {
+			redirectToList( wasNew ? 'tbl_created' : 'tbl_updated' );
+			return;
+		}
 		render();
 	}
 
@@ -283,6 +303,7 @@
 			price_group_key: state.table.supports_price_group ? rec.price_group_key || '' : '',
 		};
 
+		let success = false;
 		try {
 			if ( rec.id > 0 ) {
 				await ConfigKit.request(
@@ -295,12 +316,16 @@
 					{ method: 'POST', body: payload }
 				);
 			}
-			redirectToTable( state.table.id, wasNew ? 'cell_created' : 'cell_updated' );
-			return;
+			success = true;
 		} catch ( err ) {
 			showError( err );
+		} finally {
+			state.busy = false;
 		}
-		state.busy = false;
+		if ( success ) {
+			redirectToTable( state.table.id, wasNew ? 'cell_created' : 'cell_updated' );
+			return;
+		}
 		render();
 	}
 

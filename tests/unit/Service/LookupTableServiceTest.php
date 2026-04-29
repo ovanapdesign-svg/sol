@@ -53,6 +53,41 @@ final class LookupTableServiceTest extends TestCase {
 		$this->assertContains( 'invalid_chars', $codes );
 	}
 
+	public function test_create_key_with_dot_is_rejected(): void {
+		$result = $this->service->create( $this->valid_input( [ 'lookup_table_key' => 'foo.bar' ] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'invalid_chars', $codes );
+	}
+
+	public function test_create_key_with_dash_is_rejected(): void {
+		$result = $this->service->create( $this->valid_input( [ 'lookup_table_key' => 'foo-bar' ] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'invalid_chars', $codes );
+	}
+
+	public function test_create_key_with_space_is_rejected(): void {
+		$result = $this->service->create( $this->valid_input( [ 'lookup_table_key' => 'foo bar' ] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'invalid_chars', $codes );
+	}
+
+	public function test_create_two_char_key_is_rejected(): void {
+		$result = $this->service->create( $this->valid_input( [ 'lookup_table_key' => 'tx' ] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'too_short', $codes );
+	}
+
+	public function test_create_reserved_key_is_rejected(): void {
+		$result = $this->service->create( $this->valid_input( [ 'lookup_table_key' => 'config' ] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'reserved', $codes );
+	}
+
 	public function test_create_duplicate_key_returns_duplicate_error(): void {
 		$this->service->create( $this->valid_input() );
 		$result = $this->service->create( $this->valid_input() );
