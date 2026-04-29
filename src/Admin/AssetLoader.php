@@ -65,6 +65,13 @@ final class AssetLoader {
 			'configkit-lookup-tables',
 			'assets/admin/js/lookup-tables.js'
 		);
+
+		$this->maybe_enqueue_page_script(
+			$hook_suffix,
+			'configkit-families',
+			'configkit-families',
+			'assets/admin/js/families.js'
+		);
 	}
 
 	private function maybe_enqueue_page_script(

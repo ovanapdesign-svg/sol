@@ -21,6 +21,7 @@ final class Registrar {
 		'configkit_view_diagnostics',
 		'configkit_manage_settings',
 		'configkit_manage_modules',
+		'configkit_manage_families',
 	];
 
 	private const ROLE_MAP = [
@@ -32,12 +33,13 @@ final class Registrar {
 			'configkit_manage_libraries',
 			'configkit_manage_lookup_tables',
 			'configkit_manage_rules',
+			'configkit_manage_families',
 			'configkit_view_diagnostics',
 		],
 	];
 
 	public const CAPS_VERSION_OPTION = 'configkit_caps_version';
-	public const CAPS_VERSION        = '1';
+	public const CAPS_VERSION        = '2';
 
 	public function register(): void {
 		foreach ( self::ROLE_MAP as $role_name => $caps ) {

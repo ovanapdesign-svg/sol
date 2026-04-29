@@ -300,6 +300,7 @@ ConfigKit defines these capabilities, mapped to roles by default:
 | `configkit_view_diagnostics`      | ✅            | ✅           | ✅             | ✅     |
 | `configkit_manage_settings`       | ✅            | ❌           | ❌             | ❌     |
 | `configkit_manage_modules`        | ✅            | ❌           | ❌             | ❌     |
+| `configkit_manage_families`       | ✅            | ✅           | ❌             | ❌     |
 
 **Phase 3 scope:** capability checks at REST controller level. Custom roles
 configurable via Settings → Permissions in Phase 4+.
