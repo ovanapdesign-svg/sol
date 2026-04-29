@@ -27,7 +27,7 @@ architecture, data, fields, or libraries:
 - `docs/configkit/specs/MODULE_LIBRARY_MODEL.md`
 
 Status: DRAFT v2. Awaiting owner approval. Do not assume final until
-`docs/STATUS.md` confirms.
+`STATUS.md` confirms.
 
 Pending (not yet authored):
 
@@ -68,16 +68,16 @@ Pending (not yet authored):
 
 See `PHASES.md` for the full plan. Summary:
 
-| Phase | Name                              | Status   |
-|-------|-----------------------------------|----------|
-| 0     | Scaffold + specs                  | active   |
-| 1     | Schema migrations (additive)      | pending  |
-| 2     | Engines (rule, pricing, lookup)   | pending  |
-| 3     | Admin UI                          | pending  |
-| 4     | Frontend renderer                 | pending  |
-| 5     | Cart + order integration          | pending  |
-| 6     | Excel import + diagnostics        | pending  |
-| 7     | First product end-to-end test     | pending  |
+| Phase | Name                                       | Status   |
+|-------|--------------------------------------------|----------|
+| 0     | Scaffold + specs                           | active   |
+| 1     | Schema migrations (additive)               | pending  |
+| 2     | Engines (rule, pricing, lookup)            | pending  |
+| 3     | Admin UI core                              | pending  |
+| 4     | Excel import + diagnostics + readiness     | pending  |
+| 5     | Frontend renderer                          | pending  |
+| 6     | Cart + order integration                   | pending  |
+| 7     | First product end-to-end test              | pending  |
 
 Each phase has its own entry/exit criteria in `PHASES.md`. Do not enter
 Phase N+1 until Phase N is marked `complete` in `STATUS.md`.

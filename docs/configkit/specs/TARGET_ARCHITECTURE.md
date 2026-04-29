@@ -90,7 +90,7 @@ The domain layer must not import WordPress functions directly. Gateways and serv
 
 1. Customer hits a configurable product page.
 2. WC product → `template_key` → resolve **published** `template_version_id`.
-3. `TemplateRenderer` loads the version snapshot (one query + a small set of join queries; see `DATA_MODEL.md §3.2`).
+3. `TemplateRenderer` loads the version snapshot (one query + a small set of join queries; see `DATA_MODEL.md §3.6`).
 4. `FieldValidator` and `ModuleEvaluator` run only against fields/modules referenced by that version.
 5. `PriceCalculator` resolves each line item against its `price_group_key`.
 6. Output is cached per (template_version_id, locale, customer_role) for the runtime cache TTL.
@@ -108,7 +108,7 @@ Runtime must never trigger an import, a schema migration, or a write to authorin
 5. Templates that change produce a **new** `template_version` row. The previous published version stays live until the new one is explicitly published.
 6. On any failure, the batch is left in `state='failed'` with all item errors intact for inspection.
 
-See `DATA_MODEL.md §3.7` for the import batch tables.
+See `DATA_MODEL.md §3.15-§3.16` for the import batch tables.
 
 ---
 
@@ -134,6 +134,8 @@ $elapsed_ms = ( microtime( true ) - $t0 ) * 1000.0;
 ```
 
 Logging beyond the warning threshold writes to a structured perf log (table TBD in Batch 2). Exceeding `fail` should fail loudly in CI test fixtures.
+
+**Greenfield clarification.** Old Sologtak data, scraped products, or any prior ConfigKit data must enter the system through one-time import/migration into clean v2 data structures. No live dual-read legacy engine is required or supported for sol1. The Migration Engine handles one-time imports as documented in `MIGRATION_STRATEGY.md` (Batch 2).
 
 ---
 
