@@ -1,200 +1,431 @@
-# ConfigKit — Target Architecture
+# ConfigKit / Sologtak Configurator — Target Architecture
 
-**Status:** DRAFT v2
-**Scope:** Batch 1 of the spec set. Read alongside `DATA_MODEL.md`, `FIELD_MODEL.md`, `MODULE_LIBRARY_MODEL.md`.
-**Audience:** Plugin engineers and reviewers.
-
----
-
-## 1. Purpose
-
-ConfigKit is a schema-driven product configurator that runs on top of WooCommerce. It lets non-developer authors design configurable products by composing **templates** out of **fields**, **modules**, and **price groups** — instead of hardcoding configurator UI per product.
-
-The plugin must:
-
-- model configurator content as portable data (not PHP classes per product),
-- render that data on the front end with predictable performance,
-- import/export that data in deterministic batches,
-- coexist with WooCommerce without forking it.
-
-This document covers the high-level architecture only. Concrete table shapes live in `DATA_MODEL.md`. Field-level rules live in `FIELD_MODEL.md`. Module rules live in `MODULE_LIBRARY_MODEL.md`.
+| Field            | Value                                       |
+|------------------|---------------------------------------------|
+| Status           | DRAFT v2 (regenerated with corrections)     |
+| Document type    | Foundational specification                  |
+| Companion docs   | DATA_MODEL.md, FIELD_MODEL.md, MODULE_LIBRARY_MODEL.md |
+| Spec language    | English                                     |
+| Frontend language| Norwegian (nb_NO)                           |
+| Owner            | Ovanap / Sologtak                           |
 
 ---
 
-## 2. Architectural principles
+## 1. Mission
 
-These principles are normative for v2. Deviations require an explicit note in the relevant spec.
+ConfigKit is a WooCommerce extension that adds a dynamic, schema-driven product
+configurator to existing Woo products. ConfigKit binds to Woo products. It does
+not replace them.
 
-### 2.1 Canonical keys, not surrogate IDs
+The owner workload model:
 
-Every authoring entity that participates in import/export, references, or human reasoning carries a **canonical string key** that is the stable identity:
+1. Owner imports product data via Excel.
+2. Owner assigns family + template + lookup table to a Woo product.
+3. Owner runs diagnostics, previews frontend, then publishes.
+4. Owner does NOT manually wire 100 fields per product.
 
-- `template_key`, `field_key`, `module_key`, `price_group_key`, `option_key`, `import_batch_key`.
-- Numeric `id` columns still exist for join performance, but they are **never** used as cross-system references.
-- Keys are lowercase ASCII, `[a-z0-9_]`, max 64 chars. They are immutable once published.
-
-**Why this matters:** v1 used numeric IDs in JSON exports and inline references. Re-imports on a fresh DB produced broken pointers. v2 disallows this entirely.
-
-### 2.2 Authoring content is portable data
-
-Templates, fields, modules, price groups, and module attribute schemas are stored as rows + JSON-in-text payloads. There is **no per-product PHP file** and no generated PHP for content. New content types ship as data, not code.
-
-### 2.3 Two distinct planes
-
-| Plane | Responsibility | Latency profile |
-|-------|----------------|-----------------|
-| **Authoring** | Admin UI, validation, import/export, versioning | Tolerates 100s of ms |
-| **Runtime** | Front-end render, price calc, add-to-cart | Must hit performance budgets in §6 |
-
-These planes share the data model but **not** the same caches or the same hot paths. Runtime never reads authoring-only tables.
-
-### 2.4 Versioned templates, snapshot-rendered
-
-Templates are versioned (see `DATA_MODEL.md §3.2`). The runtime always renders against a **published version snapshot**, not against live editable rows. This isolates customers from in-progress edits and makes regressions diff-able.
-
-### 2.5 Deterministic imports
-
-Every import is a **batch** with a key, a state machine, and per-row results (see `DATA_MODEL.md §3.7`). The same input file run twice on the same DB produces the same outcome. No "fix it up by re-running."
+If the owner is wiring fields per product, the system has failed its mission.
 
 ---
 
-## 3. Layer map
+## 2. Out of scope
+
+ConfigKit does NOT:
+
+- Replace WooCommerce products with a custom product type.
+- Build a parallel admin product list outside Woo's product post type.
+- Build hardcoded module tabs (one tab per option group).
+- Use display labels as technical identifiers.
+- Use numeric IDs as canonical references between sites.
+- Calculate final pricing on the frontend (frontend pricing is UX-only).
+- Become an Elementor-style page builder.
+- Maintain its own translation framework. Plugin code strings use WP gettext;
+  owner-managed labels are written in Norwegian directly into the database.
+
+---
+
+## 3. Object hierarchy
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ Presentation (front-end render, admin React UI)             │
-├─────────────────────────────────────────────────────────────┤
-│ Application services                                        │
-│  - TemplateRenderer        - PriceCalculator                │
-│  - ModuleEvaluator         - ImportRunner                   │
-│  - FieldValidator          - ExportBuilder                  │
-├─────────────────────────────────────────────────────────────┤
-│ Domain model (pure PHP, no WP/WC calls)                     │
-│  - Template / TemplateVersion                               │
-│  - Field / FieldOption                                      │
-│  - Module / ModuleInstance                                  │
-│  - PriceGroup                                               │
-│  - ImportBatch / ImportBatchItem                            │
-├─────────────────────────────────────────────────────────────┤
-│ Persistence (wpdb gateways, one per aggregate)              │
-├─────────────────────────────────────────────────────────────┤
-│ WordPress / WooCommerce host                                │
-└─────────────────────────────────────────────────────────────┘
+WooCommerce Product
+  └── Product Binding                  (1:1 via post meta)
+        ├── Family                     (M:1, optional, by family_key)
+        ├── Template (current)         (M:1, by template_key)
+        ├── Lookup Table               (M:1, optional, by lookup_table_key)
+        ├── Defaults                   (per-binding overrides)
+        └── Validation status          (computed)
+
+Template (logical entity)
+  └── Template Version                 (1:N, immutable when published)
+        ├── Steps                      (1:N within version, by step_key)
+        │     └── Fields               (1:N within step, by field_key)
+        ├── Field Options              (1:N per field, manual_options source)
+        └── Rules                      (1:N within version, JSON spec)
+
+Module (capability definition)         registry
+  └── Library                          (M:1 to Module, by module_key)
+        └── Library Item               (M:1 to Library, by library_key + item_key)
+
+Field
+  └── source_config (JSON)
+       value_source determines shape:
+         library | woo_products | woo_category | manual_options | lookup_table | computed
+
+WooCommerce Cart Item
+  └── Cart item meta
+        ├── _configkit_template_key
+        ├── _configkit_template_version_id
+        ├── _configkit_selections        (JSON; uses field_key + item_key)
+        ├── _configkit_lookup_match
+        └── _configkit_price_breakdown
+
+WooCommerce Order Item
+  └── Order item meta (snapshot, immutable)
+        ├── _configkit_template_snapshot_id
+        ├── _configkit_template_version_id
+        ├── _configkit_selections      (JSON, with labels frozen)
+        ├── _configkit_price_breakdown
+        ├── _configkit_lookup_match
+        └── _configkit_production_summary
 ```
 
-The domain layer must not import WordPress functions directly. Gateways and services are the only layers that touch `$wpdb`, WC product objects, or WP options.
+The line item snapshot rule is critical: an order from 2026 must render
+correctly in 2028 even if the template has been edited 50 times since.
+See TEMPLATE_VERSIONING.md (Batch 2) for the snapshot mechanism.
 
 ---
 
-## 4. Data flow — runtime render
+## 4. Engine boundaries
 
-1. Customer hits a configurable product page.
-2. WC product → `template_key` → resolve **published** `template_version_id`.
-3. `TemplateRenderer` loads the version snapshot (one query + a small set of join queries; see `DATA_MODEL.md §3.6`).
-4. `FieldValidator` and `ModuleEvaluator` run only against fields/modules referenced by that version.
-5. `PriceCalculator` resolves each line item against its `price_group_key`.
-6. Output is cached per (template_version_id, locale, customer_role) for the runtime cache TTL.
+ConfigKit is composed of these engines, each with a single responsibility:
 
-Runtime must never trigger an import, a schema migration, or a write to authoring tables.
+| Engine              | Responsibility                                                |
+|---------------------|---------------------------------------------------------------|
+| Schema Engine       | CRUD for templates, steps, fields, options, rules, libraries  |
+| Rule Engine         | Evaluate JSON rule specs (frontend JS + server PHP)           |
+| Pricing Engine      | Compute price from base + options + addons + surcharges       |
+| Lookup Engine       | Match (width, height, price_group_key) → base price           |
+| Validation Engine   | Validate selections against template + rules                  |
+| Render Engine       | Frontend renderer (stepper/accordion + sticky summary)        |
+| Cart Engine         | Persist selections to cart item meta + recalc on cart events  |
+| Order Engine        | Snapshot template version into order item meta on creation    |
+| Diagnostics         | Scan for broken references, missing keys, etc.                |
+| Migration Engine    | Apply schema migrations idempotently with logs                |
+| Logger              | Structured logs to configkit_log table                        |
+
+Architectural rules:
+
+- **Rule Engine and Pricing Engine are pure functions.** No WP globals, no DB
+  queries inside the eval loop. They take data in, return data out. This makes
+  them PHPUnit-testable without a WP test bootstrap.
+- **Engines do not call each other directly.** They expose interfaces. The
+  orchestrator (a thin coordinator class) wires inputs/outputs.
+- **No engine writes to multiple tables in one method.** Transaction boundaries
+  are explicit at the orchestrator level.
+- **No engine reads `$_POST` directly.** The HTTP layer (REST controllers)
+  parses input, validates, then calls engines with sanitized arrays.
 
 ---
 
-## 5. Data flow — authoring & import
+## 5. Canonical references — keys vs IDs
 
-1. Author uploads a CSV/JSON bundle through the admin UI.
-2. `ImportRunner` creates an `import_batch` row with `state='received'`.
-3. Each row in the bundle becomes an `import_batch_item`. Validation runs per item; errors are stored on the item, not raised as PHP exceptions.
-4. On `state='applied'`, the runner writes to the relevant authoring tables in a transaction per batch.
-5. Templates that change produce a **new** `template_version` row. The previous published version stays live until the new one is explicitly published.
-6. On any failure, the batch is left in `state='failed'` with all item errors intact for inspection.
+This is the architectural rule that prevents environment drift.
 
-See `DATA_MODEL.md §3.15-§3.16` for the import batch tables.
+**Keys** are language-neutral, snake_case, immutable identifiers stored on
+records. They survive Excel export, cross-environment migration, and label
+edits.
 
----
+**IDs** are auto-increment primary keys. They differ between staging and
+production. They are NOT used in canonical references between objects.
 
-## 6. Performance budgets
+Required key columns on every editable entity:
 
-Budgets use three thresholds: **target** (steady-state goal), **warning** (logged + flagged in admin), **fail** (alerted + treated as a bug). All measurements use `microtime(true)` deltas — there is no `wp_microtime()` in WordPress core, and we explicitly avoid inventing one.
+- `family_key`
+- `template_key`
+- `step_key`
+- `field_key`
+- `option_key`
+- `module_key`
+- `library_key`
+- `item_key`
+- `lookup_table_key`
+- `rule_key`
+- `price_group_key`
 
-| Operation | Target | Warning | Fail |
-|---|---|---|---|
-| Single field render | 5 ms | 15 ms | 50 ms |
-| Full template render (≤30 fields) | 50 ms | 150 ms | 500 ms |
-| Module evaluation (single module) | 10 ms | 30 ms | 100 ms |
-| Price calculation (full configuration) | 20 ms | 60 ms | 200 ms |
-| Admin save (single template version) | 100 ms | 300 ms | 1000 ms |
-| Import batch apply (per 100 items) | 500 ms | 1500 ms | 5000 ms |
+Product binding uses keys, not IDs:
 
-Measurements are taken at service boundaries:
-
-```php
-$t0 = microtime( true );
-$result = $renderer->render( $version_id );
-$elapsed_ms = ( microtime( true ) - $t0 ) * 1000.0;
+```
+_configkit_family_key       (was _configkit_family_id)
+_configkit_template_key     (was _configkit_template_id)
+_configkit_lookup_table_key (was _configkit_lookup_table_id)
 ```
 
-Logging beyond the warning threshold writes to a structured perf log (table TBD in Batch 2). Exceeding `fail` should fail loudly in CI test fixtures.
+Numeric IDs may exist as resolved cache references in cart item meta or
+diagnostics views, but the canonical model uses keys. Excel imports and
+exports use keys. Rules reference keys. Cart and order selections use keys.
 
-**Greenfield clarification.** Old Sologtak data, scraped products, or any prior ConfigKit data must enter the system through one-time import/migration into clean v2 data structures. No live dual-read legacy engine is required or supported for sol1. The Migration Engine handles one-time imports as documented in `MIGRATION_STRATEGY.md` (Batch 2).
+Auto-key suggestion at creation:
 
----
+```
+slugify( strtolower( label ) ) → ASCII fold → snake_case → first 64 chars
+```
 
-## 7. Storage choices — portability over cleverness
-
-The data model deliberately favours portability across MySQL/MariaDB versions and across hosting environments:
-
-- **No native JSON columns.** JSON payloads are stored as `LONGTEXT` with a documented schema and validated in PHP. This keeps us compatible with MySQL 5.7-era hosts and avoids vendor-specific JSON path predicates.
-- **No ENUM columns.** Status fields and similar small-cardinality strings use `VARCHAR(32)` with allowed-value lists enforced in code. ENUM migrations are painful and ENUM ordering is a footgun.
-- **JSON arrays — never CSV.** Multi-value attributes are stored as JSON arrays in `LONGTEXT`. v1 used CSV strings (`"red,blue,green"`) which broke on values containing commas and made escaping ad-hoc.
-- **Foreign-key-shaped indexes**, even where InnoDB FKs are not declared, on every `*_id` and `*_key` column that is queried.
-
-`DATA_MODEL.md §2` lists the exact column types per table.
+Owner can override the suggestion. After save, the key never auto-regenerates.
 
 ---
 
-## 8. Caching strategy (sketch)
+## 6. Feature flag model
 
-- **Authoring side:** no caching; correctness over speed.
-- **Runtime side:** template version snapshots are the cache unit. Cache key = `cfgkit:tv:{template_version_id}:{locale}:{role}`. Invalidation happens on publish of a new version, not on edits.
-- **Module evaluation:** results are not cached across requests by default; module authors can opt in via `attribute_schema_json.cache` (see `MODULE_LIBRARY_MODEL.md §4`).
+Flags govern engine behavior and observability. Stored in `wp_options`.
 
-Detailed cache layout is out of scope for Batch 1.
+| Flag                                  | Default | Purpose                                            |
+|---------------------------------------|---------|----------------------------------------------------|
+| `configkit_debug_mode`                | false   | Verbose admin diagnostics                          |
+| `configkit_log_level`                 | 'warn'  | debug / info / warn / error                        |
+| `configkit_server_side_validation`    | true    | Reject invalid frontend payloads                   |
+| `configkit_require_required_fields`   | true    | Block add-to-cart if required fields empty        |
 
----
+This is a greenfield build. There is no v1 engine to dual-read against. If
+data needs to be migrated from a prior site, the migration runs once via the
+Migration Engine and produces a clean v2 dataset.
 
-## 9. Legacy references (v1 → v2)
-
-This section documents naming and shape changes from v1 so older docs/code can be read without confusion.
-
-| v1 term / column | v2 term / column | Notes |
-|---|---|---|
-| `source_ref` | `source_config_json` | v1 stored a single string pointer; v2 stores a structured JSON config that captures source type + parameters. See `FIELD_MODEL.md §4`. |
-| `field_options` (CSV in field row) | `configkit_field_options` table | Manual options now live in their own table with stable `option_key`s. |
-| Inline template JSON blob | `configkit_template_versions` rows | Versioning is first-class; there is no "current template" without a version. |
-| Numeric IDs in exports | Canonical keys in exports | Numeric IDs are never serialised. |
-| ENUM `status` columns | `VARCHAR(32)` + allowed list | See §7. |
-| Native JSON columns | `LONGTEXT` + PHP validation | See §7. |
-| `wp_microtime()` (custom helper) | `microtime(true)` directly | The helper added no value and obscured intent. |
-
-Legacy column names must not be reintroduced. If v1 data needs to be read during migration, it is read by an explicit, named adapter — never by the runtime.
+Greenfield clarification. Old Sologtak data, scraped products, or any prior
+ConfigKit data must enter the system through one-time import/migration into
+clean v2 data structures. No live dual-read legacy engine is required or
+supported for sol1. The Migration Engine handles one-time imports as
+documented in MIGRATION_STRATEGY.md (Batch 2).
 
 ---
 
-## 10. What this document does **not** cover
+## 7. Tech stack constraints
 
-- Concrete SQL DDL — see `DATA_MODEL.md`.
-- Field type catalogue and validation rules — see `FIELD_MODEL.md`.
-- Module attribute schema and lifecycle — see `MODULE_LIBRARY_MODEL.md`.
-- Admin UI shape, REST endpoints, capability model — Batch 2.
-- Cart / order persistence of resolved configurations — Batch 2.
-- Telemetry / perf log table — Batch 2.
+| Component       | Constraint                                                      |
+|-----------------|-----------------------------------------------------------------|
+| PHP             | 8.1 minimum. `declare(strict_types=1)` in all files.            |
+| WordPress       | 6.4+                                                            |
+| WooCommerce     | 8.0+                                                            |
+| Database        | MySQL 5.7+ or MariaDB 10.4+, utf8mb4, InnoDB                    |
+| JS              | Vanilla ES2020 modules. No jQuery in render layer.              |
+| Build           | No transpiler required. Ship raw modern JS.                     |
+| CSS             | Plain CSS with CSS variables. No SCSS pipeline.                 |
+| HTTP API        | WP REST API namespace `configkit/v1/*`                          |
+| Logging         | PSR-3-compatible interface, custom DB writer                    |
+
+`declare(strict_types=1)` is enforced via PHPCS rule when CI is set up. Until
+CI exists, code review enforces it. Files lacking strict_types declaration
+fail review.
 
 ---
 
-## 11. Open questions (tracked, not answered here)
+## 8. Staging discipline
 
-1. Should `template_version` publishing be append-only forever, or can old versions be archived after N releases?
-2. Module evaluation caching default — opt-in vs opt-out?
-3. Locale handling for option labels — separate table vs JSON-per-locale?
+All development happens on a staging environment (initially
+`demo.ovanap.dev/sol1`). Production is not deployed to until:
 
-These are noted for Batch 2 review; v2 of Batch 1 does not commit to an answer.
+- Audit is complete.
+- Specs are approved.
+- Staging tests pass.
+- Owner explicitly approves a production deployment.
+
+Schema migrations are applied via the Migration Engine, never by hand. Every
+migration is idempotent and logged. See MIGRATION_STRATEGY.md (Batch 2) for
+the full migration discipline.
+
+---
+
+## 9. Critical discipline: keys vs labels
+
+Technical identifiers are language-neutral, snake_case, immutable. Labels are
+display strings. Rules, pricing logic, lookup logic, cart meta, and order meta
+reference KEYS only.
+
+Changing a label MUST NOT break:
+
+- Saved rules
+- Pricing calculations
+- Lookup matching
+- Cart meta (existing carts must keep working)
+- Order history (existing orders must keep rendering)
+- Saved templates
+
+Keys are auto-suggested from labels at creation time but are independently
+editable in the admin and never auto-regenerated.
+
+---
+
+## 10. Performance envelope (target / warning / fail)
+
+These are not pass/fail gates during development. They are observability
+thresholds.
+
+| Operation                                       | Target  | Warning | Fail    |
+|-------------------------------------------------|---------|---------|---------|
+| Admin library list with 500 items, page load    | <500ms  | >800ms  | >2000ms |
+| Admin template edit page load                   | <800ms  | >1500ms | >3000ms |
+| Frontend price recalc (single field change)     | <100ms  | >300ms  | >800ms  |
+| Frontend initial render of a 6-step template    | <600ms  | >1200ms | >2500ms |
+| Add to cart roundtrip (server validate + write) | <300ms  | >700ms  | >1500ms |
+| Diagnostics dashboard full scan                 | <2s     | >5s     | >15s    |
+| Lookup cell match (single)                      | <5ms    | >20ms   | >100ms  |
+| Excel import dry run for 100 products           | <8s     | >20s    | >60s    |
+| Excel import commit for 100 products            | <30s    | >90s    | >300s   |
+
+Operations exceeding **warning** are logged. Operations exceeding **fail** raise
+diagnostics warnings in the admin dashboard. Numbers are not enforced as PR
+gates during MVP development.
+
+Measurement uses `microtime(true)` via the `ConfigKit_Timer` helper class.
+Engines emit start/end pairs to the log when `configkit_log_level >= 'debug'`.
+
+---
+
+## 11. Observability
+
+Every event with operational value writes a row to `wp_configkit_log`:
+
+| Column          | Purpose                                                    |
+|-----------------|------------------------------------------------------------|
+| id              | PK                                                         |
+| created_at      | DATETIME(6), microsecond precision                         |
+| level           | VARCHAR(16): debug / info / warn / error / critical        |
+| event_type      | VARCHAR(64), e.g. `pricing.frontend_server_mismatch`       |
+| user_id         | WP user (admin actions) or 0 (frontend visitor)            |
+| product_id      | Woo product ID, nullable                                   |
+| order_id        | Order ID, nullable                                         |
+| template_key    | Template key, nullable                                     |
+| context_json    | LONGTEXT — JSON blob: selections, formula, expected vs actual |
+| message         | TEXT                                                       |
+
+Mandatory log events:
+
+- `pricing.frontend_server_mismatch`
+- `pricing.lookup_cell_missing`
+- `rule.target_missing`
+- `migration.applied` / `migration.failed`
+- `validation.failed`
+- `order.snapshot_written`
+- `import.batch_started` / `import.batch_committed` / `import.batch_failed`
+
+Retention: 30 days for `level <= info`, 365 days for `warn` and above.
+Cleanup runs nightly via `configkit_log_cleanup` cron action.
+
+---
+
+## 12. Concurrency model — optimistic locking
+
+Two admins editing the same template must not silently overwrite each other.
+
+Every editable entity carries a `version_hash` column:
+
+```
+version_hash = sha1( updated_at . id )
+```
+
+Every admin form posts back the `version_hash` it loaded with. Save handler:
+
+1. Read current version_hash from DB.
+2. Compare to posted version_hash.
+3. If mismatch: reject with 409 Conflict + diff display in admin.
+4. If match: update record, recompute version_hash, return new hash.
+
+This is best-effort, not strict locking. It catches the common case of two
+admins, not race conditions at millisecond level.
+
+---
+
+## 13. Testing requirement
+
+| Suite                  | Path                       | Triggers                                |
+|------------------------|----------------------------|------------------------------------------|
+| Unit (pure PHP)        | `tests/unit/`              | Every commit (local pre-commit hook)     |
+| Integration (WP + Woo) | `tests/integration/`       | Pre-merge to main                        |
+| Manual DoD checklist   | `docs/DOD_CHECKLIST.md`    | Per feature, before "complete" status    |
+
+Unit suite scope (mandatory coverage):
+
+- `ConfigKit\Engines\RuleEngine` — every condition operator, every action,
+  AND/OR/NOT nesting, cycle detection, missing target handling.
+- `ConfigKit\Engines\PricingEngine` — every pricing mode, surcharge layering,
+  hidden field exclusion, sale price precedence, rounding policy.
+- `ConfigKit\Engines\ValidationEngine` — required-field enforcement, reset of
+  invalid selections.
+
+Integration suite scope:
+
+- Cart write/read.
+- Order snapshot creation and historical render.
+- Migration idempotency (apply twice, second is no-op).
+- Excel import dry-run and commit.
+
+---
+
+## 14. Feature status protocol
+
+Every feature has one of these statuses, visible in admin and in
+`docs/STATUS.md`:
+
+| Status      | Meaning                                                    |
+|-------------|------------------------------------------------------------|
+| `complete`  | Passes full DoD checklist for the feature.                 |
+| `partial`   | Works for stated scope; explicitly listed gaps remain.     |
+| `wip`       | Active development; should not be used in production.      |
+| `broken`    | Known broken; do not use; documented workaround if any.    |
+
+In admin, `partial`, `wip`, and `broken` features render with a subtle badge
+near the feature title.
+
+`docs/STATUS.md` is the single source of truth, updated on every PR that
+changes feature status.
+
+---
+
+## 15. JSON storage convention
+
+The schema stores JSON in `LONGTEXT` columns (named `*_json`), not native
+MySQL JSON type. Reasons:
+
+- dbDelta portability across MySQL versions and shared hosts.
+- Easier `wp db export`/`import` round-trips.
+- Application-layer validation gives clearer error messages.
+
+Validation happens in PHP at write time. Read time assumes valid JSON because
+write was validated; corrupt data raises a `data.json_invalid` log event.
+
+---
+
+## 16. Out-of-band work that affects this architecture
+
+Decisions deferred to other documents:
+
+- Migration mechanics → MIGRATION_STRATEGY.md (Batch 2)
+- Rule JSON schema → RULE_ENGINE_CONTRACT.md (Batch 2)
+- Pricing formulas → PRICING_CONTRACT.md (Batch 2)
+- Template snapshot format → TEMPLATE_VERSIONING.md (Batch 2)
+- gettext + DB content split → MULTILANGUAGE_MODEL.md (Batch 2)
+- Schema details → DATA_MODEL.md (Batch 1)
+- Field axes → FIELD_MODEL.md (Batch 1)
+- Module/library separation → MODULE_LIBRARY_MODEL.md (Batch 1)
+
+---
+
+## 17. Acceptance criteria
+
+This document is in DRAFT v2 status. Awaiting owner review.
+
+Sign-off requires:
+
+- [ ] Object hierarchy in §3 reflects intended model.
+- [ ] Engine boundaries in §4 are accepted.
+- [ ] Key-based canonical references in §5 are the law.
+- [ ] Feature flag model in §6 is accepted.
+- [ ] Tech stack constraints in §7 are committed.
+- [ ] Staging discipline in §8 is the law.
+- [ ] Key/label discipline in §9 is the law.
+- [ ] Performance envelope in §10 is acceptable.
+- [ ] Observability scope in §11 is acceptable.
+- [ ] Optimistic locking model in §12 is acceptable.
+- [ ] Testing requirement in §13 is committed.
+- [ ] Feature status protocol in §14 is committed.
+- [ ] JSON storage convention in §15 is accepted.
+
+After approval, Batch 2 specs may proceed.
