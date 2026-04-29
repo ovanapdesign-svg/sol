@@ -16,7 +16,7 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "ConfigKit\\Tests\\": "tests/"
+            "ConfigKit\\Tests\\Unit\\": "tests/unit/"
         }
     },
     "config": {
