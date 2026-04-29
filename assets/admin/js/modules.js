@@ -165,6 +165,7 @@
 		render();
 
 		const rec = state.editing;
+		const wasNew = ! ( rec.id > 0 );
 		const payload = {
 			module_key: rec.module_key,
 			name: rec.name,
@@ -179,30 +180,34 @@
 		} );
 
 		try {
-			let response;
 			if ( rec.id > 0 ) {
 				payload.version_hash = rec.version_hash;
-				response = await ConfigKit.request( '/modules/' + rec.id, {
+				await ConfigKit.request( '/modules/' + rec.id, {
 					method: 'PUT',
 					body: payload,
 				} );
 			} else {
-				response = await ConfigKit.request( '/modules', {
+				await ConfigKit.request( '/modules', {
 					method: 'POST',
 					body: payload,
 				} );
 			}
-			state.editing = response.record;
-			state.dirty = false;
-			state.message = { kind: 'success', text: 'Saved.' };
-			state.fieldErrors = {};
-			setUrl( { action: 'edit', id: response.record.id } );
+			redirectToList( wasNew ? 'created' : 'updated' );
+			return;
 		} catch ( err ) {
 			showError( err );
 		}
 
 		state.busy = false;
 		render();
+	}
+
+	function redirectToList( savedFlag ) {
+		const url = new URL( window.location.href );
+		// Strip detail query params, keep ?page=configkit-modules.
+		[ 'action', 'id' ].forEach( ( p ) => url.searchParams.delete( p ) );
+		url.searchParams.set( 'saved', savedFlag );
+		window.location.href = url.toString();
 	}
 
 	function showError( err ) {
@@ -657,6 +662,18 @@
 
 	// ---- Init ----
 
+	function consumeSavedFlag() {
+		const params = new URLSearchParams( window.location.search );
+		const saved = params.get( 'saved' );
+		if ( ! saved ) {
+			return null;
+		}
+		setUrl( { saved: null } );
+		if ( saved === 'created' ) return 'Module created.';
+		if ( saved === 'updated' ) return 'Module updated.';
+		return null;
+	}
+
 	function init() {
 		const params = new URLSearchParams( window.location.search );
 		const action = params.get( 'action' );
@@ -667,7 +684,13 @@
 		} else if ( action === 'edit' && id > 0 ) {
 			loadModule( id );
 		} else {
-			loadList();
+			const savedMessage = consumeSavedFlag();
+			loadList().then( () => {
+				if ( savedMessage ) {
+					state.message = { kind: 'success', text: savedMessage };
+					render();
+				}
+			} );
 		}
 	}
 
