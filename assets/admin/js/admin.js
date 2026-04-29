@@ -57,6 +57,72 @@
 		return payload;
 	}
 
+	/**
+	 * Translate a thrown REST error into a user-friendly description.
+	 *
+	 * Returned shape:
+	 *   {
+	 *     kind: 'error' | 'conflict',
+	 *     friendly: string,        // shown to the owner
+	 *     technical: string,       // raw message + code, hidden by default
+	 *     showFieldErrors: bool,   // if true, also surface err.data.errors[*]
+	 *   }
+	 *
+	 * 400 / 422 are treated as validation: friendly text is the server
+	 * message (already meaningful), and field-level errors are surfaced
+	 * separately by the page-specific JS via err.data.errors.
+	 */
+	function describeError( err ) {
+		const status = err && err.status ? err.status : 0;
+		const code = err && err.code ? err.code : '';
+		const rawMessage = err && err.message ? err.message : '';
+		const technical = rawMessage + ( code ? ' (' + code + ')' : '' )
+			+ ( status ? ' [HTTP ' + status + ']' : '' );
+
+		const isNoRoute = code === 'rest_no_route' || code === 'no_route';
+
+		if ( status === 404 || isNoRoute ) {
+			return {
+				kind: 'error',
+				friendly: 'Could not load this section. Try refreshing the page.',
+				technical: technical,
+				showFieldErrors: false,
+			};
+		}
+		if ( status === 401 || status === 403 ) {
+			return {
+				kind: 'error',
+				friendly: "You don't have permission for this action.",
+				technical: technical,
+				showFieldErrors: false,
+			};
+		}
+		if ( status === 409 ) {
+			return {
+				kind: 'conflict',
+				friendly:
+					'Someone else changed this record while you were editing. Please reload and try again.',
+				technical: technical,
+				showFieldErrors: false,
+			};
+		}
+		if ( status === 400 || status === 422 ) {
+			return {
+				kind: 'error',
+				friendly: rawMessage || 'Please check the errors highlighted below.',
+				technical: technical,
+				showFieldErrors: true,
+			};
+		}
+		return {
+			kind: 'error',
+			friendly: 'An unexpected error occurred. Please try again or contact support.',
+			technical: technical,
+			showFieldErrors: false,
+		};
+	}
+
 	window.ConfigKit = window.ConfigKit || {};
 	window.ConfigKit.request = request;
+	window.ConfigKit.describeError = describeError;
 } )();

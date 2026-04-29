@@ -50,7 +50,7 @@ final class LookupTableServiceTest extends TestCase {
 		$result = $this->service->create( $this->valid_input( [ 'lookup_table_key' => 'NOT_SNAKE' ] ) );
 		$this->assertFalse( $result['ok'] );
 		$codes = array_column( $result['errors'], 'code' );
-		$this->assertContains( 'invalid_format', $codes );
+		$this->assertContains( 'invalid_chars', $codes );
 	}
 
 	public function test_create_duplicate_key_returns_duplicate_error(): void {

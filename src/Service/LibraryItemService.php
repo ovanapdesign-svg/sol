@@ -6,10 +6,9 @@ namespace ConfigKit\Service;
 use ConfigKit\Repository\LibraryItemRepository;
 use ConfigKit\Repository\LibraryRepository;
 use ConfigKit\Repository\ModuleRepository;
+use ConfigKit\Validation\KeyValidator;
 
 final class LibraryItemService {
-
-	private const KEY_PATTERN = '/^[a-z][a-z0-9_]{0,63}$/';
 
 	public function __construct(
 		private LibraryItemRepository $items,
@@ -133,15 +132,10 @@ final class LibraryItemService {
 	public function validate( array $input, ?array $existing, array $library, array $module ): array {
 		$errors = [];
 
-		$item_key = isset( $input['item_key'] ) ? (string) $input['item_key'] : '';
-		if ( $item_key === '' ) {
-			$errors[] = [ 'field' => 'item_key', 'code' => 'required', 'message' => 'item_key is required.' ];
-		} elseif ( ! preg_match( self::KEY_PATTERN, $item_key ) ) {
-			$errors[] = [
-				'field'   => 'item_key',
-				'code'    => 'invalid_format',
-				'message' => 'item_key must be lowercase ascii starting with a letter, max 64 chars.',
-			];
+		$item_key   = isset( $input['item_key'] ) ? (string) $input['item_key'] : '';
+		$key_errors = KeyValidator::validate( 'item_key', $item_key );
+		if ( count( $key_errors ) > 0 ) {
+			$errors = array_merge( $errors, $key_errors );
 		} else {
 			$exclude_id = isset( $existing['id'] ) ? (int) $existing['id'] : null;
 			if ( $this->items->key_exists_in_library( (string) $library['library_key'], $item_key, $exclude_id ) ) {

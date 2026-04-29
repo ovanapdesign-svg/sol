@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace ConfigKit\Service;
 
 use ConfigKit\Repository\ModuleRepository;
+use ConfigKit\Validation\KeyValidator;
 
 /**
  * Validation + orchestration over `ModuleRepository`.
@@ -15,7 +16,6 @@ final class ModuleService {
 
 	private const VALID_FIELD_KINDS    = [ 'input', 'display', 'computed', 'addon', 'lookup' ];
 	private const VALID_ATTRIBUTE_TYPES = [ 'string', 'integer', 'boolean' ];
-	private const KEY_PATTERN          = '/^[a-z][a-z0-9_]{0,63}$/';
 	private const ATTR_KEY_PATTERN     = '/^[a-z][a-z0-9_]{0,63}$/';
 
 	public function __construct( private ModuleRepository $repo ) {}
@@ -97,15 +97,10 @@ final class ModuleService {
 	public function validate( array $input, ?array $existing ): array {
 		$errors = [];
 
-		$key = isset( $input['module_key'] ) ? (string) $input['module_key'] : '';
-		if ( $key === '' ) {
-			$errors[] = [ 'field' => 'module_key', 'code' => 'required', 'message' => 'module_key is required.' ];
-		} elseif ( ! preg_match( self::KEY_PATTERN, $key ) ) {
-			$errors[] = [
-				'field'   => 'module_key',
-				'code'    => 'invalid_format',
-				'message' => 'module_key must be lowercase ascii starting with a letter, max 64 chars (regex /^[a-z][a-z0-9_]{0,63}$/).',
-			];
+		$key        = isset( $input['module_key'] ) ? (string) $input['module_key'] : '';
+		$key_errors = KeyValidator::validate( 'module_key', $key );
+		if ( count( $key_errors ) > 0 ) {
+			$errors = array_merge( $errors, $key_errors );
 		} else {
 			$exclude_id = isset( $existing['id'] ) ? (int) $existing['id'] : null;
 			if ( $this->repo->key_exists( $key, $exclude_id ) ) {

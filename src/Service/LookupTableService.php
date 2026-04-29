@@ -5,12 +5,12 @@ namespace ConfigKit\Service;
 
 use ConfigKit\Repository\LookupCellRepository;
 use ConfigKit\Repository\LookupTableRepository;
+use ConfigKit\Validation\KeyValidator;
 
 final class LookupTableService {
 
-	private const KEY_PATTERN  = '/^[a-z][a-z0-9_]{0,63}$/';
-	private const VALID_UNITS  = [ 'mm', 'cm', 'm' ];
-	private const VALID_MODES  = [ 'exact', 'round_up', 'nearest' ];
+	private const VALID_UNITS = [ 'mm', 'cm', 'm' ];
+	private const VALID_MODES = [ 'exact', 'round_up', 'nearest' ];
 
 	public function __construct(
 		private LookupTableRepository $repo,
@@ -113,15 +113,10 @@ final class LookupTableService {
 		$errors = [];
 
 		if ( $existing === null ) {
-			$key = isset( $input['lookup_table_key'] ) ? (string) $input['lookup_table_key'] : '';
-			if ( $key === '' ) {
-				$errors[] = [ 'field' => 'lookup_table_key', 'code' => 'required', 'message' => 'lookup_table_key is required.' ];
-			} elseif ( ! preg_match( self::KEY_PATTERN, $key ) ) {
-				$errors[] = [
-					'field'   => 'lookup_table_key',
-					'code'    => 'invalid_format',
-					'message' => 'lookup_table_key must be lowercase ascii starting with a letter, max 64 chars.',
-				];
+			$key        = isset( $input['lookup_table_key'] ) ? (string) $input['lookup_table_key'] : '';
+			$key_errors = KeyValidator::validate( 'lookup_table_key', $key );
+			if ( count( $key_errors ) > 0 ) {
+				$errors = array_merge( $errors, $key_errors );
 			} elseif ( $this->repo->key_exists( $key ) ) {
 				$errors[] = [
 					'field'   => 'lookup_table_key',

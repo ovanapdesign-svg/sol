@@ -5,10 +5,9 @@ namespace ConfigKit\Service;
 
 use ConfigKit\Repository\LibraryRepository;
 use ConfigKit\Repository\ModuleRepository;
+use ConfigKit\Validation\KeyValidator;
 
 final class LibraryService {
-
-	private const KEY_PATTERN = '/^[a-z][a-z0-9_]{0,63}$/';
 
 	public function __construct(
 		private LibraryRepository $repo,
@@ -84,15 +83,10 @@ final class LibraryService {
 	public function validate( array $input, ?array $existing ): array {
 		$errors = [];
 
-		$key = isset( $input['library_key'] ) ? (string) $input['library_key'] : '';
-		if ( $key === '' ) {
-			$errors[] = [ 'field' => 'library_key', 'code' => 'required', 'message' => 'library_key is required.' ];
-		} elseif ( ! preg_match( self::KEY_PATTERN, $key ) ) {
-			$errors[] = [
-				'field'   => 'library_key',
-				'code'    => 'invalid_format',
-				'message' => 'library_key must be lowercase ascii starting with a letter, max 64 chars.',
-			];
+		$key        = isset( $input['library_key'] ) ? (string) $input['library_key'] : '';
+		$key_errors = KeyValidator::validate( 'library_key', $key );
+		if ( count( $key_errors ) > 0 ) {
+			$errors = array_merge( $errors, $key_errors );
 		} else {
 			$exclude_id = isset( $existing['id'] ) ? (int) $existing['id'] : null;
 			if ( $this->repo->key_exists( $key, $exclude_id ) ) {

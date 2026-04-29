@@ -93,6 +93,20 @@ final class LibraryItemServiceTest extends TestCase {
 		$this->assertSame( 'required', $result['errors'][0]['code'] );
 	}
 
+	public function test_create_two_char_item_key_is_rejected(): void {
+		$result = $this->service->create( $this->library_id, $this->valid_item( [ 'item_key' => 'aa' ] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'too_short', $codes );
+	}
+
+	public function test_create_reserved_item_key_is_rejected(): void {
+		$result = $this->service->create( $this->library_id, $this->valid_item( [ 'item_key' => 'default' ] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'reserved', $codes );
+	}
+
 	public function test_create_duplicate_item_key_within_library_returns_duplicate(): void {
 		$this->service->create( $this->library_id, $this->valid_item() );
 		$result = $this->service->create( $this->library_id, $this->valid_item() );
@@ -218,7 +232,7 @@ final class LibraryItemServiceTest extends TestCase {
 
 	public function test_list_for_library_returns_only_its_items(): void {
 		// Item in our library
-		$this->service->create( $this->library_id, $this->valid_item( [ 'item_key' => 'a1' ] ) );
+		$this->service->create( $this->library_id, $this->valid_item( [ 'item_key' => 'item_a' ] ) );
 
 		// New library + item in it
 		$libSvc = new LibraryService( $this->libRepo, $this->modRepo );
@@ -228,10 +242,10 @@ final class LibraryItemServiceTest extends TestCase {
 			'name'        => 'Sandatex',
 			'is_active'   => true,
 		] );
-		$this->service->create( $other['id'], $this->valid_item( [ 'item_key' => 'b1' ] ) );
+		$this->service->create( $other['id'], $this->valid_item( [ 'item_key' => 'item_b' ] ) );
 
 		$listing = $this->service->list_for_library( $this->library_id );
 		$this->assertSame( 1, $listing['total'] );
-		$this->assertSame( 'a1', $listing['items'][0]['item_key'] );
+		$this->assertSame( 'item_a', $listing['items'][0]['item_key'] );
 	}
 }

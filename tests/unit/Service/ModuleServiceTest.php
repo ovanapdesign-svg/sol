@@ -54,14 +54,63 @@ final class ModuleServiceTest extends TestCase {
 		$result = $this->service->create( $this->valid_input( [ 'module_key' => 'NotSnake' ] ) );
 		$this->assertFalse( $result['ok'] );
 		$codes = array_column( $result['errors'], 'code' );
-		$this->assertContains( 'invalid_format', $codes );
+		$this->assertContains( 'invalid_chars', $codes );
 	}
 
 	public function test_create_module_key_starting_with_digit_is_rejected(): void {
 		$result = $this->service->create( $this->valid_input( [ 'module_key' => '1textiles' ] ) );
 		$this->assertFalse( $result['ok'] );
 		$codes = array_column( $result['errors'], 'code' );
-		$this->assertContains( 'invalid_format', $codes );
+		$this->assertContains( 'invalid_start', $codes );
+	}
+
+	public function test_create_one_character_key_is_rejected_as_too_short(): void {
+		$result = $this->service->create( $this->valid_input( [ 'module_key' => 't' ] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'too_short', $codes );
+	}
+
+	public function test_create_two_character_key_is_rejected_as_too_short(): void {
+		$result = $this->service->create( $this->valid_input( [ 'module_key' => 'tx' ] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'too_short', $codes );
+	}
+
+	public function test_create_key_starting_with_underscore_is_rejected(): void {
+		$result = $this->service->create( $this->valid_input( [ 'module_key' => '_textiles' ] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'invalid_start', $codes );
+	}
+
+	public function test_create_reserved_keyword_is_rejected(): void {
+		foreach ( [ 'admin', 'config', 'configkit', 'system', 'default' ] as $reserved ) {
+			$result = $this->service->create( $this->valid_input( [ 'module_key' => $reserved ] ) );
+			$this->assertFalse( $result['ok'], 'Expected reserved keyword to be rejected: ' . $reserved );
+			$codes = array_column( $result['errors'], 'code' );
+			$this->assertContains( 'reserved', $codes, 'Expected reserved code for: ' . $reserved );
+		}
+	}
+
+	public function test_create_three_character_key_is_accepted(): void {
+		$result = $this->service->create( $this->valid_input( [ 'module_key' => 'tex' ] ) );
+		$this->assertTrue( $result['ok'] );
+	}
+
+	public function test_create_64_character_key_is_accepted(): void {
+		$key64  = 't' . str_repeat( 'a', 63 );
+		$result = $this->service->create( $this->valid_input( [ 'module_key' => $key64 ] ) );
+		$this->assertTrue( $result['ok'] );
+	}
+
+	public function test_create_65_character_key_is_rejected_as_too_long(): void {
+		$key65  = 't' . str_repeat( 'a', 64 );
+		$result = $this->service->create( $this->valid_input( [ 'module_key' => $key65 ] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'too_long', $codes );
 	}
 
 	public function test_create_duplicate_module_key_returns_duplicate_error(): void {

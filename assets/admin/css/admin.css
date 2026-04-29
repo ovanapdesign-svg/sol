@@ -278,3 +278,31 @@
 	width: 80px;
 	text-align: right;
 }
+
+.configkit-error-details {
+	margin-top: 8px;
+	font-size: 12px;
+}
+
+.configkit-error-details > summary {
+	cursor: pointer;
+	color: #50575e;
+	user-select: none;
+}
+
+.configkit-error-details > summary:hover {
+	color: #1d2327;
+}
+
+.configkit-error-details > pre {
+	margin: 6px 0 0;
+	padding: 8px 10px;
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 3px;
+	white-space: pre-wrap;
+	word-break: break-word;
+	font-family: ui-monospace, Menlo, Consolas, monospace;
+	font-size: 11px;
+	color: #3c434a;
+}

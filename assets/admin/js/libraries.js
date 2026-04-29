@@ -95,23 +95,20 @@
 	}
 
 	function showError( err ) {
-		if ( err && err.status === 409 ) {
-			state.message = {
-				kind: 'conflict',
-				text: 'This record was edited by someone else (or another tab) since you opened it. Reload to see the latest version.',
-			};
-			return;
-		}
-		const errors = ( err && err.data && err.data.errors ) || [];
+		const desc = window.ConfigKit.describeError( err );
 		state.fieldErrors = {};
-		errors.forEach( ( e ) => {
-			const key = e.field || '_global';
-			state.fieldErrors[ key ] = state.fieldErrors[ key ] || [];
-			state.fieldErrors[ key ].push( e.message );
-		} );
+		if ( desc.showFieldErrors ) {
+			const errors = ( err && err.data && err.data.errors ) || [];
+			errors.forEach( ( e ) => {
+				const key = e.field || '_global';
+				state.fieldErrors[ key ] = state.fieldErrors[ key ] || [];
+				state.fieldErrors[ key ].push( e.message );
+			} );
+		}
 		state.message = {
-			kind: 'error',
-			text: err && err.message ? err.message : 'Something went wrong.',
+			kind: desc.kind,
+			text: desc.friendly,
+			technical: desc.technical,
 		};
 	}
 
@@ -426,7 +423,15 @@
 				: m.kind === 'conflict' ? 'notice-warning'
 				: 'notice-error'
 		) + ' inline configkit-notice';
-		return el( 'div', { class: cls }, el( 'p', null, m.text ) );
+		const wrap = el( 'div', { class: cls } );
+		wrap.appendChild( el( 'p', null, m.text ) );
+		if ( m.technical ) {
+			const details = el( 'details', { class: 'configkit-error-details' } );
+			details.appendChild( el( 'summary', null, 'Show technical details' ) );
+			details.appendChild( el( 'pre', null, m.technical ) );
+			wrap.appendChild( details );
+		}
+		return wrap;
 	}
 
 	function renderList() {

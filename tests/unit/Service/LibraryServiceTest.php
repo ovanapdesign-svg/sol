@@ -64,7 +64,21 @@ final class LibraryServiceTest extends TestCase {
 		$result = $this->service->create( $this->valid_input( [ 'library_key' => 'NotSnake' ] ) );
 		$this->assertFalse( $result['ok'] );
 		$codes = array_column( $result['errors'], 'code' );
-		$this->assertContains( 'invalid_format', $codes );
+		$this->assertContains( 'invalid_chars', $codes );
+	}
+
+	public function test_create_two_char_library_key_is_rejected(): void {
+		$result = $this->service->create( $this->valid_input( [ 'library_key' => 'tx' ] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'too_short', $codes );
+	}
+
+	public function test_create_reserved_library_key_is_rejected(): void {
+		$result = $this->service->create( $this->valid_input( [ 'library_key' => 'admin' ] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'reserved', $codes );
 	}
 
 	public function test_create_duplicate_library_key_returns_duplicate(): void {
