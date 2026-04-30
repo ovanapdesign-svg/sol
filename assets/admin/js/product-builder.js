@@ -1276,6 +1276,293 @@
 	}
 
 	// =========================================================
+	// Block 4 — Profile colors
+	// =========================================================
+
+	function renderBlockProfileColors() {
+		const block = blockShell( 'profile-colors', '4. Profile color', 'Frame / profile colors the customer can pick.' );
+
+		if ( ! Array.isArray( state.drafts.profile_colors ) ) {
+			state.drafts.profile_colors = ( state.snapshot.profile_colors || [] ).map( ( c ) => ( {
+				name:         c.label || '',
+				code:         c.sku || '',
+				color_family: c.color_family || '',
+				image_url:    c.image_url || '',
+				active:       !! c.is_active,
+			} ) );
+			if ( state.drafts.profile_colors.length === 0 ) state.drafts.profile_colors.push( blankColor() );
+		}
+
+		const list = el( 'div', { class: 'configkit-pb__card-list' } );
+		state.drafts.profile_colors.forEach( ( c, i ) => list.appendChild( renderColorCard( c, i ) ) );
+
+		const footer = el( 'div', { class: 'configkit-pb__row-actions' },
+			el( 'button', {
+				type: 'button',
+				class: 'button',
+				onClick: () => {
+					readColorDraftFromDOM();
+					state.drafts.profile_colors.push( blankColor() );
+					render();
+				},
+			}, '+ Add color' ),
+			el( 'button', {
+				type: 'button',
+				class: 'button button-primary',
+				disabled: state.busy,
+				onClick: saveProfileColors,
+			}, state.busy ? 'Saving…' : 'Save colors' )
+		);
+		block.appendChild( list );
+		block.appendChild( footer );
+
+		const count = state.snapshot.profile_colors.length;
+		block.appendChild( el( 'p', { class: 'configkit-pb__count' }, count + ' color' + ( count === 1 ? '' : 's' ) + ' configured.' ) );
+		return block;
+	}
+
+	function blankColor() {
+		return { name: '', code: '', color_family: '', image_url: '', active: true };
+	}
+
+	function renderColorCard( color, index ) {
+		const card = el( 'div', { class: 'configkit-pb__card', 'data-block-card': 'profile-color' } );
+		card.appendChild( imageCellFor( color, () => render() ) );
+
+		const fields = el( 'div', { class: 'configkit-pb__card-fields' } );
+		fields.appendChild( labelled( 'Name',      inputField( 'Black', color.name, { field: 'name' } ) ) );
+		fields.appendChild( labelled( 'Code',      inputField( 'BLK',   color.code, { field: 'code', cls: 'configkit-pb__input code' } ) ) );
+
+		// Hex input + color picker preview.
+		const hexInput = el( 'input', {
+			type: 'text',
+			class: 'configkit-pb__input code',
+			placeholder: '#000000',
+			value: color.color_family || '',
+			'data-pb-field': 'color_family',
+			onInput: ( ev ) => {
+				const hex = String( ev.target.value || '' );
+				const swatch = card.querySelector( '.configkit-pb__color-swatch' );
+				if ( swatch ) swatch.style.background = isHexColor( hex ) ? hex : 'transparent';
+			},
+		} );
+		const swatch = el( 'span', { class: 'configkit-pb__color-swatch' } );
+		if ( isHexColor( color.color_family ) ) swatch.style.background = color.color_family;
+		const hexWrap = el( 'span', { class: 'configkit-pb__hex-wrap' }, hexInput, swatch );
+		fields.appendChild( labelled( 'Hex / color family', hexWrap ) );
+
+		card.appendChild( fields );
+		card.appendChild( deleteCell( () => {
+			readColorDraftFromDOM();
+			state.drafts.profile_colors.splice( index, 1 );
+			if ( state.drafts.profile_colors.length === 0 ) state.drafts.profile_colors.push( blankColor() );
+			render();
+		}, color.active ) );
+		return card;
+	}
+
+	function isHexColor( v ) {
+		return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test( String( v || '' ) );
+	}
+
+	function readColorDraftFromDOM() {
+		const cards = root.querySelectorAll( '[data-block-card="profile-color"]' );
+		const out = [];
+		cards.forEach( ( card ) => {
+			out.push( {
+				name:         readStringFromCell( card, 'name' ),
+				code:         readStringFromCell( card, 'code' ),
+				color_family: readStringFromCell( card, 'color_family' ),
+				image_url:    readStringFromCell( card, 'image_url' ),
+				active:       readCheckedFromCell( card, 'active' ),
+			} );
+		} );
+		state.drafts.profile_colors = out;
+	}
+
+	async function saveProfileColors() {
+		readColorDraftFromDOM();
+		const colors = ( state.drafts.profile_colors || [] ).filter( ( c ) => ( c.name || '' ).trim() !== '' );
+		try {
+			const result = await pbRequest( '/profile-colors', { method: 'POST', body: { colors } } );
+			showMessage( 'success', ( result && result.message ) || 'Colors saved.' );
+			state.drafts.profile_colors = null;
+			await loadSnapshot();
+			render();
+		} catch ( err ) {
+			showMessage( 'error', explainError( err ) );
+			render();
+		}
+	}
+
+	// =========================================================
+	// Block 8 + 9 — Controls + Accessories
+	// =========================================================
+
+	function renderBlockControls() {
+		return renderLinkedProductBlock( {
+			id:        'controls',
+			title:     '8. Controls (remotes, sensors)',
+			helper:    'Optional accessories the customer can add. Link to existing Woo products or set custom prices.',
+			draft_key: 'controls',
+			snapshot_key: 'controls',
+			save_path: '/controls',
+			body_key:  'controls',
+			singular:  'control',
+		} );
+	}
+
+	function renderBlockAccessories() {
+		return renderLinkedProductBlock( {
+			id:        'accessories',
+			title:     '9. Accessories (add-ons)',
+			helper:    'Bracket sets, covers, anything the customer can tick on as an extra.',
+			draft_key: 'accessories',
+			snapshot_key: 'accessories',
+			save_path: '/accessories',
+			body_key:  'accessories',
+			singular:  'accessory',
+		} );
+	}
+
+	function renderLinkedProductBlock( cfg ) {
+		const block = blockShell( cfg.id, cfg.title, cfg.helper );
+
+		if ( ! Array.isArray( state.drafts[ cfg.draft_key ] ) ) {
+			state.drafts[ cfg.draft_key ] = ( state.snapshot[ cfg.snapshot_key ] || [] ).map( linkedProductRecordToDraft );
+			if ( state.drafts[ cfg.draft_key ].length === 0 ) state.drafts[ cfg.draft_key ].push( blankLinkedProduct() );
+		}
+
+		const list = el( 'div', { class: 'configkit-pb__card-list' } );
+		state.drafts[ cfg.draft_key ].forEach( ( item, i ) => list.appendChild( renderLinkedProductCard( item, cfg, i ) ) );
+
+		const footer = el( 'div', { class: 'configkit-pb__row-actions' },
+			el( 'button', {
+				type: 'button',
+				class: 'button',
+				onClick: () => {
+					readLinkedProductDraftFromDOM( cfg );
+					state.drafts[ cfg.draft_key ].push( blankLinkedProduct() );
+					render();
+				},
+			}, '+ Add ' + cfg.singular ),
+			el( 'button', {
+				type: 'button',
+				class: 'button button-primary',
+				disabled: state.busy,
+				onClick: () => saveLinkedProductBlock( cfg ),
+			}, state.busy ? 'Saving…' : ( 'Save ' + cfg.body_key ) )
+		);
+		block.appendChild( list );
+		block.appendChild( footer );
+
+		const count = ( state.snapshot[ cfg.snapshot_key ] || [] ).length;
+		block.appendChild( el( 'p', { class: 'configkit-pb__count' }, count + ' ' + cfg.singular + ( count === 1 ? '' : 's' ) + ' configured.' ) );
+		return block;
+	}
+
+	function linkedProductRecordToDraft( m ) {
+		return {
+			_id:            m.id || null,
+			name:           m.label || '',
+			code:           m.sku || '',
+			price:          m.price || '',
+			image_url:      m.image_url || '',
+			active:         !! m.is_active,
+			woo_product_id: m.woo_product_id || 0,
+			price_source:   m.price_source || 'configkit',
+		};
+	}
+
+	function blankLinkedProduct() {
+		return { _id: null, name: '', code: '', price: '', image_url: '', active: true, woo_product_id: 0, price_source: 'configkit' };
+	}
+
+	function renderLinkedProductCard( item, cfg, index ) {
+		const card = el( 'div', { class: 'configkit-pb__card', 'data-block-card': cfg.id + '-card' } );
+		card.appendChild( imageCellFor( item, () => render() ) );
+
+		const fields = el( 'div', { class: 'configkit-pb__card-fields' } );
+		fields.appendChild( labelled( 'Name', inputField( '', item.name, { field: 'name' } ) ) );
+		fields.appendChild( labelled( 'Code', inputField( '', item.code, { field: 'code', cls: 'configkit-pb__input code' } ) ) );
+
+		const pickerHost = el( 'div', { class: 'configkit-pb__woo-picker' } );
+		fields.appendChild( el( 'label', { class: 'configkit-pb__field configkit-pb__field--wide' },
+			el( 'span', { class: 'configkit-pb__field-label' }, 'Linked Woo product (optional)' ),
+			pickerHost
+		) );
+		mountWooPicker( pickerHost, item );
+
+		const sourceWrap = el( 'span', { class: 'configkit-pb__source-radio' } );
+		[ 'woo', 'configkit' ].forEach( ( v ) => {
+			const name = 'cf_lp_' + cfg.id + '_' + Math.random().toString( 36 ).slice( 2, 8 );
+			sourceWrap.appendChild( el( 'label', { class: 'configkit-pb__source-option' },
+				el( 'input', {
+					type: 'radio',
+					name,
+					value: v,
+					checked: ( item.price_source || 'configkit' ) === v,
+					onChange: ( ev ) => { item.price_source = ev.target.value; render(); },
+				} ),
+				v === 'woo' ? ' Use Woo product price' : ' Use custom price',
+			) );
+		} );
+		fields.appendChild( labelled( 'Price source', sourceWrap ) );
+
+		if ( item.price_source === 'configkit' ) {
+			fields.appendChild( labelled( 'Custom price (kr)', inputField( '0', item.price, { type: 'number', step: '0.01', field: 'price' } ) ) );
+		}
+		card.appendChild( fields );
+
+		card.appendChild( deleteCell( () => {
+			readLinkedProductDraftFromDOM( cfg );
+			state.drafts[ cfg.draft_key ].splice( index, 1 );
+			if ( state.drafts[ cfg.draft_key ].length === 0 ) state.drafts[ cfg.draft_key ].push( blankLinkedProduct() );
+			render();
+		}, item.active ) );
+		return card;
+	}
+
+	function readLinkedProductDraftFromDOM( cfg ) {
+		const cards = root.querySelectorAll( '[data-block-card="' + cfg.id + '-card"]' );
+		const existing = state.drafts[ cfg.draft_key ] || [];
+		cards.forEach( ( card, i ) => {
+			const item = existing[ i ] || ( existing[ i ] = blankLinkedProduct() );
+			item.name      = readStringFromCell( card, 'name' );
+			item.code      = readStringFromCell( card, 'code' );
+			item.image_url = readStringFromCell( card, 'image_url' );
+			item.active    = readCheckedFromCell( card, 'active' );
+			item.price     = readNumberFromCell( card, 'price' );
+		} );
+		state.drafts[ cfg.draft_key ] = existing.slice( 0, cards.length );
+	}
+
+	async function saveLinkedProductBlock( cfg ) {
+		readLinkedProductDraftFromDOM( cfg );
+		const items = ( state.drafts[ cfg.draft_key ] || [] )
+			.filter( ( i ) => ( i.name || '' ).trim() !== '' )
+			.map( ( i ) => ( {
+				name:           i.name,
+				code:           i.code,
+				active:         i.active,
+				image_url:      i.image_url,
+				woo_product_id: i.woo_product_id,
+				price_source:   i.price_source,
+				price:          i.price_source === 'configkit' ? i.price : '',
+			} ) );
+		try {
+			const result = await pbRequest( cfg.save_path, { method: 'POST', body: { [ cfg.body_key ]: items } } );
+			showMessage( 'success', ( result && result.message ) || 'Saved.' );
+			state.drafts[ cfg.draft_key ] = null;
+			await loadSnapshot();
+			render();
+		} catch ( err ) {
+			showMessage( 'error', explainError( err ) );
+			render();
+		}
+	}
+
+	// =========================================================
 	// Image picker — wp.media bridge
 	// =========================================================
 
@@ -1333,6 +1620,10 @@
 		const showMotor = recipe.blocks.indexOf( 'motor' ) >= 0 && ( mode === 'motorized_only' || mode === 'both' );
 		if ( showStang ) root.appendChild( renderBlockStang() );
 		if ( showMotor ) root.appendChild( renderBlockMotor() );
+
+		if ( recipe.blocks.indexOf( 'profile_colors' ) >= 0 ) root.appendChild( renderBlockProfileColors() );
+		if ( recipe.blocks.indexOf( 'controls' )       >= 0 ) root.appendChild( renderBlockControls() );
+		if ( recipe.blocks.indexOf( 'accessories' )    >= 0 ) root.appendChild( renderBlockAccessories() );
 	}
 
 	function currentRecipe() {
