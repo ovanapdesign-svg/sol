@@ -55,21 +55,21 @@ final class WooIntegration {
 			[ 'label' => 'ConfigKit' ],
 		] );
 
-		echo '<div class="options_group">';
-		echo '<p class="form-field">';
-		echo '<strong>' . \esc_html__( 'ConfigKit', 'configkit' ) . '</strong> — ';
-		echo \esc_html__(
-			'Bind this product to a ConfigKit template. Status, defaults, and allowed options are managed here.',
-			'configkit'
-		);
-		echo '</p>';
+		// Phase 4.3 dalis 2 — Simple Mode Product Builder mounts here
+		// by default. Owners click "Show advanced settings" inside
+		// the builder header to swap to the existing binding view.
+		echo '<div id="configkit-product-builder-app" class="configkit-app configkit-product-builder" data-loading="true" data-product-id="'
+			. \esc_attr( (string) $product_id ) . '">';
+		echo '<noscript><p>' . \esc_html__( 'JavaScript is required to use Product Builder.', 'configkit' ) . '</p></noscript>';
+		echo '<p class="configkit-app__loading">' . \esc_html__( 'Loading product builder…', 'configkit' ) . '</p>';
 		echo '</div>';
 
-		// Mount point. Sections are rendered by product-binding.js.
-		echo '<div id="configkit-product-binding-app" class="configkit-app" data-loading="true" data-product-id="'
-			. \esc_attr( (string) $product_id ) . '">';
+		// Existing 8-section advanced mode — hidden by default;
+		// product-builder.js toggles visibility.
+		echo '<div id="configkit-product-binding-app" class="configkit-app configkit-app--advanced" data-loading="true" data-product-id="'
+			. \esc_attr( (string) $product_id ) . '" hidden>';
 		echo '<noscript><p>' . \esc_html__( 'JavaScript is required to manage ConfigKit binding.', 'configkit' ) . '</p></noscript>';
-		echo '<p class="configkit-app__loading">' . \esc_html__( 'Loading…', 'configkit' ) . '</p>';
+		echo '<p class="configkit-app__loading">' . \esc_html__( 'Loading advanced settings…', 'configkit' ) . '</p>';
 		echo '</div>';
 
 		echo '</div>'; // .configkit-product-tab

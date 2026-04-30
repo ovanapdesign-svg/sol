@@ -65,6 +65,20 @@ final class AssetLoader {
 				$this->version,
 				true
 			);
+			// Phase 4.3 dalis 2 — Simple Mode UI also lives on the
+			// product edit screen.
+			\wp_enqueue_script(
+				'configkit-product-builder',
+				$this->plugin_url . 'assets/admin/js/product-builder.js',
+				[ 'configkit-admin', 'configkit-woo-product-picker' ],
+				$this->version,
+				true
+			);
+			// WordPress media picker for fabric / control / motor
+			// images — only loaded on the product edit screen.
+			if ( function_exists( 'wp_enqueue_media' ) ) {
+				\wp_enqueue_media();
+			}
 			return;
 		}
 
