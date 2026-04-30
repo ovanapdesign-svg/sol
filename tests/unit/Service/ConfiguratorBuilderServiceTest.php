@@ -70,6 +70,8 @@ final class ConfiguratorBuilderServiceTest extends TestCase {
 			new ModuleService( $this->modules ),
 			new LibraryService( $this->libraries, $this->modules ),
 			$this->libraries,
+			new LookupCellService( $this->lookup_cells, $this->lookup_tables ),
+			$this->lookup_cells,
 		);
 	}
 
@@ -167,6 +169,68 @@ final class ConfiguratorBuilderServiceTest extends TestCase {
 			function ( array $data ): void { $this->option_store = $data; },
 		);
 		$this->assertFalse( $registry->is_auto_managed( AutoManagedRegistry::TYPE_LIBRARY, $key ) );
+	}
+
+	public function test_save_range_rows_writes_lookup_cells_and_preserves_from_bounds(): void {
+		$created = $this->service->create_section( self::PRODUCT_ID, SectionTypeRegistry::TYPE_SIZE_PRICING, 'Pricing' );
+		$id = $created['section']['id'];
+		$result = $this->service->save_range_rows( self::PRODUCT_ID, $id, [
+			[ 'width_from' => 1000, 'width_to' => 2100, 'height_from' => 1000, 'height_to' => 2000, 'price' => 11000, 'price_group_key' => 'I' ],
+			[ 'width_from' => 2101, 'width_to' => 2400, 'height_from' => 1000, 'height_to' => 2000, 'price' => 12000, 'price_group_key' => 'I' ],
+		] );
+		$this->assertTrue( $result['ok'], 'errors=' . json_encode( $result['errors'] ?? [] ) );
+		$this->assertCount( 2, $this->lookup_cells->records );
+
+		$rows = $this->service->read_range_rows( self::PRODUCT_ID, $id );
+		$this->assertSame( 1000, $rows[0]['width_from'] );
+		$this->assertSame( 2100, $rows[0]['width_to'] );
+		$this->assertSame( 'I',  $rows[0]['price_group_key'] );
+	}
+
+	public function test_save_range_rows_replaces_previous_set(): void {
+		$created = $this->service->create_section( self::PRODUCT_ID, SectionTypeRegistry::TYPE_SIZE_PRICING );
+		$id = $created['section']['id'];
+		$this->service->save_range_rows( self::PRODUCT_ID, $id, [
+			[ 'width_from' => 0, 'width_to' => 2400, 'height_from' => 0, 'height_to' => 2000, 'price' => 12000 ],
+		] );
+		$this->assertCount( 1, $this->lookup_cells->records );
+		$this->service->save_range_rows( self::PRODUCT_ID, $id, [
+			[ 'width_from' => 0, 'width_to' => 3000, 'height_from' => 0, 'height_to' => 2400, 'price' => 16000 ],
+			[ 'width_from' => 0, 'width_to' => 3500, 'height_from' => 0, 'height_to' => 2400, 'price' => 18000 ],
+		] );
+		$this->assertCount( 2, $this->lookup_cells->records );
+	}
+
+	public function test_save_range_rows_rejects_invalid_input(): void {
+		$created = $this->service->create_section( self::PRODUCT_ID, SectionTypeRegistry::TYPE_SIZE_PRICING );
+		$id = $created['section']['id'];
+		$result = $this->service->save_range_rows( self::PRODUCT_ID, $id, [
+			[ 'width_to' => 0, 'height_to' => 2000, 'price' => 1000 ], // bad width
+		] );
+		$this->assertFalse( $result['ok'] );
+		$this->assertNotEmpty( $result['errors'] );
+	}
+
+	public function test_analyse_ranges_flags_overlap_and_gap(): void {
+		$rows = [
+			[ 'width_from' => 1000, 'width_to' => 2100, 'height_from' => 1000, 'height_to' => 2000, 'price' => 11000 ],
+			[ 'width_from' => 2050, 'width_to' => 2400, 'height_from' => 1000, 'height_to' => 2000, 'price' => 12000 ],
+		];
+		$diag = $this->service->analyse_ranges( $rows );
+		$this->assertCount( 1, $diag['overlaps'] );
+		$this->assertSame( 0, $diag['overlaps'][0]['a'] );
+		$this->assertSame( 1, $diag['overlaps'][0]['b'] );
+		$this->assertFalse( $diag['ok'] );
+	}
+
+	public function test_analyse_ranges_clean_set_returns_ok(): void {
+		$rows = [
+			[ 'width_from' => 0,    'width_to' => 2100, 'height_from' => 0, 'height_to' => 2000, 'price' => 11000 ],
+			[ 'width_from' => 2101, 'width_to' => 2400, 'height_from' => 0, 'height_to' => 2000, 'price' => 12000 ],
+		];
+		$diag = $this->service->analyse_ranges( $rows );
+		$this->assertSame( [], $diag['overlaps'] );
+		$this->assertTrue( $diag['ok'] );
 	}
 
 	public function test_section_type_registry_lists_documented_types(): void {

@@ -73,6 +73,19 @@ final class ConfiguratorBuilderController extends AbstractController {
 				'permission_callback' => $this->require_cap( self::CAP ),
 			],
 		] );
+
+		\register_rest_route( self::NAMESPACE, '/configurator/(?P<product_id>\d+)/sections/(?P<section_id>[\w_-]+)/ranges', [
+			[
+				'methods'             => 'GET',
+				'callback'            => [ $this, 'read_ranges' ],
+				'permission_callback' => $this->require_cap( self::CAP ),
+			],
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'save_ranges' ],
+				'permission_callback' => $this->require_cap( self::CAP ),
+			],
+		] );
 	}
 
 	public function list_section_types( \WP_REST_Request $request ): \WP_REST_Response {
@@ -113,6 +126,26 @@ final class ConfiguratorBuilderController extends AbstractController {
 		$result     = $this->service->delete_section( $product_id, $section_id );
 		if ( ! ( $result['ok'] ?? false ) ) {
 			return $this->error( 'configurator_failed', (string) ( $result['message'] ?? 'Could not delete section.' ), [], 400 );
+		}
+		return $this->ok( $result );
+	}
+
+	public function read_ranges( \WP_REST_Request $request ): \WP_REST_Response {
+		$product_id = (int) $request['product_id'];
+		$section_id = (string) $request['section_id'];
+		return $this->ok( [
+			'rows' => $this->service->read_range_rows( $product_id, $section_id ),
+		] );
+	}
+
+	public function save_ranges( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$product_id = (int) $request['product_id'];
+		$section_id = (string) $request['section_id'];
+		$body       = $this->payload( $request );
+		$rows       = is_array( $body['rows'] ?? null ) ? $body['rows'] : [];
+		$result     = $this->service->save_range_rows( $product_id, $section_id, $rows );
+		if ( ! ( $result['ok'] ?? false ) ) {
+			return $this->error( 'configurator_failed', (string) ( $result['message'] ?? 'Could not save ranges.' ), [ 'errors' => $result['errors'] ?? [] ], 400 );
 		}
 		return $this->ok( $result );
 	}

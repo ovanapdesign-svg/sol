@@ -5,6 +5,7 @@ namespace ConfigKit\Service;
 
 use ConfigKit\Admin\SectionTypeRegistry;
 use ConfigKit\Repository\LibraryRepository;
+use ConfigKit\Repository\LookupCellRepository;
 use ConfigKit\Repository\LookupTableRepository;
 
 /**
@@ -39,6 +40,8 @@ final class ConfiguratorBuilderService {
 		private ?ModuleService $modules = null,
 		private ?LibraryService $libraries = null,
 		private ?LibraryRepository $library_repo = null,
+		private ?LookupCellService $lookup_cells = null,
+		private ?LookupCellRepository $lookup_cell_repo = null,
 	) {}
 
 	/**
@@ -175,6 +178,231 @@ final class ConfiguratorBuilderService {
 		}
 		$this->sections->reorder( $product_id, $ids );
 		return [ 'ok' => true, 'sections' => $this->sections->list( $product_id ) ];
+	}
+
+	/**
+	 * Phase 4.4 — save the range rows for a size_pricing section.
+	 *
+	 * Storage strategy without an engine touch: the engine's
+	 * `round_up` matcher already provides range semantics — a cell
+	 * at (width=W, height=H) catches any customer dimension ≤ W,
+	 * ≤ H (and gets picked when no smaller cell qualifies). We
+	 * write each range row as a single lookup_cell at
+	 * (width = width_to, height = height_to, price, price_group_key)
+	 * so the customer-facing engine path stays unchanged. The
+	 * owner's literal from-side bounds are preserved on the section
+	 * record so the editor reads back exactly what was typed —
+	 * `range_rows` ride alongside the auto-managed entity key.
+	 *
+	 * Idempotent: re-saving a range list wipes the prior cells (and
+	 * the prior `range_rows` snapshot) and inserts the new ones —
+	 * the section reflects the UI exactly.
+	 *
+	 * @param list<array<string,mixed>> $rows
+	 *
+	 * @return array{ok:bool, message?:string, errors?:list<array<string,mixed>>, section?:array<string,mixed>}
+	 */
+	public function save_range_rows( int $product_id, string $section_id, array $rows ): array {
+		if ( $this->lookup_cells === null || $this->lookup_cell_repo === null ) {
+			return [ 'ok' => false, 'message' => 'Range pricing is not wired in this environment.' ];
+		}
+		$section = $this->sections->find( $product_id, $section_id );
+		if ( $section === null || ( $section['type'] ?? '' ) !== SectionTypeRegistry::TYPE_SIZE_PRICING ) {
+			return [ 'ok' => false, 'message' => 'Section not found, or not a size-pricing section.' ];
+		}
+		$lookup_key = (string) ( $section['lookup_table_key'] ?? '' );
+		if ( $lookup_key === '' ) {
+			return [ 'ok' => false, 'message' => 'Section has no underlying lookup table.' ];
+		}
+		$table = $this->lookup_table_repo->find_by_key( $lookup_key );
+		if ( $table === null ) {
+			return [ 'ok' => false, 'message' => 'Lookup table missing for this section.' ];
+		}
+
+		$normalised = [];
+		$errors     = [];
+		$cells      = [];
+		foreach ( $rows as $i => $row ) {
+			$wf = $this->to_int( $row['width_from']  ?? null );
+			$wt = $this->to_int( $row['width_to']    ?? null );
+			$hf = $this->to_int( $row['height_from'] ?? null );
+			$ht = $this->to_int( $row['height_to']   ?? null );
+			$price = $this->to_float( $row['price']  ?? null );
+			$pgk   = isset( $row['price_group_key'] ) ? (string) $row['price_group_key'] : '';
+
+			if ( $wt === null || $wt <= 0 || $ht === null || $ht <= 0 ) {
+				$errors[] = [ 'field' => 'range', 'code' => 'invalid', 'message' => sprintf( 'Row %d needs a width and height "to" value.', $i + 1 ) ];
+				continue;
+			}
+			if ( $price === null || $price < 0 ) {
+				$errors[] = [ 'field' => 'price', 'code' => 'invalid', 'message' => sprintf( 'Row %d needs a non-negative price.', $i + 1 ) ];
+				continue;
+			}
+			// `from` defaults to 0 when missing — the round_up matcher
+			// doesn't care about lower bounds anyway, but the editor
+			// needs them for display.
+			$normalised[] = [
+				'width_from'      => $wf !== null && $wf >= 0 ? $wf : 0,
+				'width_to'        => $wt,
+				'height_from'     => $hf !== null && $hf >= 0 ? $hf : 0,
+				'height_to'       => $ht,
+				'price'           => $price,
+				'price_group_key' => $pgk,
+			];
+			$cells[] = [
+				'lookup_table_key' => $lookup_key,
+				'width'            => $wt,
+				'height'           => $ht,
+				'price'            => $price,
+				'price_group_key'  => $pgk,
+				'is_active'        => true,
+			];
+		}
+		if ( count( $errors ) > 0 ) {
+			return [ 'ok' => false, 'message' => sprintf( '%d invalid range row(s).', count( $errors ) ), 'errors' => $errors ];
+		}
+
+		$this->lookup_cell_repo->delete_all_in_table( $lookup_key );
+		$bulk = $this->lookup_cells->bulk_upsert( (int) $table['id'], $cells );
+		if ( ! ( $bulk['ok'] ?? false ) ) {
+			return [ 'ok' => false, 'message' => 'Range rows could not be saved.', 'errors' => $bulk['errors'] ?? [] ];
+		}
+
+		$this->sections->update( $product_id, $section_id, [ 'range_rows' => $normalised ] );
+		$diagnostics = $this->analyse_ranges( $normalised );
+		return [
+			'ok'          => true,
+			'message'     => sprintf( '%d range row(s) saved.', count( $normalised ) ),
+			'section'     => $this->sections->find( $product_id, $section_id ),
+			'diagnostics' => $diagnostics,
+		];
+	}
+
+	/**
+	 * Read the section's range rows back. Falls back to lookup_cells
+	 * (with synthetic from = 0) when the section state has no
+	 * `range_rows` snapshot — covers older sections that pre-date
+	 * Phase 4.4.
+	 *
+	 * @return list<array<string,mixed>>
+	 */
+	public function read_range_rows( int $product_id, string $section_id ): array {
+		$section = $this->sections->find( $product_id, $section_id );
+		if ( $section === null ) return [];
+		if ( is_array( $section['range_rows'] ?? null ) ) {
+			return $section['range_rows'];
+		}
+		if ( $this->lookup_cell_repo === null ) return [];
+		$lookup_key = (string) ( $section['lookup_table_key'] ?? '' );
+		if ( $lookup_key === '' ) return [];
+		$cells = $this->lookup_cell_repo->list_in_table( $lookup_key, [], 1, 5000 )['items'] ?? [];
+		$out = [];
+		foreach ( $cells as $c ) {
+			$out[] = [
+				'width_from'      => 0,
+				'width_to'        => (int) ( $c['width']  ?? 0 ),
+				'height_from'     => 0,
+				'height_to'       => (int) ( $c['height'] ?? 0 ),
+				'price'           => (float) ( $c['price'] ?? 0 ),
+				'price_group_key' => (string) ( $c['price_group_key'] ?? '' ),
+			];
+		}
+		return $out;
+	}
+
+	/**
+	 * Compute overlap + gap diagnostics over the supplied ranges.
+	 * Pure-PHP — no DB. Used by save_range_rows so the controller
+	 * can hand the JS a ready-to-render warning list.
+	 *
+	 * Overlap: two rows whose width AND height ranges intersect.
+	 * Gap (informational): the smallest from-edge that no row covers
+	 * — the JS surfaces this as a soft warning rather than an error.
+	 *
+	 * @param list<array<string,mixed>> $rows
+	 * @return array{overlaps:list<array{a:int,b:int,message:string}>,gaps:list<string>,ok:bool}
+	 */
+	public function analyse_ranges( array $rows ): array {
+		$overlaps = [];
+		for ( $i = 0; $i < count( $rows ); $i++ ) {
+			for ( $j = $i + 1; $j < count( $rows ); $j++ ) {
+				if ( $this->ranges_overlap( $rows[ $i ], $rows[ $j ] ) ) {
+					$overlaps[] = [
+						'a' => $i,
+						'b' => $j,
+						'message' => sprintf(
+							'Rows %d and %d overlap at width %d-%d × height %d-%d.',
+							$i + 1,
+							$j + 1,
+							max( (int) $rows[ $i ]['width_from'],  (int) $rows[ $j ]['width_from'] ),
+							min( (int) $rows[ $i ]['width_to'],    (int) $rows[ $j ]['width_to'] ),
+							max( (int) $rows[ $i ]['height_from'], (int) $rows[ $j ]['height_from'] ),
+							min( (int) $rows[ $i ]['height_to'],   (int) $rows[ $j ]['height_to'] ),
+						),
+					];
+				}
+			}
+		}
+		// Gap heuristic: did the rows cover [0, max-to] continuously
+		// on each axis? Naive but useful — flags the most common
+		// "missing 2400-2500" mistake.
+		$gaps = [];
+		if ( count( $rows ) > 0 ) {
+			$widths = array_unique( array_map( static fn ( $r ) => (int) $r['width_to'], $rows ) );
+			sort( $widths );
+			$prev_end = 0;
+			foreach ( $widths as $end ) {
+				$next_starts = array_filter( $rows, static fn ( $r ) => (int) $r['width_to'] === $end );
+				$min_from    = min( array_map( static fn ( $r ) => (int) $r['width_from'], $next_starts ) );
+				if ( $min_from > $prev_end + 1 ) {
+					$gaps[] = sprintf( 'Width gap: no row covers %d-%d.', $prev_end + 1, $min_from - 1 );
+				}
+				$prev_end = max( $prev_end, $end );
+			}
+		}
+		return [
+			'overlaps' => $overlaps,
+			'gaps'     => $gaps,
+			'ok'       => count( $overlaps ) === 0,
+		];
+	}
+
+	/**
+	 * @param array<string,mixed> $a
+	 * @param array<string,mixed> $b
+	 */
+	private function ranges_overlap( array $a, array $b ): bool {
+		$aw_from = (int) ( $a['width_from']  ?? 0 );
+		$aw_to   = (int) ( $a['width_to']    ?? 0 );
+		$ah_from = (int) ( $a['height_from'] ?? 0 );
+		$ah_to   = (int) ( $a['height_to']   ?? 0 );
+		$bw_from = (int) ( $b['width_from']  ?? 0 );
+		$bw_to   = (int) ( $b['width_to']    ?? 0 );
+		$bh_from = (int) ( $b['height_from'] ?? 0 );
+		$bh_to   = (int) ( $b['height_to']   ?? 0 );
+		$width_overlap  = $aw_from <= $bw_to && $bw_from <= $aw_to;
+		$height_overlap = $ah_from <= $bh_to && $bh_from <= $ah_to;
+		// Same price-group rows that share an exact (width_to, height_to)
+		// bucket are duplicates from the engine's point of view, so we
+		// also flag exact-equal rows even though strictly they don't
+		// "overlap" in the from/to model.
+		if ( $width_overlap && $height_overlap ) return true;
+		return false;
+	}
+
+	private function to_int( mixed $value ): ?int {
+		if ( $value === null || $value === '' ) return null;
+		if ( is_int( $value ) ) return $value;
+		if ( is_float( $value ) ) return (int) round( $value );
+		if ( is_string( $value ) && is_numeric( trim( $value ) ) ) return (int) round( (float) trim( $value ) );
+		return null;
+	}
+
+	private function to_float( mixed $value ): ?float {
+		if ( $value === null || $value === '' ) return null;
+		if ( is_int( $value ) || is_float( $value ) ) return (float) $value;
+		if ( is_string( $value ) && is_numeric( trim( $value ) ) ) return (float) trim( $value );
+		return null;
 	}
 
 	/**

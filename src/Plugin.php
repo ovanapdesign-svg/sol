@@ -399,7 +399,9 @@ final class Plugin {
 			$lookup_repo,
 			new ModuleService( $module_repo ),
 			new LibraryService( $library_repo, $module_repo ),
-			$library_repo
+			$library_repo,
+			new LookupCellService( $cell_repo, $lookup_repo ),
+			$cell_repo
 		) ) );
 		$router->add( new ProductBuilderController(
 			new ProductBuilderService(
