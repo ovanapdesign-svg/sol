@@ -289,7 +289,7 @@
 				'div',
 				{ class: 'configkit-diagnostics__issue-actions' },
 				( issue.fix_link || issue.fix_url )
-					? el( 'a', { href: issue.fix_link || issue.fix_url, class: 'button button-primary' }, 'Fix' )
+					? el( 'a', { href: issue.fix_link || issue.fix_url, class: 'button button-primary' }, fixButtonLabel( issue ) )
 					: null,
 				issue.acknowledged
 					? null
@@ -301,6 +301,15 @@
 					}, 'Mark as known' )
 			)
 		);
+	}
+
+	function fixButtonLabel( issue ) {
+		var url = issue.fix_link || issue.fix_url || '';
+		if ( /#cells\b/.test( url ) )                return 'Open cells editor →';
+		if ( /#publish\b/.test( url ) )              return 'Open template publish →';
+		if ( /tab=rules/.test( url ) )               return 'Open rules drawer →';
+		if ( /configkit_product_data/.test( url ) )  return 'Open product binding →';
+		return 'Open fix →';
 	}
 
 	load( false );

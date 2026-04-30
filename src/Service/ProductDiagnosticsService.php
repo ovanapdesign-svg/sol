@@ -93,6 +93,17 @@ final class ProductDiagnosticsService {
 
 		// 2. Published template version exists.
 		$template_published = $template !== null && (string) ( $template['status'] ?? '' ) === 'published';
+		$publish_fix_url = null;
+		if ( ! $template_published && $template !== null ) {
+			// Jump straight into the template edit screen and scroll
+			// to the publish button block.
+			$publish_fix_url = $this->configkit_admin_url( 'configkit-templates', [
+				'action' => 'edit',
+				'id'     => (int) $template['id'],
+			] ) . '#publish';
+		} elseif ( ! $template_published ) {
+			$publish_fix_url = '#section-base-setup';
+		}
 		$checks[] = $this->check(
 			'template_version_published',
 			$template_published,
@@ -100,7 +111,7 @@ final class ProductDiagnosticsService {
 			$template_published
 				? 'Template has a published version.'
 				: 'Selected template has no published version.',
-			$template_published ? null : '#section-base-setup'
+			$publish_fix_url
 		);
 
 		// 3. Lookup table selected.
@@ -125,12 +136,21 @@ final class ProductDiagnosticsService {
 			$cells_listing = $this->lookup_cells->list_in_table( (string) $lookup_table['lookup_table_key'], [], 1, 1 );
 			$cells_ok      = $cells_listing['total'] > 0;
 		}
+		$cells_fix_url = null;
+		if ( ! $cells_ok && $lookup_table !== null ) {
+			$cells_fix_url = $this->configkit_admin_url( 'configkit-lookup-tables', [
+				'action' => 'edit',
+				'id'     => (int) $lookup_table['id'],
+			] ) . '#cells';
+		} elseif ( ! $cells_ok ) {
+			$cells_fix_url = '#section-base-setup';
+		}
 		$checks[] = $this->check(
 			'lookup_table_has_cells',
 			$cells_ok,
 			'critical',
 			$cells_ok ? 'Lookup table has cells.' : 'Lookup table is empty.',
-			$cells_ok ? null : '#section-base-setup'
+			$cells_fix_url
 		);
 
 		// Build template field index (re-used by checks 5-10).
@@ -256,6 +276,16 @@ final class ProductDiagnosticsService {
 				}
 			}
 		}
+		$rules_fix_url = null;
+		if ( $rule_target_errors > 0 && $template !== null ) {
+			$rules_fix_url = $this->configkit_admin_url( 'configkit-templates', [
+				'action' => 'edit',
+				'id'     => (int) $template['id'],
+				'tab'    => 'rules',
+			] );
+		} elseif ( $rule_target_errors > 0 ) {
+			$rules_fix_url = '#section-base-setup';
+		}
 		$checks[] = $this->check(
 			'rules_targets_valid',
 			$rule_target_errors === 0,
@@ -263,7 +293,7 @@ final class ProductDiagnosticsService {
 			$rule_target_errors === 0
 				? 'Template rules reference live entities.'
 				: $rule_target_errors . ' rule(s) reference deleted fields or steps.',
-			$rule_target_errors === 0 ? null : '#section-base-setup'
+			$rules_fix_url
 		);
 
 		// 10. No locked field has invalid value.
@@ -404,6 +434,21 @@ final class ProductDiagnosticsService {
 		// orphan checks in a future iteration.
 		unset( $known_field_keys_with_options );
 		return false;
+	}
+
+	/**
+	 * Build a ConfigKit admin URL with query args, used for fix_link
+	 * targets that jump to a specific entity edit screen.
+	 *
+	 * @param array<string,int|string> $args
+	 */
+	private function configkit_admin_url( string $page, array $args = [] ): string {
+		$query = [ 'page' => $page ] + $args;
+		$qs    = http_build_query( $query );
+		if ( function_exists( 'admin_url' ) ) {
+			return \admin_url( 'admin.php?' . $qs );
+		}
+		return '/wp-admin/admin.php?' . $qs;
 	}
 
 	/**

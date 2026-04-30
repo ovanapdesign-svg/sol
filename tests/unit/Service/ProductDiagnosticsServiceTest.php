@@ -196,6 +196,12 @@ final class ProductDiagnosticsServiceTest extends TestCase {
 		$pub_check = $this->find_check( $result['checks'], 'template_version_published' );
 		$this->assertFalse( $pub_check['passed'] );
 		$this->assertSame( 'missing_template', $result['status'] );
+		// Phase 4.1: fix_link jumps to the template edit screen with
+		// the publish anchor.
+		$this->assertNotNull( $pub_check['fix_url'] );
+		$this->assertStringContainsString( 'configkit-templates', $pub_check['fix_url'] );
+		$this->assertStringContainsString( 'action=edit', $pub_check['fix_url'] );
+		$this->assertStringContainsString( '#publish', $pub_check['fix_url'] );
 	}
 
 	public function test_missing_lookup_table_reports_missing_lookup_table(): void {
@@ -225,6 +231,12 @@ final class ProductDiagnosticsServiceTest extends TestCase {
 		$cells_check = $this->find_check( $result['checks'], 'lookup_table_has_cells' );
 		$this->assertFalse( $cells_check['passed'] );
 		$this->assertSame( 'missing_lookup_table', $result['status'] );
+		// Phase 4.1: fix_link points at the empty table's cells editor,
+		// not the generic Lookup Tables list.
+		$this->assertNotNull( $cells_check['fix_url'] );
+		$this->assertStringContainsString( 'configkit-lookup-tables', $cells_check['fix_url'] );
+		$this->assertStringContainsString( 'action=edit', $cells_check['fix_url'] );
+		$this->assertStringContainsString( '#cells', $cells_check['fix_url'] );
 	}
 
 	public function test_invalid_default_field_key_reports_invalid_defaults(): void {

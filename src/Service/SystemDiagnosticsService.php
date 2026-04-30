@@ -209,7 +209,7 @@ final class SystemDiagnosticsService {
 				(string) $tmpl['template_key'],
 				(string) $tmpl['name'],
 				'No published version exists. Customers bound to this template cannot purchase until it is published.',
-				$this->template_edit_url( (int) $tmpl['id'] )
+				$this->template_edit_url( (int) $tmpl['id'] ) . '#publish'
 			);
 		}
 		return $out;
@@ -256,7 +256,7 @@ final class SystemDiagnosticsService {
 					(string) $table['lookup_table_key'],
 					(string) $table['name'],
 					'Pricing cannot resolve from an empty table.',
-					$this->lookup_table_edit_url( (int) $table['id'] )
+					$this->lookup_table_edit_url( (int) $table['id'] ) . '#cells'
 				);
 			}
 		}
@@ -358,7 +358,7 @@ final class SystemDiagnosticsService {
 						$template_key,
 						implode( '; ', $broken )
 					),
-					$this->template_edit_url( (int) $tmpl['id'] ) . '&drawer=rules'
+					$this->template_edit_url( (int) $tmpl['id'] ) . '&tab=rules#section-rules'
 				);
 			}
 		}

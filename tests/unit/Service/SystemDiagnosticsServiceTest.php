@@ -132,6 +132,25 @@ final class SystemDiagnosticsServiceTest extends TestCase {
 		$result = $this->service->run();
 		$ids = $this->collect_issue_ids( $result['issues'] );
 		$this->assertContains( 'lookup_tables_empty', $ids );
+		// Phase 4.1: fix_link points to the table's cells editor, not
+		// the generic Lookup Tables list.
+		$issue = $this->find_issue( $result['issues'], 'lookup_tables_empty', 'markise_2d_v1' );
+		$this->assertStringContainsString( 'configkit-lookup-tables', (string) $issue['fix_url'] );
+		$this->assertStringContainsString( '#cells', (string) $issue['fix_url'] );
+	}
+
+	public function test_unpublished_template_fix_link_points_to_publish(): void {
+		$tmpl_svc = new \ConfigKit\Service\TemplateService( $this->templates );
+		$tmpl_svc->create( [
+			'template_key' => 'unfinished',
+			'name'         => 'Unfinished',
+			'status'       => 'draft',
+		] );
+		$result = $this->service->run();
+		$issue = $this->find_issue( $result['issues'], 'templates_no_published_version', 'unfinished' );
+		$this->assertStringContainsString( 'configkit-templates', (string) $issue['fix_url'] );
+		$this->assertStringContainsString( 'action=edit', (string) $issue['fix_url'] );
+		$this->assertStringContainsString( '#publish', (string) $issue['fix_url'] );
 	}
 
 	public function test_inactive_lookup_table_skipped(): void {
