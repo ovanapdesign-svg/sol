@@ -36,11 +36,49 @@ final class LibraryItemParser {
 		'is_active', 'sort_order',
 	];
 
-	/** Headers that map into the attributes_json object. */
-	private const ATTRIBUTE_FIELDS = [
+	/** Aliases the parser silently rewrites to the canonical key. */
+	private const HEADER_ALIASES = [
+		'price_group' => 'price_group_key',
+		'active'      => 'is_active',
+	];
+
+	/** Phase 4.2c — built-in attribute fields kept for compatibility with
+	 *  pre-Phase-4.2c imports; module-driven attributes are layered on top
+	 *  via set_module_context().
+	 */
+	private const BUILTIN_ATTRIBUTE_FIELDS = [
 		'brand', 'collection', 'color_family', 'image_url', 'main_image_url',
 		'filter_tags', 'compatibility_tags',
 	];
+
+	/**
+	 * Module context for attribute resolution. Every key in this set
+	 * is treated as a known attribute (so values land in
+	 * `normalized.attributes[key]` instead of `unknown_columns`).
+	 *
+	 * @var array<string,bool>
+	 */
+	private array $module_attribute_keys = [];
+
+	/**
+	 * Phase 4.2c — let the runner inject the target library's module
+	 * before parse so module-declared attributes are routed into the
+	 * attributes bucket. Without context the parser falls back to the
+	 * builtin attribute list (legacy behaviour).
+	 *
+	 * @param array<string,mixed>|null $module
+	 */
+	public function set_module_context( ?array $module ): void {
+		$this->module_attribute_keys = [];
+		if ( ! is_array( $module ) ) return;
+		$schema = $module['attribute_schema'] ?? [];
+		if ( ! is_array( $schema ) ) return;
+		foreach ( array_keys( $schema ) as $key ) {
+			if ( is_string( $key ) && $key !== '' ) {
+				$this->module_attribute_keys[ $key ] = true;
+			}
+		}
+	}
 
 	/**
 	 * @return array{
@@ -129,10 +167,23 @@ final class LibraryItemParser {
 		while ( $col !== 'AA' ) {
 			$value = $sheet->getCell( $col . '1' )->getValue();
 			if ( $value === null || $value === '' ) break;
-			$out[ $col ] = strtolower( trim( (string) $value ) );
+			$out[ $col ] = $this->canonical_header( strtolower( trim( (string) $value ) ) );
 			$col = $this->next_col( $col );
 		}
 		return $out;
+	}
+
+	/**
+	 * Normalise an Excel header to the canonical key the rest of the
+	 * parser uses. Phase 4.2c — `attr.{key}` is rewritten to `{key}`,
+	 * and a small alias map makes price_group / active behave like
+	 * their longer cousins.
+	 */
+	private function canonical_header( string $raw ): string {
+		if ( str_starts_with( $raw, 'attr.' ) ) {
+			return substr( $raw, 5 );
+		}
+		return self::HEADER_ALIASES[ $raw ] ?? $raw;
 	}
 
 	/**
@@ -175,7 +226,9 @@ final class LibraryItemParser {
 	 */
 	private function extract_attributes( array $raw ): array {
 		$out = [];
-		foreach ( self::ATTRIBUTE_FIELDS as $field ) {
+		// Built-in attribute fields keep their pre-Phase-4.2c
+		// behaviour (filter_tags / compatibility_tags split on commas).
+		foreach ( self::BUILTIN_ATTRIBUTE_FIELDS as $field ) {
 			if ( ! array_key_exists( $field, $raw ) ) continue;
 			$value = $raw[ $field ];
 			if ( $value === null || $value === '' ) continue;
@@ -185,6 +238,23 @@ final class LibraryItemParser {
 			}
 			$out[ $field ] = (string) $value;
 		}
+		// Phase 4.2c — module-declared attributes from the schema. Use
+		// raw scalar value (no CSV split — that's reserved for the
+		// builtin tag fields).
+		foreach ( array_keys( $this->module_attribute_keys ) as $key ) {
+			if ( ! array_key_exists( $key, $raw ) ) continue;
+			$value = $raw[ $key ];
+			if ( $value === null || $value === '' ) continue;
+			if ( is_bool( $value ) ) {
+				$out[ $key ] = $value;
+				continue;
+			}
+			if ( is_int( $value ) || is_float( $value ) ) {
+				$out[ $key ] = $value;
+				continue;
+			}
+			$out[ $key ] = (string) $value;
+		}
 		return $out;
 	}
 
@@ -193,8 +263,12 @@ final class LibraryItemParser {
 	 * @return list<string>
 	 */
 	private function extract_unknown_columns( array $raw ): array {
-		$known = array_merge( self::TOP_LEVEL_FIELDS, self::ATTRIBUTE_FIELDS );
-		$out   = [];
+		$known = array_merge(
+			self::TOP_LEVEL_FIELDS,
+			self::BUILTIN_ATTRIBUTE_FIELDS,
+			array_keys( $this->module_attribute_keys )
+		);
+		$out = [];
 		foreach ( array_keys( $raw ) as $header ) {
 			if ( ! in_array( $header, $known, true ) ) $out[] = (string) $header;
 		}

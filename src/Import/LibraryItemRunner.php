@@ -7,6 +7,7 @@ use ConfigKit\Repository\ImportBatchRepository;
 use ConfigKit\Repository\ImportRowRepository;
 use ConfigKit\Repository\LibraryItemRepository;
 use ConfigKit\Repository\LibraryRepository;
+use ConfigKit\Repository\ModuleRepository;
 
 /**
  * Phase 4 dalis 3 — orchestrates a library-items import batch through
@@ -43,6 +44,7 @@ final class LibraryItemRunner {
 		private LibraryRepository $libraries,
 		private LibraryItemParser $parser,
 		private LibraryItemValidator $validator,
+		private ?ModuleRepository $modules = null,
 	) {}
 
 	/**
@@ -98,6 +100,11 @@ final class LibraryItemRunner {
 		$mode       = (string) ( $summary['mode'] ?? self::MODE_INSERT_UPDATE );
 
 		$this->batches->update( $batch_id, [ 'status' => ImportBatchRepository::STATE_PARSING ] );
+
+		// Phase 4.2c — load the target module so the parser can route
+		// schema-declared attribute columns into the attributes bucket
+		// instead of dumping them into unknown_columns.
+		$this->parser->set_module_context( $this->load_module_for_library( $target_key ) );
 
 		try {
 			$parsed = $this->parser->parse_file( $path );
@@ -269,6 +276,23 @@ final class LibraryItemRunner {
 		}
 		$this->batches->update( $batch_id, [ 'status' => ImportBatchRepository::STATE_CANCELLED ] );
 		return [ 'ok' => true, 'batch' => $this->batches->find_by_id( $batch_id ) ];
+	}
+
+	/**
+	 * Phase 4.2c — best-effort module lookup. Returns null when the
+	 * module repository wasn't injected (e.g. older test wiring) or
+	 * the library has no matching module; the parser then falls back
+	 * to its built-in attribute list.
+	 *
+	 * @return array<string,mixed>|null
+	 */
+	private function load_module_for_library( string $library_key ): ?array {
+		if ( $this->modules === null || $library_key === '' ) return null;
+		$library = $this->libraries->find_by_key( $library_key );
+		if ( $library === null ) return null;
+		$module_key = (string) ( $library['module_key'] ?? '' );
+		if ( $module_key === '' ) return null;
+		return $this->modules->find_by_key( $module_key );
 	}
 
 	/**

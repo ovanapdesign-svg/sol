@@ -332,7 +332,8 @@ final class Plugin {
 			$item_repo,
 			$library_repo,
 			new LibraryItemParser(),
-			new LibraryItemValidator( $library_repo, $module_repo, $item_repo, new WooSkuResolverImpl() )
+			new LibraryItemValidator( $library_repo, $module_repo, $item_repo, new WooSkuResolverImpl() ),
+			$module_repo
 		);
 		$quick_import = new QuickImportService(
 			new LookupTableService( $lookup_repo, $cell_repo ),

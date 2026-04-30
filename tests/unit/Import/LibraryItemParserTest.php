@@ -104,6 +104,63 @@ final class LibraryItemParserTest extends TestCase {
 		$this->assertNotEmpty( $result['notes'] );
 	}
 
+	public function test_attr_dot_alias_routes_into_attributes(): void {
+		// Phase 4.2c — `attr.fabric_code` is rewritten to `fabric_code`
+		// during header parsing so `attr.fabric_code` and bare
+		// `fabric_code` both land in normalized.attributes.
+		$book  = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+		$sheet = $book->getActiveSheet();
+		$sheet->fromArray( [
+			[ 'library_key', 'item_key', 'label', 'attr.fabric_code' ],
+			[ 'lib', 'k', 'L', 'U171' ],
+		] );
+		$parser = new LibraryItemParser();
+		$parser->set_module_context( [ 'attribute_schema' => [
+			'fabric_code' => [ 'label' => 'Fabric code', 'type' => 'text' ],
+		] ] );
+		$result = $parser->parse_spreadsheet( $book );
+		$norm = $result['rows'][0]['normalized'];
+		$this->assertSame( 'U171', $norm['attributes']['fabric_code'] );
+		$this->assertNotContains( 'attr.fabric_code', $norm['unknown_columns'] );
+	}
+
+	public function test_module_schema_attribute_routes_into_attributes_bucket(): void {
+		// Without module context, an unknown header lands in
+		// unknown_columns. With module context, it routes into the
+		// attributes map.
+		$book  = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+		$sheet = $book->getActiveSheet();
+		$sheet->fromArray( [
+			[ 'library_key', 'item_key', 'label', 'fabric_code', 'gsm' ],
+			[ 'lib', 'k', 'L', 'U171', 250 ],
+		] );
+
+		$parser = new LibraryItemParser();
+		$without = $parser->parse_spreadsheet( $book );
+		$this->assertContains( 'fabric_code', $without['rows'][0]['normalized']['unknown_columns'] );
+
+		$parser->set_module_context( [ 'attribute_schema' => [
+			'fabric_code' => [ 'label' => 'Fabric code', 'type' => 'text' ],
+			'gsm'         => [ 'label' => 'GSM',         'type' => 'number' ],
+		] ] );
+		$with = $parser->parse_spreadsheet( $book );
+		$this->assertSame( 'U171', $with['rows'][0]['normalized']['attributes']['fabric_code'] );
+		$this->assertSame( 250,    $with['rows'][0]['normalized']['attributes']['gsm'] );
+		$this->assertNotContains( 'fabric_code', $with['rows'][0]['normalized']['unknown_columns'] );
+	}
+
+	public function test_price_group_alias_is_canonicalised(): void {
+		$book  = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+		$sheet = $book->getActiveSheet();
+		$sheet->fromArray( [
+			[ 'library_key', 'item_key', 'label', 'price_group' ],
+			[ 'lib', 'k', 'L', 'I' ],
+		] );
+		$parser = new LibraryItemParser();
+		$result = $parser->parse_spreadsheet( $book );
+		$this->assertSame( 'I', $result['rows'][0]['normalized']['price_group_key'] );
+	}
+
 	public function test_parser_records_columns_seen(): void {
 		$book  = new Spreadsheet();
 		$sheet = $book->getActiveSheet();
