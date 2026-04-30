@@ -555,38 +555,46 @@
 			textField( 'Name', 'name', rec.name, ( v ) => {
 				rec.name = v;
 				state.dirty = true;
-				// Phase 4 dalis 4 BUG 2 — DOM-patch the technical key
-				// instead of re-rendering, so the cursor stays put.
 				if ( isNew && ! state.userEditedLookupKey ) {
-					rec.lookup_table_key = slugify( v );
+					rec.lookup_table_key = ( window.ConfigKit && window.ConfigKit.slugify )
+						? window.ConfigKit.slugify( v, { fallbackPrefix: 'table' } )
+						: slugify( v );
 					const techInput = document.getElementById( 'cf_lookup_table_key' );
 					if ( techInput && techInput.value !== rec.lookup_table_key ) {
 						techInput.value = rec.lookup_table_key;
 					}
 				}
 			} ),
-			textField( 'Technical key', 'lookup_table_key', rec.lookup_table_key, ( v ) => {
-				rec.lookup_table_key = v;
-				state.dirty = true;
-				state.userEditedLookupKey = true;
-			}, {
-				mono: true,
-				help: isNew
-					? 'Used internally to reference this table from products and rules. Lowercase, snake_case, max 64 chars. Locked after save.'
-					: 'Technical key is immutable after a table is saved.',
-				warnings: ( isNew && window.ConfigKit && window.ConfigKit.softKeyWarnings )
-					? window.ConfigKit.softKeyWarnings( rec.lookup_table_key, {
-						hint: 'try {product}_{dimensions}_v{n}, e.g. markise_2d_v1',
-						duplicates: ( state.list.items || [] ).map( ( t ) => t.lookup_table_key ),
-					} )
-					: [],
-			} ),
-			isNew ? null : el( 'p', { class: 'description' }, 'lookup_table_key cannot be changed.' ),
 			textField( 'Family (optional)', 'family_key', rec.family_key || '', ( v ) => {
 				rec.family_key = v;
 				state.dirty = true;
 			} ),
 		] ) );
+
+		// Phase 4 dalis 4 BUG 3 — Technical key collapsed for new tables.
+		wrap.appendChild( fieldset(
+			isNew ? 'Technical key (auto-generated)' : 'Technical key',
+			[
+				textField( 'Technical key', 'lookup_table_key', rec.lookup_table_key, ( v ) => {
+					rec.lookup_table_key = v;
+					state.dirty = true;
+					state.userEditedLookupKey = true;
+				}, {
+					mono: true,
+					help: isNew
+						? 'Auto-filled from Name. Edit only if you need a specific key — locked once the table is saved.'
+						: 'Technical key is immutable after a table is saved.',
+					warnings: ( isNew && window.ConfigKit && window.ConfigKit.softKeyWarnings )
+						? window.ConfigKit.softKeyWarnings( rec.lookup_table_key, {
+							hint: 'try {product}_{dimensions}_v{n}, e.g. markise_2d_v1',
+							duplicates: ( state.list.items || [] ).map( ( t ) => t.lookup_table_key ),
+						} )
+						: [],
+				} ),
+				isNew ? null : el( 'p', { class: 'description' }, 'lookup_table_key cannot be changed.' ),
+			],
+			{ collapsible: true, collapsed: isNew }
+		) );
 
 		wrap.appendChild( fieldset( 'Matching', [
 			selectFieldRow( 'Unit', 'unit', UNITS, rec.unit, ( v ) => {

@@ -1010,31 +1010,15 @@
 			textField( 'Name', 'name', rec.name, ( v ) => {
 				rec.name = v;
 				state.dirty = true;
-				// Phase 4 dalis 4 BUG 2 — DOM patch keeps cursor in field.
 				if ( isNew && ! state.userEditedTemplateKey ) {
-					rec.template_key = slugify( v );
+					rec.template_key = ( window.ConfigKit && window.ConfigKit.slugify )
+						? window.ConfigKit.slugify( v, { fallbackPrefix: 'template' } )
+						: slugify( v );
 					const techInput = document.getElementById( 'cf_template_key' );
 					if ( techInput && techInput.value !== rec.template_key ) {
 						techInput.value = rec.template_key;
 					}
 				}
-			} ),
-			textField( 'Technical key', 'template_key', rec.template_key, ( v ) => {
-				rec.template_key = v;
-				state.dirty = true;
-				state.userEditedTemplateKey = true;
-			}, {
-				mono: true,
-				disabled: ! isNew,
-				help: isNew
-					? 'Used internally by rules and bindings. Lowercase, snake_case, 3–64 chars. Locked after save.'
-					: 'Technical key is immutable after a template is saved.',
-				warnings: ( isNew && window.ConfigKit && window.ConfigKit.softKeyWarnings )
-					? window.ConfigKit.softKeyWarnings( rec.template_key, {
-						hint: 'try {product}_{variant}, e.g. markise_motorisert',
-						duplicates: ( state.list.items || [] ).map( ( t ) => t.template_key ),
-					} )
-					: [],
 			} ),
 			textField( 'family_key (optional)', 'family_key', rec.family_key || '', ( v ) => {
 				rec.family_key = v;
@@ -1045,6 +1029,31 @@
 				state.dirty = true;
 			} ),
 		] ) );
+
+		// Phase 4 dalis 4 BUG 3 — Technical key collapsed.
+		wrap.appendChild( fieldset(
+			isNew ? 'Technical key (auto-generated)' : 'Technical key',
+			[
+				textField( 'Technical key', 'template_key', rec.template_key, ( v ) => {
+					rec.template_key = v;
+					state.dirty = true;
+					state.userEditedTemplateKey = true;
+				}, {
+					mono: true,
+					disabled: ! isNew,
+					help: isNew
+						? 'Auto-filled from Name. Edit only if you need a specific key — locked after save.'
+						: 'Technical key is immutable after a template is saved.',
+					warnings: ( isNew && window.ConfigKit && window.ConfigKit.softKeyWarnings )
+						? window.ConfigKit.softKeyWarnings( rec.template_key, {
+							hint: 'try {product}_{variant}, e.g. markise_motorisert',
+							duplicates: ( state.list.items || [] ).map( ( t ) => t.template_key ),
+						} )
+						: [],
+				} ),
+			],
+			{ collapsible: true, collapsed: isNew }
+		) );
 
 		wrap.appendChild( fieldset( 'Status', [
 			selectFieldRow( 'Status', 'status', STATUS_OPTIONS, rec.status, ( v ) => {
@@ -1632,7 +1641,9 @@
 			modal.appendChild( textField( 'Field name', 'wiz_label', w.label, ( v ) => {
 				w.label = v;
 				if ( ! w.userEditedFieldKey ) {
-					w.fieldKey = slugify( v );
+					w.fieldKey = ( window.ConfigKit && window.ConfigKit.slugify )
+						? window.ConfigKit.slugify( v, { fallbackPrefix: 'field' } )
+						: slugify( v );
 					const techInput = document.getElementById( 'cf_wiz_field_key' );
 					if ( techInput && techInput.value !== w.fieldKey ) {
 						techInput.value = w.fieldKey;
@@ -1704,29 +1715,38 @@
 				rec.label = v;
 				state.dirty = true;
 				if ( isNew && ! state.userEditedStepKey ) {
-					rec.step_key = slugify( v );
+					rec.step_key = ( window.ConfigKit && window.ConfigKit.slugify )
+						? window.ConfigKit.slugify( v, { fallbackPrefix: 'step' } )
+						: slugify( v );
 					const techInput = document.getElementById( 'cf_step_key' );
 					if ( techInput && techInput.value !== rec.step_key ) {
 						techInput.value = rec.step_key;
 					}
 				}
 			} ),
-			textField( 'step_key', 'step_key', rec.step_key, ( v ) => {
-				rec.step_key = v;
-				state.dirty = true;
-				state.userEditedStepKey = true;
-			}, {
-				mono: true,
-				disabled: ! isNew,
-				help: isNew
-					? 'Lowercase, snake_case, 3–64 chars. Locked after save. Unique within this template.'
-					: 'step_key is immutable after a step is saved.',
-			} ),
 			textareaField( 'Description', 'description', rec.description || '', ( v ) => {
 				rec.description = v;
 				state.dirty = true;
 			} ),
 		] ) );
+
+		wrap.appendChild( fieldset(
+			isNew ? 'Technical key (auto-generated)' : 'Technical key',
+			[
+				textField( 'step_key', 'step_key', rec.step_key, ( v ) => {
+					rec.step_key = v;
+					state.dirty = true;
+					state.userEditedStepKey = true;
+				}, {
+					mono: true,
+					disabled: ! isNew,
+					help: isNew
+						? 'Auto-filled from Step name. Edit only if you need a specific key — locked after save. Unique within this template.'
+						: 'step_key is immutable after a step is saved.',
+				} ),
+			],
+			{ collapsible: true, collapsed: isNew }
+		) );
 
 		wrap.appendChild( fieldset( 'Behavior', [
 			checkboxField( 'Required', 'is_required', !! rec.is_required, ( v ) => {
@@ -2368,7 +2388,9 @@
 				textField( 'Rule name', 'rule_name', f.name, ( v ) => {
 					f.name = v;
 					if ( f.id === 0 && ! f.userEditedRuleKey ) {
-						f.rule_key = slugify( v );
+						f.rule_key = ( window.ConfigKit && window.ConfigKit.slugify )
+							? window.ConfigKit.slugify( v, { fallbackPrefix: 'rule' } )
+							: slugify( v );
 						const techInput = document.getElementById( 'cf_rule_key' );
 						if ( techInput && techInput.value !== f.rule_key ) {
 							techInput.value = f.rule_key;

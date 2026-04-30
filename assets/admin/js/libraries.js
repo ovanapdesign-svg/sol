@@ -702,40 +702,51 @@
 
 		const selectedModule = state.modules.find( ( m ) => m.module_key === rec.module_key );
 
-		// Basics
+		// Basics — Phase 4 dalis 4 BUG 3: technical key into its own
+		// collapsible block so creators don't see a snake_case field
+		// before they've typed a Name.
 		wrap.appendChild( fieldset( 'Basics', [
 			textField( 'Name', 'name', rec.name, ( v ) => {
 				rec.name = v;
 				state.dirty = true;
-				// Phase 4 dalis 4 BUG 2 — patch the technical_key
-				// input directly instead of re-rendering.
 				if ( isNew && ! state.userEditedLibraryKey ) {
-					rec.library_key = slugify( v );
+					rec.library_key = ( window.ConfigKit && window.ConfigKit.slugify )
+						? window.ConfigKit.slugify( v, { fallbackPrefix: 'library' } )
+						: slugify( v );
 					const techInput = document.getElementById( 'cf_library_key' );
 					if ( techInput && techInput.value !== rec.library_key ) {
 						techInput.value = rec.library_key;
 					}
 				}
 			} ),
-			textField( 'Technical key', 'library_key', rec.library_key, ( v ) => {
-				rec.library_key = v;
-				state.dirty = true;
-				state.userEditedLibraryKey = true;
-			}, {
-				mono: true,
-				help: 'Used internally to reference this library from items and rules. Lowercase, snake_case.',
-				warnings: ( isNew && window.ConfigKit && window.ConfigKit.softKeyWarnings )
-					? window.ConfigKit.softKeyWarnings( rec.library_key, {
-						hint: 'try {module}_{brand}, e.g. textiles_dickson',
-						duplicates: ( state.list.items || [] ).map( ( l ) => l.library_key ),
-					} )
-					: [],
-			} ),
 			textareaField( 'Description', 'description', rec.description || '', ( v ) => {
 				rec.description = v;
 				state.dirty = true;
 			} ),
 		] ) );
+
+		wrap.appendChild( fieldset(
+			isNew ? 'Technical key (auto-generated)' : 'Technical key',
+			[
+				textField( 'Technical key', 'library_key', rec.library_key, ( v ) => {
+					rec.library_key = v;
+					state.dirty = true;
+					state.userEditedLibraryKey = true;
+				}, {
+					mono: true,
+					help: isNew
+						? 'Auto-filled from Name. Edit only if you need a specific key — locked once the library is saved.'
+						: 'Used internally to reference this library from items and rules. Lowercase, snake_case.',
+					warnings: ( isNew && window.ConfigKit && window.ConfigKit.softKeyWarnings )
+						? window.ConfigKit.softKeyWarnings( rec.library_key, {
+							hint: 'try {module}_{brand}, e.g. textiles_dickson',
+							duplicates: ( state.list.items || [] ).map( ( l ) => l.library_key ),
+						} )
+						: [],
+				} ),
+			],
+			{ collapsible: true, collapsed: isNew }
+		) );
 
 		// Capability-conditional fields
 		const cond = [];
@@ -997,25 +1008,21 @@
 			),
 		] ) );
 
-		// Basics
+		// Basics — Phase 4 dalis 4 BUG 3: item_key collapsed.
 		wrap.appendChild( fieldset( 'Basics', [
 			textField( 'Label', 'label', rec.label, ( v ) => {
 				rec.label = v;
 				state.dirty = true;
-				// Phase 4 dalis 4 BUG 2 — patch item_key in place.
 				if ( isNew && ! state.userEditedItemKey ) {
-					rec.item_key = slugify( v );
+					rec.item_key = ( window.ConfigKit && window.ConfigKit.slugify )
+						? window.ConfigKit.slugify( v, { fallbackPrefix: 'item' } )
+						: slugify( v );
 					const techInput = document.getElementById( 'cf_item_key' );
 					if ( techInput && techInput.value !== rec.item_key ) {
 						techInput.value = rec.item_key;
 					}
 				}
 			} ),
-			textField( 'Technical key', 'item_key', rec.item_key, ( v ) => {
-				rec.item_key = v;
-				state.dirty = true;
-				state.userEditedItemKey = true;
-			}, { mono: true } ),
 			textField( 'Short label', 'short_label', rec.short_label || '', ( v ) => {
 				rec.short_label = v;
 				state.dirty = true;
@@ -1025,6 +1032,23 @@
 				state.dirty = true;
 			} ),
 		] ) );
+
+		wrap.appendChild( fieldset(
+			isNew ? 'Technical key (auto-generated)' : 'Technical key',
+			[
+				textField( 'Technical key', 'item_key', rec.item_key, ( v ) => {
+					rec.item_key = v;
+					state.dirty = true;
+					state.userEditedItemKey = true;
+				}, {
+					mono: true,
+					help: isNew
+						? 'Auto-filled from Label. Edit only if you need a specific key — locked once the item is saved.'
+						: 'Locked after save.',
+				} ),
+			],
+			{ collapsible: true, collapsed: isNew }
+		) );
 
 		// Phase 4.2b.2 — Pricing source picker. The five-value enum
 		// becomes a filtered radio group: simple items see configkit /

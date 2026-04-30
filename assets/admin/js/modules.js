@@ -588,42 +588,51 @@
 			wrap.appendChild( renderPresetButtons() );
 		}
 
-		// Basics
+		// Basics — Phase 4 dalis 4 BUG 3: Technical key moved to a
+		// collapsed "Advanced" fieldset so the owner doesn't have to
+		// know what `module_key` is to create a module.
 		wrap.appendChild( fieldset( 'Basics', [
 			textField( 'Name', 'name', rec.name, ( v ) => {
 				rec.name = v;
 				state.dirty = true;
-				// Phase 4 dalis 4 BUG 2 — DO NOT call render() here.
-				// Re-rendering the form on every keystroke wipes the
-				// input DOM and ejects the cursor mid-word. Patch the
-				// technical_key field directly instead.
 				if ( ! rec.id && ! state.userEditedKey ) {
-					rec.module_key = slugify( v );
+					rec.module_key = ( window.ConfigKit && window.ConfigKit.slugify )
+						? window.ConfigKit.slugify( v, { fallbackPrefix: 'module' } )
+						: slugify( v );
 					const techInput = document.getElementById( 'cf_module_key' );
 					if ( techInput && techInput.value !== rec.module_key ) {
 						techInput.value = rec.module_key;
 					}
 				}
 			} ),
-			textField( 'Technical key', 'module_key', rec.module_key, ( v ) => {
-				rec.module_key = v;
-				state.dirty = true;
-				state.userEditedKey = true; // owner took manual control
-			}, {
-				mono: true,
-				help: 'Used internally to reference this module from libraries and rules. Lowercase, snake_case, max 64 chars.',
-				warnings: window.ConfigKit && window.ConfigKit.softKeyWarnings
-					? window.ConfigKit.softKeyWarnings( rec.module_key, {
-						hint: 'try {brand}_{kind} format, e.g. textiles_dickson',
-						duplicates: ( state.list.items || [] ).map( ( m ) => m.module_key ),
-					} )
-					: [],
-			} ),
 			textareaField( 'Description', 'description', rec.description || '', ( v ) => {
 				rec.description = v;
 				state.dirty = true;
 			} ),
 		] ) );
+
+		wrap.appendChild( fieldset(
+			isNew ? 'Technical key (auto-generated)' : 'Technical key',
+			[
+				textField( 'Technical key', 'module_key', rec.module_key, ( v ) => {
+					rec.module_key = v;
+					state.dirty = true;
+					state.userEditedKey = true;
+				}, {
+					mono: true,
+					help: isNew
+						? 'Auto-filled from Name. Edit only if you need a specific key — locked once the module is saved.'
+						: 'Used internally to reference this module from libraries and rules. Lowercase, snake_case, max 64 chars.',
+					warnings: window.ConfigKit && window.ConfigKit.softKeyWarnings
+						? window.ConfigKit.softKeyWarnings( rec.module_key, {
+							hint: 'try {brand}_{kind} format, e.g. textiles_dickson',
+							duplicates: ( state.list.items || [] ).map( ( m ) => m.module_key ),
+						} )
+						: [],
+				} ),
+			],
+			{ collapsible: true, collapsed: isNew }
+		) );
 
 		// Capabilities
 		const capChecks = CAPABILITY_FLAGS.map( ( [ key, label, help, icon ] ) =>

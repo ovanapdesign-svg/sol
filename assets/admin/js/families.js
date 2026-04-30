@@ -343,37 +343,46 @@
 			textField( 'Name', 'name', rec.name, ( v ) => {
 				rec.name = v;
 				state.dirty = true;
-				// Phase 4 dalis 4 BUG 2 — DOM patch instead of render.
 				if ( isNew && ! state.userEditedFamilyKey ) {
-					rec.family_key = slugify( v );
+					rec.family_key = ( window.ConfigKit && window.ConfigKit.slugify )
+						? window.ConfigKit.slugify( v, { fallbackPrefix: 'family' } )
+						: slugify( v );
 					const techInput = document.getElementById( 'cf_family_key' );
 					if ( techInput && techInput.value !== rec.family_key ) {
 						techInput.value = rec.family_key;
 					}
 				}
 			} ),
-			textField( 'Technical key', 'family_key', rec.family_key, ( v ) => {
-				rec.family_key = v;
-				state.dirty = true;
-				state.userEditedFamilyKey = true;
-			}, {
-				mono: true,
-				disabled: ! isNew,
-				help: isNew
-					? 'Used internally to reference this family from templates and products. Lowercase, snake_case, 3–64 chars. Locked after save.'
-					: 'Technical key is immutable after a family is saved.',
-				warnings: ( isNew && window.ConfigKit && window.ConfigKit.softKeyWarnings )
-					? window.ConfigKit.softKeyWarnings( rec.family_key, {
-						hint: 'try a noun specific to the product family, e.g. markiser_motor',
-						duplicates: ( state.list.items || [] ).map( ( f ) => f.family_key ),
-					} )
-					: [],
-			} ),
 			textareaField( 'Description', 'description', rec.description || '', ( v ) => {
 				rec.description = v;
 				state.dirty = true;
 			} ),
 		] ) );
+
+		// Phase 4 dalis 4 BUG 3 — Technical key collapsed.
+		wrap.appendChild( fieldset(
+			isNew ? 'Technical key (auto-generated)' : 'Technical key',
+			[
+				textField( 'Technical key', 'family_key', rec.family_key, ( v ) => {
+					rec.family_key = v;
+					state.dirty = true;
+					state.userEditedFamilyKey = true;
+				}, {
+					mono: true,
+					disabled: ! isNew,
+					help: isNew
+						? 'Auto-filled from Name. Edit only if you need a specific key — locked after save.'
+						: 'Technical key is immutable after a family is saved.',
+					warnings: ( isNew && window.ConfigKit && window.ConfigKit.softKeyWarnings )
+						? window.ConfigKit.softKeyWarnings( rec.family_key, {
+							hint: 'try a noun specific to the product family, e.g. markiser_motor',
+							duplicates: ( state.list.items || [] ).map( ( f ) => f.family_key ),
+						} )
+						: [],
+				} ),
+			],
+			{ collapsible: true, collapsed: isNew }
+		) );
 
 		wrap.appendChild( fieldset( 'Status', [
 			checkboxField( 'Active', 'is_active', !! rec.is_active, ( v ) => {

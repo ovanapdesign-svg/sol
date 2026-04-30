@@ -399,6 +399,63 @@
 		initIntroBoxes();
 	}
 
+	/**
+	 * Phase 4 dalis 4 BUG 3 — owner-friendly slugify. Used by every
+	 * entity form to auto-generate the Technical key from the human
+	 * Name. Transliterates Lithuanian / Norwegian / Polish / German
+	 * special characters to ASCII so owners typing in their native
+	 * language don't get rejected for using non-ASCII characters.
+	 *
+	 *   ConfigKit.slugify( 'Motioras vienas' )   // → 'motioras_vienas'
+	 *   ConfigKit.slugify( 'Markisė į stogą' )   // → 'markise_i_stoga'
+	 *   ConfigKit.slugify( 'M', { fallbackPrefix: 'module' } ) // → 'module_m'
+	 *
+	 * Options:
+	 *   maxLength       — defaults to 64
+	 *   fallbackPrefix  — when slug < 3 chars, "<prefix>_<slug>"
+	 *                     so the owner doesn't have to think about
+	 *                     the 3-char minimum.
+	 */
+	const TRANSLITERATE = {
+		// Lithuanian
+		'ą': 'a', 'č': 'c', 'ę': 'e', 'ė': 'e', 'į': 'i',
+		'š': 's', 'ų': 'u', 'ū': 'u', 'ž': 'z',
+		// Norwegian / Danish / Swedish
+		'ø': 'o', 'å': 'a', 'æ': 'ae', 'ö': 'o', 'ä': 'a', 'ü': 'u',
+		// Polish
+		'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z',
+		// German
+		'ß': 'ss',
+		// Common Latin diacritics
+		'á': 'a', 'à': 'a', 'â': 'a', 'ã': 'a',
+		'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
+		'í': 'i', 'ì': 'i', 'î': 'i', 'ï': 'i',
+		'ñ': 'n', 'ò': 'o', 'ô': 'o', 'õ': 'o',
+		'ú': 'u', 'ù': 'u', 'û': 'u', 'ý': 'y', 'ÿ': 'y',
+		'ç': 'c',
+	};
+
+	function slugify( raw, opts ) {
+		opts = opts || {};
+		const maxLength = opts.maxLength || 64;
+		if ( ! raw ) return '';
+		let s = String( raw ).toLowerCase();
+		// Transliterate non-ASCII letters first.
+		s = s.replace( /[^a-z0-9_ \-]/g, ( ch ) => TRANSLITERATE[ ch ] || '' );
+		// Spaces / dashes / repeated punctuation collapse to single _.
+		s = s.replace( /[^a-z0-9]+/g, '_' );
+		// Strip edge underscores.
+		s = s.replace( /^_+|_+$/g, '' );
+		// Don't start with a digit (key validators want letter-leading).
+		s = s.replace( /^[0-9]+/, ( m ) => '_' + m ).replace( /^_+/, '' );
+		// If still empty or below 3 chars, optionally prepend a noun.
+		if ( s.length < 3 && opts.fallbackPrefix ) {
+			s = opts.fallbackPrefix + ( s !== '' ? '_' + s : '' );
+		}
+		if ( s.length > maxLength ) s = s.slice( 0, maxLength ).replace( /_+$/, '' );
+		return s;
+	}
+
 	window.ConfigKit = window.ConfigKit || {};
 	window.ConfigKit.request = request;
 	window.ConfigKit.describeError = describeError;
@@ -408,4 +465,5 @@
 	window.ConfigKit.softKeyWarnings = softKeyWarnings;
 	window.ConfigKit.renderSoftWarnings = renderSoftWarnings;
 	window.ConfigKit.subBreadcrumb = subBreadcrumb;
+	window.ConfigKit.slugify = slugify;
 } )();
