@@ -826,25 +826,33 @@
 	}
 
 	function checkboxField( label, name, checked, onChange, help, icon ) {
+		// The whole row gets a .configkit-capability-row container so
+		// CSS can style icon + label uniformly via .is-checked instead
+		// of relying on :has() (still not reliable across all browsers).
 		const checkbox = el( 'input', {
 			type: 'checkbox',
 			checked: !! checked,
 			onChange: ( ev ) => onChange( ev.target.checked ),
 		} );
-		const wrap = el( 'label', { class: 'configkit-checkbox' + ( icon ? ' configkit-checkbox--with-icon' : '' ) } );
-		wrap.appendChild( checkbox );
-		wrap.appendChild( document.createTextNode( ' ' ) );
+		const labelEl = el( 'label', { class: 'configkit-checkbox' + ( icon ? ' configkit-checkbox--with-icon' : '' ) } );
+		labelEl.appendChild( checkbox );
+		labelEl.appendChild( document.createTextNode( ' ' ) );
 		if ( icon ) {
-			const iconClass = 'dashicons dashicons-' + icon
-				+ ' configkit-cap-icon'
-				+ ( checked ? ' configkit-cap-icon--checked' : '' );
-			wrap.appendChild( el( 'span', { class: iconClass, 'aria-hidden': 'true' } ) );
+			labelEl.appendChild( el( 'span', {
+				class: 'dashicons dashicons-' + icon + ' configkit-cap-icon',
+				'aria-hidden': 'true',
+			} ) );
 		}
-		wrap.appendChild( document.createTextNode( label ) );
+		labelEl.appendChild( document.createTextNode( label ) );
 		if ( help && window.ConfigKit && window.ConfigKit.help ) {
-			wrap.appendChild( window.ConfigKit.help( help ) );
+			labelEl.appendChild( window.ConfigKit.help( help ) );
 		}
-		return wrap;
+		const row = el(
+			'div',
+			{ class: 'configkit-capability-row' + ( checked ? ' is-checked' : '' ) },
+			labelEl
+		);
+		return row;
 	}
 
 	function numberField( label, name, value, onChange ) {
