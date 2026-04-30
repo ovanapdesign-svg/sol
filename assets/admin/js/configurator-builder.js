@@ -490,6 +490,7 @@
 
 	function renderChoicesTab( section ) {
 		if ( section.type === 'size_pricing' ) return renderRangeEditor( section );
+		if ( section.type === 'motor' )        return renderMotorEditor( section );
 		return renderOptionEditor( section );
 	}
 
@@ -526,6 +527,25 @@
 			price_group:    o.price_group_key || '',
 			price:          ( o.price === null || o.price === undefined ) ? '' : String( o.price ),
 			active:         o.is_active !== false,
+			// Motor-specific. Survive a round-trip through the
+			// option editor so a non-motor section's save doesn't
+			// drop these fields silently.
+			item_type:          o.item_type || 'simple_option',
+			price_source:       o.price_source || 'configkit',
+			woo_product_id:     o.woo_product_id || 0,
+			woo_product_sku:    o.woo_product_sku || '',
+			bundle_components:  Array.isArray( o.bundle_components ) ? o.bundle_components.map( componentRecordToDraft ) : [],
+			bundle_fixed_price: ( o.bundle_fixed_price === null || o.bundle_fixed_price === undefined ) ? '' : String( o.bundle_fixed_price ),
+		};
+	}
+
+	function componentRecordToDraft( c ) {
+		return {
+			component_key:   c.component_key || '',
+			woo_product_id:  c.woo_product_id || 0,
+			woo_product_sku: c.woo_product_sku || '',
+			qty:             c.qty || 1,
+			price_source:    c.price_source || 'woo',
 		};
 	}
 
@@ -534,7 +554,17 @@
 			label: '', sku: '', image_url: '',
 			brand: '', collection: '', color_family: '',
 			price_group: '', price: '', active: true,
+			item_type: 'simple_option',
+			price_source: 'configkit',
+			woo_product_id: 0,
+			woo_product_sku: '',
+			bundle_components: [],
+			bundle_fixed_price: '',
 		};
+	}
+
+	function blankComponent() {
+		return { component_key: '', woo_product_id: 0, woo_product_sku: '', qty: 1, price_source: 'woo' };
 	}
 
 	function renderOptionEditor( section ) {
@@ -866,6 +896,364 @@
 			unmatched_skus: unmatchedSkus,
 		};
 		render();
+	}
+
+	// =========================================================
+	// Motor editor — single + bundle variants. Reuses the
+	// option-list/save plumbing; per-card UI swaps in motor
+	// fields (woo product, price source, bundle components).
+	// =========================================================
+
+	function renderMotorEditor( section ) {
+		const wrap = el( 'div', { class: 'configkit-cb__option-editor' } );
+		const options = ( state.modal && Array.isArray( state.modal.options ) ) ? state.modal.options : null;
+		if ( options === null ) {
+			wrap.appendChild( el( 'p', { class: 'description' }, 'Loading motors…' ) );
+			return wrap;
+		}
+
+		const list = el( 'div', { class: 'configkit-cb__option-list' } );
+		options.forEach( ( opt, i ) => list.appendChild( renderMotorCard( section, opt, i ) ) );
+		wrap.appendChild( list );
+
+		wrap.appendChild( el( 'div', { class: 'configkit-cb__option-actions' },
+			el( 'button', {
+				type: 'button',
+				class: 'button',
+				onClick: () => {
+					readMotorDraftsFromDOM();
+					state.modal.options.push( blankOption() );
+					render();
+				},
+			}, '+ Add motor' ),
+			el( 'button', {
+				type: 'button',
+				class: 'button',
+				onClick: () => {
+					readMotorDraftsFromDOM();
+					const draft = blankOption();
+					draft.item_type    = 'bundle';
+					draft.price_source = 'bundle_sum';
+					draft.bundle_components.push( blankComponent() );
+					state.modal.options.push( draft );
+					render();
+				},
+			}, '+ Add motor package' ),
+			el( 'button', {
+				type: 'button',
+				class: 'button',
+				onClick: () => openBulkPaste( section.id ),
+			}, '📋 Bulk paste motors' ),
+			el( 'button', {
+				type: 'button',
+				class: 'button button-primary',
+				disabled: state.busy,
+				onClick: saveMotorOptions,
+			}, state.busy ? 'Saving…' : 'Save motors' )
+		) );
+		return wrap;
+	}
+
+	function renderMotorCard( section, opt, index ) {
+		const isBundle = opt.item_type === 'bundle';
+		const card = el( 'div', {
+			class: 'configkit-cb__option-card configkit-cb__motor-card' + ( isBundle ? ' is-bundle' : '' ),
+			'data-option-index': String( index ),
+		} );
+
+		// Type toggle.
+		const typeRow = el( 'div', { class: 'configkit-cb__motor-type' } );
+		typeRow.appendChild( el( 'label', null,
+			el( 'input', {
+				type: 'radio',
+				name: 'motor-type-' + index,
+				value: 'simple_option',
+				'data-field': 'item_type_simple',
+				checked: ! isBundle,
+				onChange: () => {
+					readMotorDraftsFromDOM();
+					state.modal.options[ index ].item_type    = 'simple_option';
+					state.modal.options[ index ].price_source = 'configkit';
+					render();
+				},
+			} ),
+			document.createTextNode( ' Single motor' )
+		) );
+		typeRow.appendChild( el( 'label', null,
+			el( 'input', {
+				type: 'radio',
+				name: 'motor-type-' + index,
+				value: 'bundle',
+				'data-field': 'item_type_bundle',
+				checked: isBundle,
+				onChange: () => {
+					readMotorDraftsFromDOM();
+					state.modal.options[ index ].item_type    = 'bundle';
+					state.modal.options[ index ].price_source = 'bundle_sum';
+					if ( state.modal.options[ index ].bundle_components.length === 0 ) {
+						state.modal.options[ index ].bundle_components.push( blankComponent() );
+					}
+					render();
+				},
+			} ),
+			document.createTextNode( ' Motor package (bundle)' )
+		) );
+		card.appendChild( typeRow );
+
+		// Common header — name + sku + active.
+		const header = el( 'div', { class: 'configkit-cb__option-grid' } );
+		header.appendChild( labelled( 'Name',          textInput( opt.label, 'label' ) ) );
+		header.appendChild( labelled( 'SKU',           textInput( opt.sku, 'sku' ) ) );
+		card.appendChild( header );
+
+		if ( isBundle ) {
+			card.appendChild( renderBundleSection( opt, index ) );
+		} else {
+			card.appendChild( renderSingleMotorSection( opt ) );
+		}
+
+		// Hidden fields preserved across saves.
+		card.appendChild( el( 'input', { type: 'hidden', 'data-field': 'image_url',  value: opt.image_url || '' } ) );
+		card.appendChild( el( 'input', { type: 'hidden', 'data-field': 'brand',      value: opt.brand || '' } ) );
+		card.appendChild( el( 'input', { type: 'hidden', 'data-field': 'collection', value: opt.collection || '' } ) );
+
+		// Footer.
+		const footer = el( 'div', { class: 'configkit-cb__option-footer' } );
+		const activeBox = el( 'input', {
+			type: 'checkbox',
+			'data-field': 'active',
+			checked: opt.active !== false,
+		} );
+		footer.appendChild( el( 'label', { class: 'configkit-cb__option-active' },
+			activeBox, document.createTextNode( ' Active' )
+		) );
+		footer.appendChild( el( 'button', {
+			type: 'button',
+			class: 'button-link configkit-cb__option-delete',
+			onClick: () => {
+				readMotorDraftsFromDOM();
+				state.modal.options.splice( index, 1 );
+				if ( state.modal.options.length === 0 ) state.modal.options.push( blankOption() );
+				render();
+			},
+		}, '✕ Delete' ) );
+		card.appendChild( footer );
+
+		return card;
+	}
+
+	function renderSingleMotorSection( opt ) {
+		const wrap = el( 'div', { class: 'configkit-cb__option-grid' } );
+		wrap.appendChild( labelled( 'Woo product SKU', textInput( opt.woo_product_sku, 'woo_product_sku' ) ) );
+		wrap.appendChild( labelled( 'Custom price (kr)', numberInput( opt.price, 'price' ) ) );
+
+		const sourceSelect = el( 'select', { 'data-field': 'price_source', class: 'configkit-cb__option-input' } );
+		[ 'configkit', 'woo' ].forEach( ( v ) => {
+			sourceSelect.appendChild( el( 'option', {
+				value: v,
+				selected: ( opt.price_source === v ),
+			}, v === 'woo' ? 'From Woo product' : 'Custom (above)' ) );
+		} );
+		wrap.appendChild( labelled( 'Price source', sourceSelect ) );
+
+		// Hidden numeric id passes through (resolver-set).
+		wrap.appendChild( el( 'input', { type: 'hidden', 'data-field': 'woo_product_id', value: String( opt.woo_product_id || 0 ) } ) );
+		return wrap;
+	}
+
+	function renderBundleSection( opt, optIndex ) {
+		const wrap = el( 'div', { class: 'configkit-cb__bundle' } );
+		wrap.appendChild( el( 'h4', null, 'Components' ) );
+
+		const table = el( 'div', { class: 'configkit-cb__bundle-table' } );
+		table.appendChild( el( 'div', { class: 'configkit-cb__bundle-row configkit-cb__bundle-row--head' },
+			el( 'span', null, 'Woo SKU' ),
+			el( 'span', null, 'Qty' ),
+			el( 'span', null, 'Price source' ),
+			el( 'span', null, '' )
+		) );
+		opt.bundle_components.forEach( ( comp, ci ) => {
+			table.appendChild( renderBundleComponent( opt, optIndex, comp, ci ) );
+		} );
+		wrap.appendChild( table );
+
+		wrap.appendChild( el( 'button', {
+			type: 'button',
+			class: 'button-link',
+			onClick: () => {
+				readMotorDraftsFromDOM();
+				state.modal.options[ optIndex ].bundle_components.push( blankComponent() );
+				render();
+			},
+		}, '+ Add component' ) );
+
+		const priceRow = el( 'div', { class: 'configkit-cb__bundle-pricing' } );
+		const sumRadio = el( 'input', {
+			type: 'radio',
+			name: 'bundle-price-' + optIndex,
+			value: 'bundle_sum',
+			'data-field': 'price_source_sum',
+			checked: opt.price_source !== 'fixed_bundle',
+			onChange: () => {
+				readMotorDraftsFromDOM();
+				state.modal.options[ optIndex ].price_source = 'bundle_sum';
+				render();
+			},
+		} );
+		const fixedRadio = el( 'input', {
+			type: 'radio',
+			name: 'bundle-price-' + optIndex,
+			value: 'fixed_bundle',
+			'data-field': 'price_source_fixed',
+			checked: opt.price_source === 'fixed_bundle',
+			onChange: () => {
+				readMotorDraftsFromDOM();
+				state.modal.options[ optIndex ].price_source = 'fixed_bundle';
+				render();
+			},
+		} );
+		priceRow.appendChild( el( 'label', null, sumRadio,   document.createTextNode( ' Sum of components' ) ) );
+		priceRow.appendChild( el( 'label', null, fixedRadio, document.createTextNode( ' Fixed price (kr): ' ),
+			el( 'input', {
+				type: 'number',
+				step: '0.01',
+				'data-field': 'bundle_fixed_price',
+				class: 'configkit-cb__option-input',
+				value: opt.bundle_fixed_price || '',
+				disabled: opt.price_source !== 'fixed_bundle',
+			} )
+		) );
+		wrap.appendChild( priceRow );
+		return wrap;
+	}
+
+	function renderBundleComponent( opt, optIndex, comp, ci ) {
+		const row = el( 'div', { class: 'configkit-cb__bundle-row', 'data-component-index': String( ci ) },
+			el( 'input', {
+				type: 'text',
+				class: 'configkit-cb__option-input',
+				'data-field': 'comp_woo_sku',
+				value: comp.woo_product_sku || '',
+				placeholder: 'SOMFY-MOT-25',
+			} ),
+			el( 'input', {
+				type: 'number',
+				min: '1',
+				class: 'configkit-cb__option-input',
+				'data-field': 'comp_qty',
+				value: String( comp.qty || 1 ),
+			} ),
+			( () => {
+				const sel = el( 'select', { class: 'configkit-cb__option-input', 'data-field': 'comp_price_source' } );
+				[ 'woo', 'configkit' ].forEach( ( v ) => {
+					sel.appendChild( el( 'option', {
+						value: v,
+						selected: ( comp.price_source === v ),
+					}, v === 'woo' ? 'Woo' : 'Free' ) );
+				} );
+				return sel;
+			} )(),
+			el( 'button', {
+				type: 'button',
+				class: 'configkit-cb__row-remove',
+				'aria-label': 'Remove component',
+				onClick: () => {
+					readMotorDraftsFromDOM();
+					state.modal.options[ optIndex ].bundle_components.splice( ci, 1 );
+					render();
+				},
+			}, '✕' ),
+			// Hidden numeric id (resolver-set).
+			el( 'input', { type: 'hidden', 'data-field': 'comp_woo_id', value: String( comp.woo_product_id || 0 ) } )
+		);
+		return row;
+	}
+
+	function readMotorDraftsFromDOM() {
+		if ( ! state.modal || ! Array.isArray( state.modal.options ) ) return;
+		const cards = root.querySelectorAll( '[data-option-index]' );
+		const out = [];
+		cards.forEach( ( card ) => {
+			const isBundle = !! ( card.querySelector( '[data-field="item_type_bundle"]' ) || {} ).checked;
+			const draft = {
+				label:           pickString( card, 'label' ),
+				sku:             pickString( card, 'sku' ),
+				image_url:       pickString( card, 'image_url' ),
+				brand:           pickString( card, 'brand' ),
+				collection:      pickString( card, 'collection' ),
+				color_family:    '',
+				price_group:     '',
+				price:           pickString( card, 'price' ),
+				active:          !! ( card.querySelector( '[data-field="active"]' ) || {} ).checked,
+				item_type:       isBundle ? 'bundle' : 'simple_option',
+				price_source:    pickString( card, 'price_source' ) || 'configkit',
+				woo_product_id:  Number( pickString( card, 'woo_product_id' ) ) || 0,
+				woo_product_sku: pickString( card, 'woo_product_sku' ),
+				bundle_components: [],
+				bundle_fixed_price: pickString( card, 'bundle_fixed_price' ),
+			};
+			if ( isBundle ) {
+				const fixedChecked = !! ( card.querySelector( '[data-field="price_source_fixed"]' ) || {} ).checked;
+				draft.price_source = fixedChecked ? 'fixed_bundle' : 'bundle_sum';
+				card.querySelectorAll( '[data-component-index]' ).forEach( ( cRow ) => {
+					draft.bundle_components.push( {
+						component_key:  '',
+						woo_product_id: Number( pickString( cRow, 'comp_woo_id' ) ) || 0,
+						woo_product_sku: pickString( cRow, 'comp_woo_sku' ),
+						qty:            Math.max( 1, Number( pickString( cRow, 'comp_qty' ) ) || 1 ),
+						price_source:   pickString( cRow, 'comp_price_source' ) || 'woo',
+					} );
+				} );
+			}
+			out.push( draft );
+		} );
+		state.modal.options = out;
+	}
+
+	async function saveMotorOptions() {
+		if ( ! state.modal ) return;
+		readMotorDraftsFromDOM();
+		const payload = ( state.modal.options || [] )
+			.filter( ( o ) => ( o.label || '' ).trim() !== '' )
+			.map( ( o ) => {
+				const row = {
+					label:           o.label,
+					sku:             o.sku,
+					active:          !! o.active,
+					price:           o.price === '' ? null : Number( o.price ),
+					price_source:    o.price_source,
+					woo_product_id:  o.woo_product_id || 0,
+					woo_product_sku: o.woo_product_sku,
+				};
+				if ( o.item_type === 'bundle' ) {
+					row.components = ( o.bundle_components || [] )
+						.filter( ( c ) => ( c.woo_product_sku || '' ).trim() !== '' || ( c.woo_product_id || 0 ) > 0 )
+						.map( ( c ) => ( {
+							component_key:   c.component_key || '',
+							woo_product_id:  c.woo_product_id || 0,
+							woo_product_sku: c.woo_product_sku,
+							qty:             c.qty,
+							price_source:    c.price_source,
+						} ) );
+					if ( o.price_source === 'fixed_bundle' && o.bundle_fixed_price !== '' ) {
+						row.bundle_fixed_price = Number( o.bundle_fixed_price );
+					}
+				}
+				return row;
+			} );
+		try {
+			const result = await cbRequest(
+				'/sections/' + encodeURIComponent( state.modal.sectionId ) + '/options',
+				{ method: 'POST', body: { options: payload } }
+			);
+			showMessage( 'success', result.message || 'Motors saved.' );
+			state.optionCounts[ state.modal.sectionId ] = payload.length;
+			await loadOptions( state.modal.sectionId );
+			render();
+		} catch ( err ) {
+			showMessage( 'error', explainError( err ) );
+			render();
+		}
 	}
 
 	function normaliseFilenameToSku( name ) {

@@ -404,7 +404,8 @@ final class Plugin {
 			$cell_repo,
 			new LibraryItemService( $item_repo, $library_repo, $module_repo ),
 			$item_repo,
-			$module_repo
+			$module_repo,
+			new WooSkuResolverImpl()
 		) ) );
 		$router->add( new ProductBuilderController(
 			new ProductBuilderService(

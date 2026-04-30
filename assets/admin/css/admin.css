@@ -3843,6 +3843,77 @@
 	gap: 6px;
 }
 
+/* Phase 4.4 chunk 6 — motor section editor + bundles. */
+.configkit-cb__motor-card {
+	grid-template-columns: 1fr;
+}
+
+.configkit-cb__motor-card.is-bundle {
+	background: #f7faff;
+	border-color: #b3c7e6;
+}
+
+.configkit-cb__motor-card .configkit-cb__option-grid {
+	grid-column: 1;
+}
+
+.configkit-cb__motor-type {
+	display: flex;
+	gap: 16px;
+	font-size: 13px;
+	padding-bottom: 6px;
+	border-bottom: 1px dashed #dcdcde;
+}
+
+.configkit-cb__bundle {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.configkit-cb__bundle h4 {
+	margin: 0;
+	font-size: 12px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: #50575e;
+}
+
+.configkit-cb__bundle-table {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.configkit-cb__bundle-row {
+	display: grid;
+	grid-template-columns: 2fr 60px 1fr 30px;
+	gap: 8px;
+	align-items: center;
+}
+
+.configkit-cb__bundle-row--head {
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: #50575e;
+}
+
+.configkit-cb__bundle-pricing {
+	display: flex;
+	gap: 16px;
+	flex-wrap: wrap;
+	font-size: 13px;
+	padding-top: 6px;
+	border-top: 1px dashed #dcdcde;
+}
+
+.configkit-cb__bundle-pricing label {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
 /* Phase 4.3 — Product Builder auto-managed badge in admin lists. */
 .configkit-auto-managed-badge {
 	display: inline-flex;

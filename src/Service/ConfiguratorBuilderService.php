@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace ConfigKit\Service;
 
+use ConfigKit\Adapters\WooSkuResolver;
 use ConfigKit\Admin\SectionTypeRegistry;
 use ConfigKit\Repository\LibraryItemRepository;
 use ConfigKit\Repository\LibraryRepository;
@@ -47,6 +48,7 @@ final class ConfiguratorBuilderService {
 		private ?LibraryItemService $items = null,
 		private ?LibraryItemRepository $item_repo = null,
 		private ?ModuleRepository $module_repo = null,
+		private ?WooSkuResolver $woo_sku_resolver = null,
 	) {}
 
 	/**
@@ -403,13 +405,13 @@ final class ConfiguratorBuilderService {
 	 * @return array<string,mixed>
 	 */
 	private function option_to_item_payload( array $row, array $module, array $section ): array {
+		$has_components = isset( $row['components'] ) && is_array( $row['components'] ) && count( array_filter( $row['components'], 'is_array' ) ) > 0;
 		$payload = [
 			'label'        => isset( $row['label'] ) ? trim( (string) $row['label'] ) : '',
 			'sku'          => isset( $row['sku'] ) && $row['sku'] !== '' ? (string) $row['sku'] : null,
 			'is_active'    => array_key_exists( 'active', $row ) ? (bool) $row['active'] : true,
 			'attributes'   => [],
-			'price_source' => 'configkit',
-			'item_type'    => 'simple_option',
+			'item_type'    => $has_components ? 'bundle' : 'simple_option',
 		];
 
 		if ( ! empty( $module['supports_image'] ) && ! empty( $row['image_url'] ) ) {
@@ -429,10 +431,67 @@ final class ConfiguratorBuilderService {
 		) {
 			$payload['price'] = (float) $row['price'];
 		}
-		if ( ! empty( $module['supports_woo_product_link'] ) && isset( $row['woo_product_id'] )
-			&& (int) $row['woo_product_id'] > 0
-		) {
-			$payload['woo_product_id'] = (int) $row['woo_product_id'];
+		// Woo product link: id wins; SKU is resolved through the
+		// adapter when only an SKU is supplied (the bulk paste path
+		// gives owners SKUs, not numeric ids).
+		if ( ! empty( $module['supports_woo_product_link'] ) ) {
+			if ( isset( $row['woo_product_id'] ) && (int) $row['woo_product_id'] > 0 ) {
+				$payload['woo_product_id'] = (int) $row['woo_product_id'];
+			} elseif ( ! empty( $row['woo_product_sku'] ) && $this->woo_sku_resolver !== null ) {
+				$resolved = $this->woo_sku_resolver->resolveBySku( (string) $row['woo_product_sku'] );
+				if ( $resolved !== null && $resolved > 0 ) $payload['woo_product_id'] = $resolved;
+			}
+		}
+
+		// Bundle components — Phase 4.4 motor section. Components are
+		// parallel rows the customer never sees as separate options;
+		// they simply describe the line items the bundle adds to the
+		// cart. Mirrors Phase 4.2b shape so downstream cart code stays
+		// untouched.
+		if ( $has_components ) {
+			$components = [];
+			foreach ( $row['components'] as $c ) {
+				if ( ! is_array( $c ) ) continue;
+				$wid = isset( $c['woo_product_id'] ) ? (int) $c['woo_product_id'] : 0;
+				if ( $wid <= 0 && ! empty( $c['woo_product_sku'] ) && $this->woo_sku_resolver !== null ) {
+					$resolved = $this->woo_sku_resolver->resolveBySku( (string) $c['woo_product_sku'] );
+					$wid      = $resolved !== null ? $resolved : 0;
+				}
+				if ( $wid <= 0 ) continue;
+				$components[] = [
+					'component_key'  => isset( $c['component_key'] ) && $c['component_key'] !== '' ? (string) $c['component_key'] : 'c_' . $wid,
+					'woo_product_id' => $wid,
+					'qty'            => isset( $c['qty'] ) && (int) $c['qty'] > 0 ? (int) $c['qty'] : 1,
+					'price_source'   => isset( $c['price_source'] ) && in_array( $c['price_source'], [ 'woo', 'configkit' ], true ) ? (string) $c['price_source'] : 'woo',
+				];
+			}
+			if ( count( $components ) === 0 ) {
+				$payload['item_type']    = 'simple_option';
+				$payload['price_source'] = 'configkit';
+			} else {
+				$payload['bundle_components'] = $components;
+				if ( isset( $row['bundle_fixed_price'] ) && $row['bundle_fixed_price'] !== '' && (float) $row['bundle_fixed_price'] >= 0 ) {
+					$payload['price_source']       = 'fixed_bundle';
+					$payload['bundle_fixed_price'] = (float) $row['bundle_fixed_price'];
+				} else {
+					$payload['price_source'] = 'bundle_sum';
+				}
+			}
+		} else {
+			// Single option price source: explicit choice wins. Implicit
+			// "Woo-linked, no price typed" → Woo, matching ProductBuilder's
+			// normalise_price_source.
+			$raw = isset( $row['price_source'] ) ? strtolower( (string) $row['price_source'] ) : '';
+			if ( $raw === 'woo' && ! empty( $payload['woo_product_id'] ) ) {
+				$payload['price_source'] = 'woo';
+				unset( $payload['price'] );
+			} elseif ( $raw === 'configkit' ) {
+				$payload['price_source'] = 'configkit';
+			} elseif ( ! empty( $payload['woo_product_id'] ) && empty( $payload['price'] ) ) {
+				$payload['price_source'] = 'woo';
+			} else {
+				$payload['price_source'] = 'configkit';
+			}
 		}
 
 		// Brand / collection are library-level fields the bulk paste

@@ -12,6 +12,7 @@ use ConfigKit\Service\LookupTableService;
 use ConfigKit\Service\ModuleService;
 use ConfigKit\Service\ProductBuilderState;
 use ConfigKit\Service\SectionListState;
+use ConfigKit\Tests\Unit\Adapters\StubWooSkuResolver;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -38,6 +39,7 @@ final class ConfiguratorBuilderServiceTest extends TestCase {
 	private StubLookupCellRepository $lookup_cells;
 	private SectionListState $sections;
 	private StubLibraryItemRepository $items;
+	private StubWooSkuResolver $woo_resolver;
 
 	protected function setUp(): void {
 		$this->product_meta  = [];
@@ -63,6 +65,9 @@ final class ConfiguratorBuilderServiceTest extends TestCase {
 		);
 
 		$this->items = new StubLibraryItemRepository();
+		$this->woo_resolver = new StubWooSkuResolver(
+			[ 'SOMFY-MOT-25' => 5001, 'SOMFY-MOT-30' => 5002, 'SOMFY-REMOTE' => 5100 ]
+		);
 		$this->service = new ConfiguratorBuilderService(
 			$this->sections,
 			$pb_state,
@@ -77,6 +82,7 @@ final class ConfiguratorBuilderServiceTest extends TestCase {
 			new \ConfigKit\Service\LibraryItemService( $this->items, $this->libraries, $this->modules ),
 			$this->items,
 			$this->modules,
+			$this->woo_resolver,
 		);
 	}
 
@@ -280,6 +286,89 @@ final class ConfiguratorBuilderServiceTest extends TestCase {
 		$result  = $this->service->save_section_options( self::PRODUCT_ID, $created['section']['id'], [ [ 'sku' => 'X', 'label' => 'Y' ] ] );
 		$this->assertFalse( $result['ok'] );
 		$this->assertStringContainsString( 'ranges endpoint', $result['message'] );
+	}
+
+	public function test_save_motor_resolves_woo_sku_and_records_woo_price_source(): void {
+		$created = $this->service->create_section( self::PRODUCT_ID, SectionTypeRegistry::TYPE_MOTOR, 'Motors' );
+		$id      = $created['section']['id'];
+		$result  = $this->service->save_section_options( self::PRODUCT_ID, $id, [
+			[
+				'sku'             => 'M25',
+				'label'           => 'Somfy 25Nm',
+				'woo_product_sku' => 'SOMFY-MOT-25',
+				'price_source'    => 'woo',
+			],
+		] );
+		$this->assertTrue( $result['ok'], 'errors=' . json_encode( $result['errors'] ?? [] ) );
+
+		$saved = array_values( array_filter( $this->items->records, static fn ( $r ) => ( $r['sku'] ?? '' ) === 'M25' && ! empty( $r['is_active'] ) ) );
+		$this->assertCount( 1, $saved );
+		$this->assertSame( 5001, $saved[0]['woo_product_id'] );
+		$this->assertSame( 'woo', $saved[0]['price_source'] );
+		$this->assertSame( 'simple_option', $saved[0]['item_type'] );
+	}
+
+	public function test_save_motor_bundle_collects_components_and_picks_bundle_sum(): void {
+		$created = $this->service->create_section( self::PRODUCT_ID, SectionTypeRegistry::TYPE_MOTOR );
+		$id      = $created['section']['id'];
+		$result  = $this->service->save_section_options( self::PRODUCT_ID, $id, [
+			[
+				'sku'   => 'PKG-25',
+				'label' => 'Somfy package 25',
+				'components' => [
+					[ 'woo_product_sku' => 'SOMFY-MOT-25', 'qty' => 1, 'price_source' => 'woo' ],
+					[ 'woo_product_sku' => 'SOMFY-REMOTE', 'qty' => 1, 'price_source' => 'woo' ],
+				],
+			],
+		] );
+		$this->assertTrue( $result['ok'], 'errors=' . json_encode( $result['errors'] ?? [] ) );
+
+		$bundle = array_values( array_filter( $this->items->records, static fn ( $r ) => ( $r['sku'] ?? '' ) === 'PKG-25' && ! empty( $r['is_active'] ) ) )[0] ?? null;
+		$this->assertNotNull( $bundle );
+		$this->assertSame( 'bundle', $bundle['item_type'] );
+		$this->assertSame( 'bundle_sum', $bundle['price_source'] );
+		$this->assertCount( 2, $bundle['bundle_components'] );
+		$this->assertSame( 5001, $bundle['bundle_components'][0]['woo_product_id'] );
+		$this->assertSame( 5100, $bundle['bundle_components'][1]['woo_product_id'] );
+	}
+
+	public function test_save_motor_bundle_with_fixed_price_uses_fixed_bundle_source(): void {
+		$created = $this->service->create_section( self::PRODUCT_ID, SectionTypeRegistry::TYPE_MOTOR );
+		$id      = $created['section']['id'];
+		$result  = $this->service->save_section_options( self::PRODUCT_ID, $id, [
+			[
+				'sku'                 => 'PKG-FIXED',
+				'label'               => 'Fixed-price package',
+				'bundle_fixed_price'  => 4999.0,
+				'components'          => [
+					[ 'woo_product_sku' => 'SOMFY-MOT-25', 'qty' => 1 ],
+				],
+			],
+		] );
+		$this->assertTrue( $result['ok'], 'errors=' . json_encode( $result['errors'] ?? [] ) );
+
+		$bundle = array_values( array_filter( $this->items->records, static fn ( $r ) => ( $r['sku'] ?? '' ) === 'PKG-FIXED' && ! empty( $r['is_active'] ) ) )[0] ?? null;
+		$this->assertSame( 'fixed_bundle', $bundle['price_source'] );
+		$this->assertSame( 4999.0, $bundle['bundle_fixed_price'] );
+	}
+
+	public function test_save_motor_bundle_with_no_resolvable_components_falls_back_to_simple(): void {
+		$created = $this->service->create_section( self::PRODUCT_ID, SectionTypeRegistry::TYPE_MOTOR );
+		$id      = $created['section']['id'];
+		$result  = $this->service->save_section_options( self::PRODUCT_ID, $id, [
+			[
+				'sku'        => 'PKG-EMPTY',
+				'label'      => 'Empty package',
+				'components' => [
+					[ 'woo_product_sku' => 'UNKNOWN-SKU', 'qty' => 1 ],
+				],
+			],
+		] );
+		$this->assertTrue( $result['ok'], 'errors=' . json_encode( $result['errors'] ?? [] ) );
+
+		$row = array_values( array_filter( $this->items->records, static fn ( $r ) => ( $r['sku'] ?? '' ) === 'PKG-EMPTY' && ! empty( $r['is_active'] ) ) )[0];
+		$this->assertSame( 'simple_option', $row['item_type'] );
+		$this->assertSame( 'configkit', $row['price_source'] );
 	}
 
 	public function test_section_type_registry_lists_documented_types(): void {
