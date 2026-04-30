@@ -842,14 +842,26 @@
 
 		// Items section
 		const itemsBlock = el( 'div', { class: 'configkit-form configkit-items' } );
+		// Phase 4 dalis 3 — open the import wizard with this library
+		// pre-selected. Mirrors the lookup-tables detail header.
+		const importHref = ( window.location.pathname || '' )
+			+ '?page=configkit-imports&target_type=library_items&target_library_key='
+			+ encodeURIComponent( lib.library_key );
 		itemsBlock.appendChild( el(
 			'div',
 			{ class: 'configkit-list__header' },
 			el( 'h3', null, 'Items' ),
-			el(
-				'button',
-				{ type: 'button', class: 'button button-secondary', onClick: showNewItemForm },
-				'+ New item'
+			el( 'div', { class: 'configkit-list__actions' },
+				el( 'a', {
+					href: importHref,
+					class: 'button',
+					title: 'Open the import wizard with this library preselected',
+				}, '⬆ Import from Excel' ),
+				el(
+					'button',
+					{ type: 'button', class: 'button button-secondary', onClick: showNewItemForm },
+					'+ New item'
+				)
 			)
 		) );
 
