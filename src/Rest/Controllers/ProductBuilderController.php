@@ -48,6 +48,19 @@ final class ProductBuilderController extends AbstractController {
 				'permission_callback' => $this->require_cap( self::CAP ),
 			],
 		] );
+
+		\register_rest_route( self::NAMESPACE, '/product-builder/(?P<product_id>\d+)/pricing', [
+			[
+				'methods'             => 'GET',
+				'callback'            => [ $this, 'read_pricing' ],
+				'permission_callback' => $this->require_cap( self::CAP ),
+			],
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'save_pricing' ],
+				'permission_callback' => $this->require_cap( self::CAP ),
+			],
+		] );
 	}
 
 	public function list_recipes( \WP_REST_Request $request ): \WP_REST_Response {
@@ -72,6 +85,31 @@ final class ProductBuilderController extends AbstractController {
 			return $this->error(
 				'product_builder_failed',
 				(string) ( $result['message'] ?? 'Could not set product type.' ),
+				[ 'errors' => $result['errors'] ?? [] ],
+				400
+			);
+		}
+		return $this->ok( $result );
+	}
+
+	public function read_pricing( \WP_REST_Request $request ): \WP_REST_Response {
+		$product_id = (int) $request['product_id'];
+		return $this->ok( [
+			'product_id' => $product_id,
+			'rows'       => $this->service->read_pricing_rows( $product_id ),
+		] );
+	}
+
+	public function save_pricing( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$product_id = (int) $request['product_id'];
+		$body       = $this->payload( $request );
+		$rows       = is_array( $body['rows'] ?? null ) ? $body['rows'] : [];
+
+		$result = $this->service->save_pricing_rows( $product_id, $rows );
+		if ( ! ( $result['ok'] ?? false ) ) {
+			return $this->error(
+				'product_builder_failed',
+				(string) ( $result['message'] ?? 'Could not save pricing rows.' ),
 				[ 'errors' => $result['errors'] ?? [] ],
 				400
 			);

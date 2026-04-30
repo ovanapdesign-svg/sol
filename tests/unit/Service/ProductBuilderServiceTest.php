@@ -6,6 +6,8 @@ namespace ConfigKit\Tests\Unit\Service;
 use ConfigKit\Admin\ProductTypeRecipes;
 use ConfigKit\Service\AutoManagedRegistry;
 use ConfigKit\Service\FamilyService;
+use ConfigKit\Service\LookupCellService;
+use ConfigKit\Service\LookupTableService;
 use ConfigKit\Service\ProductBuilderService;
 use ConfigKit\Service\ProductBuilderState;
 use ConfigKit\Service\TemplateService;
@@ -29,6 +31,8 @@ final class ProductBuilderServiceTest extends TestCase {
 	private ProductBuilderService $service;
 	private StubFamilyRepository $families;
 	private StubTemplateRepository $templates;
+	private StubLookupTableRepository $lookup_tables;
+	private StubLookupCellRepository $lookup_cells;
 	private ProductBuilderState $state;
 	private AutoManagedRegistry $registry;
 
@@ -36,8 +40,10 @@ final class ProductBuilderServiceTest extends TestCase {
 		$this->product_meta = [];
 		$this->option_store = [];
 
-		$this->families  = new StubFamilyRepository();
-		$this->templates = new StubTemplateRepository();
+		$this->families      = new StubFamilyRepository();
+		$this->templates     = new StubTemplateRepository();
+		$this->lookup_tables = new StubLookupTableRepository();
+		$this->lookup_cells  = new StubLookupCellRepository();
 
 		$this->state = new ProductBuilderState(
 			fn ( int $pid ): array => $this->product_meta[ $pid ] ?? [],
@@ -56,6 +62,10 @@ final class ProductBuilderServiceTest extends TestCase {
 			$this->families,
 			$this->state,
 			$this->registry,
+			new LookupTableService( $this->lookup_tables, $this->lookup_cells ),
+			$this->lookup_tables,
+			new LookupCellService( $this->lookup_cells, $this->lookup_tables ),
+			$this->lookup_cells,
 		);
 	}
 
@@ -118,6 +128,61 @@ final class ProductBuilderServiceTest extends TestCase {
 		foreach ( [ 'pricing', 'fabrics', 'profile_colors', 'operation', 'stang', 'motor' ] as $block ) {
 			$this->assertContains( $block, $recipe['blocks'], 'markise recipe missing block: ' . $block );
 		}
+	}
+
+	public function test_save_pricing_requires_a_product_type_first(): void {
+		$result = $this->service->save_pricing_rows( self::PRODUCT_ID, [
+			[ 'to_width' => 2400, 'to_height' => 2000, 'price' => 12000 ],
+		] );
+		$this->assertFalse( $result['ok'] );
+		$this->assertStringContainsString( 'product type', strtolower( $result['message'] ) );
+	}
+
+	public function test_save_pricing_creates_lookup_table_with_round_up_match_mode(): void {
+		$this->service->set_product_type( self::PRODUCT_ID, 'markise' );
+		$result = $this->service->save_pricing_rows( self::PRODUCT_ID, [
+			[ 'to_width' => 2100, 'to_height' => 2000, 'price' => 11000 ],
+			[ 'to_width' => 2400, 'to_height' => 2000, 'price' => 12000 ],
+			[ 'to_width' => 2400, 'to_height' => 2400, 'price' => 13500 ],
+		] );
+		$this->assertTrue( $result['ok'], 'errors=' . json_encode( $result['errors'] ?? [] ) );
+
+		$table = $this->lookup_tables->find_by_key( 'product_4242_pricing' );
+		$this->assertNotNull( $table );
+		$this->assertSame( 'round_up', $table['match_mode'] );
+		$this->assertSame( 'mm', $table['unit'] );
+		$this->assertCount( 3, $this->lookup_cells->records );
+
+		// State now points at the new lookup_table_key.
+		$this->assertSame( 'product_4242_pricing', $this->service->get_state( self::PRODUCT_ID )['lookup_table_key'] );
+		$this->assertTrue( $this->registry->is_auto_managed( AutoManagedRegistry::TYPE_LOOKUP_TABLE, 'product_4242_pricing' ) );
+	}
+
+	public function test_save_pricing_replaces_previous_rows(): void {
+		$this->service->set_product_type( self::PRODUCT_ID, 'markise' );
+		$this->service->save_pricing_rows( self::PRODUCT_ID, [
+			[ 'to_width' => 2100, 'to_height' => 2000, 'price' => 11000 ],
+			[ 'to_width' => 2400, 'to_height' => 2000, 'price' => 12000 ],
+		] );
+		$this->assertCount( 2, $this->lookup_cells->records );
+
+		// Re-save with one row → previous cells are wiped.
+		$this->service->save_pricing_rows( self::PRODUCT_ID, [
+			[ 'to_width' => 3000, 'to_height' => 2400, 'price' => 15000 ],
+		] );
+		$this->assertCount( 1, $this->lookup_cells->records );
+		$only = array_values( $this->lookup_cells->records )[0];
+		$this->assertSame( 3000, $only['width'] );
+	}
+
+	public function test_save_pricing_rejects_invalid_row(): void {
+		$this->service->set_product_type( self::PRODUCT_ID, 'markise' );
+		$result = $this->service->save_pricing_rows( self::PRODUCT_ID, [
+			[ 'to_width' => 2100, 'to_height' => 2000, 'price' => 11000 ],
+			[ 'to_width' => 0,    'to_height' => 2000, 'price' => 12000 ],
+		] );
+		$this->assertFalse( $result['ok'] );
+		$this->assertNotEmpty( $result['errors'] );
 	}
 
 	public function test_state_marks_product_as_auto_managed_after_first_action(): void {

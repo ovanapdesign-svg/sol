@@ -391,7 +391,11 @@ final class Plugin {
 			new FamilyService( new FamilyRepository( $wpdb ) ),
 			new FamilyRepository( $wpdb ),
 			new ProductBuilderState(),
-			new AutoManagedRegistry()
+			new AutoManagedRegistry(),
+			new LookupTableService( $lookup_repo, $cell_repo ),
+			$lookup_repo,
+			new LookupCellService( $cell_repo, $lookup_repo ),
+			$cell_repo
 		) ) );
 		return $router;
 	}
