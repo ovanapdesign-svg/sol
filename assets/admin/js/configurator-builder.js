@@ -2180,7 +2180,8 @@
 		const section = findSection( state.bulkPaste.sectionId );
 		if ( ! section ) return null;
 		const type    = findType( section.type ) || {};
-		const columns = ( type.bulk_paste_columns || [] ).join( ' \\t ' );
+		const guide   = bulkPasteGuide( section.type, type );
+		const preview = previewBulkPaste( section.type, type, state.bulkPaste.text || '' );
 
 		const overlay = el( 'div', {
 			class: 'configkit-cb__modal-overlay',
@@ -2199,30 +2200,104 @@
 				onClick: closeBulkPaste,
 			}, '✕' )
 		) );
-		modal.appendChild( el( 'div', { class: 'configkit-cb__modal-body' },
-			el( 'p', { class: 'description' },
-				'Paste tab-separated rows from Excel. Expected columns: ',
-				el( 'code', null, columns )
+
+		const body = el( 'div', { class: 'configkit-cb__modal-body' } );
+		body.appendChild( el( 'p', { class: 'description' }, guide.intro ) );
+		body.appendChild( el( 'div', { class: 'configkit-cb__bulk-guide' },
+			el( 'div', null,
+				el( 'span', { class: 'configkit-cb__bulk-guide-label' }, 'Columns:' ),
+				el( 'code', null, guide.columns.join( '   →   ' ) )
 			),
-			el( 'textarea', {
-				class: 'configkit-cb__bulk-textarea',
-				rows: 10,
-				placeholder: '1000\t2100\t1000\t2000\t10000\tI',
-				value: state.bulkPaste.text,
-				onInput: ( ev ) => { state.bulkPaste.text = ev.target.value; },
-			} ),
-			...( state.bulkPaste.errors || [] ).map( ( m ) => el( 'p', { class: 'configkit-cb__range-diag-warn' }, m ) )
+			el( 'div', null,
+				el( 'span', { class: 'configkit-cb__bulk-guide-label' }, 'Example:' ),
+				el( 'code', null, guide.example )
+			)
 		) );
+		body.appendChild( el( 'textarea', {
+			class: 'configkit-cb__bulk-textarea',
+			rows: 10,
+			placeholder: guide.example,
+			value: state.bulkPaste.text,
+			onInput: ( ev ) => { state.bulkPaste.text = ev.target.value; render(); },
+		} ) );
+
+		const counter = el( 'p', { class: preview.errors.length > 0 ? 'configkit-cb__range-diag-warn' : 'configkit-cb__range-diag-ok' },
+			'Parsed ' + preview.rowCount + ' row(s). ' + preview.errors.length + ' error(s).'
+		);
+		body.appendChild( counter );
+		preview.errors.slice( 0, 5 ).forEach( ( m ) => {
+			body.appendChild( el( 'p', { class: 'configkit-cb__range-diag-warn' }, m ) );
+		} );
+		( state.bulkPaste.errors || [] ).forEach( ( m ) => {
+			body.appendChild( el( 'p', { class: 'configkit-cb__range-diag-warn' }, m ) );
+		} );
+		modal.appendChild( body );
+
 		modal.appendChild( el( 'div', { class: 'configkit-cb__modal-footer' },
 			el( 'button', { type: 'button', class: 'button', onClick: closeBulkPaste }, 'Cancel' ),
 			el( 'button', {
 				type: 'button',
 				class: 'button button-primary',
+				disabled: preview.rowCount === 0 || preview.errors.length > 0,
 				onClick: applyBulkPaste,
-			}, 'Add rows' )
+			}, 'Add ' + preview.rowCount + ' row' + ( preview.rowCount === 1 ? '' : 's' ) )
 		) );
 		overlay.appendChild( modal );
 		return overlay;
+	}
+
+	// Phase 4.4b — per-section-type bulk paste cheat sheet. The
+	// columns / example are hard-coded for the four section families
+	// owners actually use; extending it is one entry per type.
+	function bulkPasteGuide( sectionType, typeMeta ) {
+		switch ( sectionType ) {
+			case 'size_pricing':
+				return {
+					intro:   'Paste rows from Excel. One row per width × height range.',
+					columns: [ 'width_from', 'width_to', 'height_from', 'height_to', 'price', 'price_group' ],
+					example: '2100\t2400\t1500\t2000\t12000\tI',
+				};
+			case 'motor':
+				return {
+					intro:   'Paste rows from Excel. One row per motor.',
+					columns: [ 'name', 'sku', 'woo_product_sku', 'custom_price', 'price_source' ],
+					example: 'Somfy IO Motor\tSOMFY-IO-MOTOR\tSOMFY-IO-MOTOR\t4500\twoo',
+				};
+			case 'option_group':
+			default:
+				return {
+					intro:   'Paste rows from Excel. One row per option (fabric, colour, finish, …).',
+					columns: ( typeMeta.bulk_paste_columns && typeMeta.bulk_paste_columns.length > 0 )
+						? typeMeta.bulk_paste_columns
+						: [ 'name', 'sku', 'price', 'brand', 'collection', 'color_family', 'price_group' ],
+					example: 'Dickson U171\tDICK-U171\t0\tDickson\tOrchestra\tBeige\tII',
+				};
+		}
+	}
+
+	// Tiny preflight parser used only for the live counter on the
+	// bulk paste modal. Format-of-record is whatever applyBulkPaste*
+	// actually accepts; this preview is intentionally conservative
+	// (it counts non-blank lines and validates required columns) so
+	// the owner sees a useful number before clicking submit.
+	function previewBulkPaste( sectionType, typeMeta, text ) {
+		const lines  = String( text || '' ).split( /\r?\n/ ).map( ( l ) => l.trim() ).filter( Boolean );
+		const errors = [];
+		let rows = 0;
+		lines.forEach( ( line, i ) => {
+			const parts = line.split( /\t|\s{2,}|,/ );
+			if ( sectionType === 'size_pricing' ) {
+				if ( parts.length < 5 ) { errors.push( 'Row ' + ( i + 1 ) + ': expected at least 5 values.' ); return; }
+				if ( ! Number.isFinite( Number( parts[1] ) ) || ! Number.isFinite( Number( parts[3] ) ) || ! Number.isFinite( Number( parts[4] ) ) ) {
+					errors.push( 'Row ' + ( i + 1 ) + ': width_to / height_to / price must be numbers.' );
+					return;
+				}
+			} else {
+				if ( parts.length < 2 ) { errors.push( 'Row ' + ( i + 1 ) + ': expected at least 2 values.' ); return; }
+			}
+			rows++;
+		} );
+		return { rowCount: rows, errors };
 	}
 
 	function applyBulkPaste() {

@@ -3832,6 +3832,31 @@
 	min-width: 240px;
 }
 
+.configkit-cb__bulk-guide {
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	padding: 8px 10px;
+	font-size: 12px;
+	margin: 8px 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.configkit-cb__bulk-guide code {
+	background: transparent;
+	padding: 0;
+	color: #1e4f24;
+	white-space: pre;
+}
+
+.configkit-cb__bulk-guide-label {
+	color: #50575e;
+	margin-right: 6px;
+	font-weight: 600;
+}
+
 .configkit-cb__option-input {
 	width: 100%;
 	padding: 4px 6px;
