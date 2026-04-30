@@ -4345,3 +4345,106 @@
 	font-weight: 500;
 	white-space: nowrap;
 }
+
+/* Phase 4.4b — mobile modal polish.
+ *
+ * Below 768px the configurator-builder modals (section editor, bulk
+ * paste, source modals, diagnostics) need to fit a phone screen
+ * without horizontal overflow. We do four things:
+ *   1. Tighten the overlay padding so the modal fills the viewport.
+ *   2. Force a single-column field grid inside the modal body so
+ *      labels never crop.
+ *   3. Make the footer sticky at the bottom so primary actions stay
+ *      reachable while the body scrolls.
+ *   4. Stack the section card actions and source panel actions so
+ *      they wrap instead of spilling sideways.
+ */
+@media ( max-width: 768px ) {
+	.configkit-cb__modal-overlay {
+		padding: 12px;
+		align-items: stretch;
+	}
+
+	.configkit-cb__modal,
+	.configkit-cb__modal--bulk,
+	.configkit-cb__modal--source,
+	.configkit-cb__modal--diag {
+		width: calc( 100vw - 24px );
+		max-width: calc( 100vw - 24px );
+		max-height: calc( 100vh - 80px );
+		border-radius: 6px;
+	}
+
+	.configkit-cb__modal-header {
+		grid-template-columns: 1fr auto;
+		grid-template-areas:
+			"title close"
+			"id    id";
+		row-gap: 6px;
+	}
+
+	.configkit-cb__modal-title { grid-area: title; }
+	.configkit-cb__modal-close { grid-area: close; }
+	.configkit-cb__modal-id    { grid-area: id; flex-wrap: wrap; }
+
+	.configkit-cb__modal-body {
+		padding: 14px 16px;
+	}
+
+	.configkit-cb__modal-footer {
+		position: sticky;
+		bottom: 0;
+		flex-wrap: wrap;
+		gap: 6px;
+	}
+
+	.configkit-cb__option-grid,
+	.configkit-cb__bundle-row {
+		grid-template-columns: 1fr;
+	}
+
+	.configkit-cb__option-card {
+		grid-template-columns: 1fr;
+	}
+
+	.configkit-cb__option-image-wrap {
+		flex-direction: row;
+	}
+
+	.configkit-cb__option-grid,
+	.configkit-cb__option-footer,
+	.configkit-cb__option-actions {
+		grid-column: 1;
+	}
+
+	.configkit-cb__source-actions {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.configkit-cb__section-card {
+		flex-wrap: wrap;
+	}
+
+	.configkit-cb__section-actions {
+		width: 100%;
+		justify-content: flex-end;
+	}
+
+	.configkit-cb__range-row {
+		grid-template-columns: 1fr 1fr;
+		gap: 6px;
+	}
+
+	.configkit-cb__range-row--head {
+		display: none;
+	}
+
+	.configkit-cb__bulk-textarea {
+		font-size: 12px;
+	}
+
+	.configkit-cb__product-picker-list {
+		max-height: 180px;
+	}
+}
