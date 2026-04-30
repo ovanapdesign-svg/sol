@@ -1815,3 +1815,46 @@
 .configkit-import-recent {
 	margin-top: 24px;
 }
+
+/* ---- In-form module preset helpers (Phase 4 polish) ---- */
+
+.configkit-preset-row {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px 14px;
+	margin: 0 0 16px;
+	background: #f6f7f7;
+	border: 1px solid #ececef;
+	border-radius: 6px;
+}
+
+.configkit-preset-row__label {
+	color: #50575e;
+	font-size: 13px;
+}
+
+.configkit-preset-row__buttons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.configkit-preset-row__btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 12px !important;
+	height: auto !important;
+	line-height: 1.2 !important;
+}
+
+.configkit-preset-row__btn.is-active {
+	background: #2271b1 !important;
+	color: #fff !important;
+	border-color: #2271b1 !important;
+}
+
+.configkit-preset-row__icon {
+	font-size: 14px;
+}

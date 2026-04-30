@@ -190,10 +190,12 @@
 	}
 
 	function showNewForm() {
-		// Step 1 — show the preset picker. Step 2 (`pickPreset`) seeds
-		// the form with the chosen preset's capabilities + field kinds.
-		state.view = 'presets';
-		state.editing = null;
+		// Owner lands directly on a blank form. The 4 named presets
+		// (Textiles / Colors / Motors / Accessories) become inline
+		// "Apply preset" buttons inside renderForm() that overlay
+		// their capabilities on top of whatever is already set.
+		state.view = 'form';
+		state.editing = blankRecord();
 		state.pickedPresetId = null;
 		state.dirty = false;
 		clearMessages();
@@ -201,17 +203,25 @@
 		render();
 	}
 
-	function pickPreset( presetId ) {
+	/**
+	 * Overlay a preset's capability set on top of the current form
+	 * state. Owner-supplied checkbox state is NEVER cleared — the
+	 * preset only ticks new boxes on. Same union-merge for
+	 * allowed_field_kinds. Owner can untick anything afterwards.
+	 */
+	function applyPreset( presetId ) {
 		const preset = MODULE_TYPE_PRESETS.find( ( p ) => p.id === presetId );
-		const rec = blankRecord();
-		if ( preset ) {
-			Object.keys( preset.capabilities ).forEach( ( k ) => { rec[ k ] = !! preset.capabilities[ k ]; } );
-			rec.allowed_field_kinds = ( preset.allowed_field_kinds || [] ).slice();
-		}
-		state.editing = rec;
+		if ( ! preset || ! state.editing ) return;
+		Object.keys( preset.capabilities ).forEach( ( k ) => {
+			if ( preset.capabilities[ k ] ) state.editing[ k ] = true;
+		} );
+		const merged = ( state.editing.allowed_field_kinds || [] ).slice();
+		( preset.allowed_field_kinds || [] ).forEach( ( kind ) => {
+			if ( merged.indexOf( kind ) === -1 ) merged.push( kind );
+		} );
+		state.editing.allowed_field_kinds = merged;
 		state.pickedPresetId = presetId;
-		state.view = 'form';
-		state.dirty = false;
+		state.dirty = true;
 		render();
 	}
 
@@ -381,11 +391,6 @@
 			return;
 		}
 
-		if ( state.view === 'presets' ) {
-			root.appendChild( renderPresetPicker() );
-			return;
-		}
-
 		if ( state.view === 'form' ) {
 			root.appendChild( renderForm() );
 		}
@@ -398,55 +403,33 @@
 			return;
 		}
 		const segs = [ { label: 'Modules', onClick: () => { setUrl( { action: null, id: null } ); loadList(); } } ];
-		if ( state.view === 'presets' ) {
-			segs.push( { label: 'New module' } );
-		} else if ( state.view === 'form' ) {
-			const rec = state.editing;
-			if ( rec && rec.id > 0 ) segs.push( { label: 'Edit "' + ( rec.name || rec.module_key ) + '"' } );
-			else segs.push( { label: 'New module' } );
-		}
+		const rec = state.editing;
+		if ( rec && rec.id > 0 ) segs.push( { label: 'Edit "' + ( rec.name || rec.module_key ) + '"' } );
+		else segs.push( { label: 'New module' } );
 		window.ConfigKit.subBreadcrumb( segs );
 	}
 
-	function renderPresetPicker() {
-		const wrap = el( 'div', { class: 'configkit-form' } );
-		wrap.appendChild( el( 'h2', null, 'New module — pick a starting point' ) );
-		wrap.appendChild( el(
-			'p',
-			{ class: 'description' },
-			'Choose the closest match. You can adjust every capability before saving.'
-		) );
-
-		const grid = el( 'div', { class: 'configkit-preset-grid' } );
-		MODULE_TYPE_PRESETS.forEach( ( preset ) => {
-			const enabledCaps = Object.keys( preset.capabilities ).filter( ( k ) => preset.capabilities[ k ] );
-			const card = el(
-				'button',
-				{
-					type: 'button',
-					class: 'configkit-preset-card',
-					onClick: () => pickPreset( preset.id ),
-				},
-				el( 'span', { class: 'configkit-preset-card__icon' }, preset.icon ),
-				el( 'span', { class: 'configkit-preset-card__title' }, preset.label ),
-				el( 'span', { class: 'configkit-preset-card__desc' }, preset.description ),
-				enabledCaps.length > 0
-					? el( 'span', { class: 'configkit-preset-card__caps' }, enabledCaps.length + ' capabilities preselected' )
-					: el( 'span', { class: 'configkit-preset-card__caps' }, 'Pick everything yourself' )
-			);
-			grid.appendChild( card );
-		} );
-		wrap.appendChild( grid );
-
-		wrap.appendChild( el(
-			'div',
-			{ class: 'configkit-form__footer' },
-			el( 'button', {
+	function renderPresetButtons() {
+		// Only the named, capability-bearing presets — "Custom" is the
+		// default state, so we don't render a button for it.
+		const presets = MODULE_TYPE_PRESETS.filter( ( p ) => Object.keys( p.capabilities ).some( ( k ) => p.capabilities[ k ] ) );
+		const wrap = el( 'div', { class: 'configkit-preset-row' } );
+		wrap.appendChild( el( 'span', { class: 'configkit-preset-row__label' }, 'Need a starting point? Apply a preset:' ) );
+		const buttons = el( 'div', { class: 'configkit-preset-row__buttons' } );
+		presets.forEach( ( preset ) => {
+			const isActive = state.pickedPresetId === preset.id;
+			buttons.appendChild( el( 'button', {
 				type: 'button',
-				class: 'button',
-				onClick: () => { setUrl( { action: null, id: null } ); loadList(); },
-			}, 'Cancel' )
-		) );
+				class: 'button configkit-preset-row__btn' + ( isActive ? ' is-active' : '' ),
+				title: preset.description,
+				onClick: () => applyPreset( preset.id ),
+			},
+				el( 'span', { class: 'configkit-preset-row__icon', 'aria-hidden': 'true' }, preset.icon ),
+				' ',
+				preset.label
+			) );
+		} );
+		wrap.appendChild( buttons );
 		return wrap;
 	}
 
@@ -593,6 +576,13 @@
 
 		if ( state.message ) {
 			wrap.appendChild( messageBanner( state.message ) );
+		}
+
+		// Optional preset helpers — only on Create. The form starts
+		// blank; clicking a preset overlays its capabilities on top
+		// of whatever the owner has already toggled.
+		if ( isNew ) {
+			wrap.appendChild( renderPresetButtons() );
 		}
 
 		// Basics

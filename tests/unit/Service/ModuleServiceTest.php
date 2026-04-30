@@ -43,6 +43,40 @@ final class ModuleServiceTest extends TestCase {
 		$this->assertTrue( $result['record']['supports_sku'] );
 	}
 
+	public function test_create_with_no_capabilities_succeeds(): void {
+		// Phase 4 polish: a module with zero capability flags is
+		// unusual but allowed — it just has nothing meaningful for
+		// libraries to fill in. Owner can add capabilities later.
+		$result = $this->service->create( $this->valid_input( [
+			'allowed_field_kinds' => [],
+			'attribute_schema'    => [],
+			'supports_sku'        => false,
+			'supports_image'      => false,
+			'module_key'          => 'empty_module',
+			'name'                => 'Empty',
+		] ) );
+		$this->assertTrue( $result['ok'], 'errors=' . json_encode( $result['errors'] ?? [] ) );
+		$this->assertFalse( $result['record']['supports_sku'] );
+		$this->assertFalse( $result['record']['supports_image'] );
+		$this->assertSame( [], $result['record']['allowed_field_kinds'] );
+	}
+
+	public function test_create_with_only_one_capability_succeeds(): void {
+		// Phase 4 polish: form must accept any single capability
+		// without requiring others.
+		$result = $this->service->create( [
+			'module_key'          => 'sku_only',
+			'name'                => 'SKU only',
+			'description'         => null,
+			'allowed_field_kinds' => [],
+			'attribute_schema'    => [],
+			'supports_sku'        => true,
+			'supports_image'      => false,
+		] );
+		$this->assertTrue( $result['ok'], 'errors=' . json_encode( $result['errors'] ?? [] ) );
+		$this->assertTrue( $result['record']['supports_sku'] );
+	}
+
 	public function test_create_missing_module_key_returns_required_error(): void {
 		$result = $this->service->create( $this->valid_input( [ 'module_key' => '' ] ) );
 		$this->assertFalse( $result['ok'] );
