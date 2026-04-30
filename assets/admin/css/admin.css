@@ -1261,3 +1261,75 @@
 .configkit-product-tab .configkit-breadcrumb {
 	margin: 0 0 10px;
 }
+
+/* ---- Dashboard guidance card ---- */
+
+.configkit-guidance {
+	background: linear-gradient( 135deg, #2271b1 0%, #135e96 100% );
+	color: #fff;
+	border-radius: 6px;
+	padding: 24px 28px;
+	margin: 0 0 24px;
+	box-shadow: 0 2px 8px rgba( 0, 0, 0, 0.08 );
+}
+
+.configkit-guidance--ready {
+	background: linear-gradient( 135deg, #2e8b57 0%, #1e6e3a 100% );
+}
+
+.configkit-guidance--issues_present {
+	background: linear-gradient( 135deg, #d63638 0%, #a92526 100% );
+}
+
+.configkit-guidance__heading {
+	margin: 0 0 8px;
+	color: #fff;
+	font-size: 22px;
+	font-weight: 600;
+}
+
+.configkit-guidance__body {
+	margin: 0 0 16px;
+	color: #fff;
+	font-size: 14px;
+	line-height: 1.5;
+	max-width: 760px;
+	opacity: 0.92;
+}
+
+.configkit-guidance__actions {
+	margin: 0;
+}
+
+.configkit-guidance__actions .button-primary.button-hero {
+	background: #fff;
+	color: #1d2327;
+	border-color: #fff;
+	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.1 );
+	font-weight: 600;
+	text-shadow: none;
+}
+
+.configkit-guidance__actions .button-primary.button-hero:hover,
+.configkit-guidance__actions .button-primary.button-hero:focus {
+	background: #f0f0f1;
+	color: #1d2327;
+	border-color: #f0f0f1;
+}
+
+.configkit-dashboard__counts h2 {
+	font-size: 14px;
+	color: #50575e;
+	margin: 4px 0 8px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+@media ( max-width: 768px ) {
+	.configkit-guidance {
+		padding: 18px 18px;
+	}
+	.configkit-guidance__heading {
+		font-size: 18px;
+	}
+}

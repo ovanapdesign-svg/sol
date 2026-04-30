@@ -129,7 +129,10 @@ final class Plugin {
 		global $wpdb;
 
 		return [
-			new DashboardPage( new CountsService( $wpdb ) ),
+			new DashboardPage(
+				new CountsService( $wpdb ),
+				$this->build_system_diagnostics( $wpdb )
+			),
 			new SettingsPage( $this->build_general_settings() ),
 			new ModulesPage(),
 			new LibrariesPage(),
@@ -139,6 +142,23 @@ final class Plugin {
 			new ProductsPage(),
 			new DiagnosticsPage(),
 		];
+	}
+
+	private function build_system_diagnostics( \wpdb $wpdb ): SystemDiagnosticsService {
+		return new SystemDiagnosticsService(
+			new ProductBindingRepository( $wpdb ),
+			new TemplateRepository( $wpdb ),
+			new StepRepository( $wpdb ),
+			new FieldRepository( $wpdb ),
+			new FieldOptionRepository( $wpdb ),
+			new LookupTableRepository( $wpdb ),
+			new LookupCellRepository( $wpdb ),
+			new LibraryRepository( $wpdb ),
+			new LibraryItemRepository( $wpdb ),
+			new ModuleRepository( $wpdb ),
+			new RuleRepository( $wpdb ),
+			new LogRepository( $wpdb )
+		);
 	}
 
 	private function build_rest_router(): Router {
