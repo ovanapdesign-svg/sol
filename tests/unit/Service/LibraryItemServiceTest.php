@@ -248,4 +248,171 @@ final class LibraryItemServiceTest extends TestCase {
 		$this->assertSame( 1, $listing['total'] );
 		$this->assertSame( 'item_a', $listing['items'][0]['item_key'] );
 	}
+
+	// ---- Phase 4.2b.1 — pricing source + bundle validation ----------------
+
+	public function test_create_simple_option_can_save_without_bundle_fields(): void {
+		// item_type defaults to 'simple_option', price_source to
+		// 'configkit'. The Phase 4.2 validator should not reject the
+		// pre-Phase-4.2 happy path.
+		$result = $this->service->create( $this->library_id, $this->valid_item() );
+		$this->assertTrue( $result['ok'], json_encode( $result['errors'] ?? [] ) );
+		$this->assertSame( 'simple_option', $result['record']['item_type'] );
+		$this->assertSame( 'configkit', $result['record']['price_source'] );
+		$this->assertNull( $result['record']['bundle_fixed_price'] );
+		$this->assertNull( $result['record']['cart_behavior'] );
+	}
+
+	public function test_create_woo_source_requires_woo_product_id(): void {
+		$result = $this->service->create( $this->library_id, $this->valid_item( [
+			'price_source'   => 'woo',
+			'woo_product_id' => 0,
+		] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'required', $codes );
+		$fields = array_column( $result['errors'], 'field' );
+		$this->assertContains( 'woo_product_id', $fields );
+	}
+
+	public function test_create_simple_with_bundle_source_is_rejected(): void {
+		$result = $this->service->create( $this->library_id, $this->valid_item( [
+			'price_source' => 'bundle_sum',
+		] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'invalid_for_simple', $codes );
+	}
+
+	public function test_create_bundle_requires_components(): void {
+		// Module needs supports_woo_product_link for bundle
+		// components — re-create with that capability via the stub.
+		$this->modRepo->records[1]['supports_woo_product_link'] = true;
+		$result = $this->service->create( $this->library_id, $this->valid_item( [
+			'item_type'    => 'bundle',
+			'price_source' => 'bundle_sum',
+		] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'empty', $codes );
+	}
+
+	public function test_create_bundle_with_components_succeeds(): void {
+		$this->modRepo->records[1]['supports_woo_product_link'] = true;
+		$result = $this->service->create( $this->library_id, $this->valid_item( [
+			'item_type'    => 'bundle',
+			'price_source' => 'bundle_sum',
+			'bundle_components' => [
+				[ 'component_key' => 'motor',  'woo_product_id' => 123, 'qty' => 1, 'price_source' => 'woo' ],
+				[ 'component_key' => 'remote', 'woo_product_id' => 124, 'qty' => 1, 'price_source' => 'woo' ],
+			],
+		] ) );
+		$this->assertTrue( $result['ok'], json_encode( $result['errors'] ?? [] ) );
+		$this->assertSame( 'bundle', $result['record']['item_type'] );
+		$this->assertSame( 'price_inside_main', $result['record']['cart_behavior'] );
+		$this->assertSame( 'expanded', $result['record']['admin_order_display'] );
+		$this->assertCount( 2, $result['record']['bundle_components'] );
+	}
+
+	public function test_create_bundle_component_with_zero_woo_id_is_rejected(): void {
+		$this->modRepo->records[1]['supports_woo_product_link'] = true;
+		$result = $this->service->create( $this->library_id, $this->valid_item( [
+			'item_type'    => 'bundle',
+			'price_source' => 'bundle_sum',
+			'bundle_components' => [
+				[ 'component_key' => 'phantom', 'woo_product_id' => 0, 'qty' => 1, 'price_source' => 'woo' ],
+			],
+		] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'missing_woo_product_id', $codes );
+	}
+
+	public function test_create_bundle_component_with_invalid_qty_is_rejected(): void {
+		$this->modRepo->records[1]['supports_woo_product_link'] = true;
+		$result = $this->service->create( $this->library_id, $this->valid_item( [
+			'item_type'    => 'bundle',
+			'price_source' => 'bundle_sum',
+			'bundle_components' => [
+				[ 'component_key' => 'a', 'woo_product_id' => 123, 'qty' => 0, 'price_source' => 'woo' ],
+			],
+		] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'invalid_qty', $codes );
+	}
+
+	public function test_create_bundle_component_with_invalid_source_is_rejected(): void {
+		$this->modRepo->records[1]['supports_woo_product_link'] = true;
+		$result = $this->service->create( $this->library_id, $this->valid_item( [
+			'item_type'    => 'bundle',
+			'price_source' => 'bundle_sum',
+			'bundle_components' => [
+				[ 'component_key' => 'a', 'woo_product_id' => 123, 'qty' => 1, 'price_source' => 'bundle_sum' ],
+			],
+		] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'invalid_component_source', $codes );
+	}
+
+	public function test_create_fixed_bundle_requires_bundle_fixed_price(): void {
+		$this->modRepo->records[1]['supports_woo_product_link'] = true;
+		$result = $this->service->create( $this->library_id, $this->valid_item( [
+			'item_type'    => 'bundle',
+			'price_source' => 'fixed_bundle',
+			'bundle_components' => [
+				[ 'component_key' => 'a', 'woo_product_id' => 1, 'qty' => 1, 'price_source' => 'woo' ],
+			],
+			// bundle_fixed_price intentionally missing
+		] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'required', $codes );
+		$fields = array_column( $result['errors'], 'field' );
+		$this->assertContains( 'bundle_fixed_price', $fields );
+	}
+
+	public function test_create_fixed_bundle_with_price_succeeds(): void {
+		$this->modRepo->records[1]['supports_woo_product_link'] = true;
+		$result = $this->service->create( $this->library_id, $this->valid_item( [
+			'item_type'        => 'bundle',
+			'price_source'     => 'fixed_bundle',
+			'bundle_fixed_price' => 8990.0,
+			'bundle_components' => [
+				[ 'component_key' => 'a', 'woo_product_id' => 1, 'qty' => 1, 'price_source' => 'woo' ],
+			],
+		] ) );
+		$this->assertTrue( $result['ok'], json_encode( $result['errors'] ?? [] ) );
+		$this->assertSame( 8990.0, $result['record']['bundle_fixed_price'] );
+	}
+
+	public function test_create_invalid_item_type_is_rejected(): void {
+		$result = $this->service->create( $this->library_id, $this->valid_item( [
+			'item_type' => 'bogus_value',
+		] ) );
+		$this->assertFalse( $result['ok'] );
+		$codes = array_column( $result['errors'], 'code' );
+		$this->assertContains( 'invalid_value', $codes );
+	}
+
+	public function test_simple_item_clears_bundle_fields_on_save(): void {
+		// Owner toggled Package off but their old bundle_fixed_price
+		// is still in the request. Sanitizer must wipe it.
+		$result = $this->service->create( $this->library_id, $this->valid_item( [
+			'item_type'         => 'simple_option',
+			'price_source'      => 'configkit',
+			'bundle_fixed_price' => 8990.0,
+			'cart_behavior'     => 'add_child_lines',
+			'admin_order_display' => 'collapsed',
+			'bundle_components' => [
+				[ 'component_key' => 'leftover', 'woo_product_id' => 1, 'qty' => 1, 'price_source' => 'woo' ],
+			],
+		] ) );
+		$this->assertTrue( $result['ok'], json_encode( $result['errors'] ?? [] ) );
+		$this->assertNull( $result['record']['bundle_fixed_price'] );
+		$this->assertNull( $result['record']['cart_behavior'] );
+		$this->assertNull( $result['record']['admin_order_display'] );
+		$this->assertNull( $result['record']['bundle_components'] );
+	}
 }

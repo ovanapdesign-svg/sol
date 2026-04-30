@@ -161,7 +161,7 @@ class LibraryItemRepository {
 			'price_source'         => (string) ( $row['price_source'] ?? 'configkit' ),
 			'bundle_fixed_price'   => $this->null_or_float( $row['bundle_fixed_price'] ?? null ),
 			'item_type'            => (string) ( $row['item_type'] ?? 'simple_option' ),
-			'bundle_components'    => $this->decode_array( $row['bundle_components_json'] ?? '' ),
+			'bundle_components'    => $this->decode_list_of_objects( $row['bundle_components_json'] ?? '' ),
 			'cart_behavior'        => $this->null_or_string( $row['cart_behavior'] ?? null ),
 			'admin_order_display'  => $this->null_or_string( $row['admin_order_display'] ?? null ),
 			'sale_price'      => $this->null_or_float( $row['sale_price'] ?? null ),
@@ -281,5 +281,24 @@ class LibraryItemRepository {
 		}
 		$decoded = json_decode( $raw, true );
 		return is_array( $decoded ) ? $decoded : [];
+	}
+
+	/**
+	 * Phase 4.2 — decode a JSON list of association arrays
+	 * (`bundle_components_json`). Unlike `decode_array` (filters to
+	 * strings) and `decode_object` (single map), this returns a
+	 * zero-indexed list of objects.
+	 *
+	 * @return list<array<string,mixed>>
+	 */
+	private function decode_list_of_objects( mixed $raw ): array {
+		if ( ! is_string( $raw ) || $raw === '' ) {
+			return [];
+		}
+		$decoded = json_decode( $raw, true );
+		if ( ! is_array( $decoded ) ) {
+			return [];
+		}
+		return array_values( array_filter( $decoded, 'is_array' ) );
 	}
 }
