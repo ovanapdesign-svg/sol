@@ -156,6 +156,9 @@
 			state.view = 'list';
 			clearMessages();
 			render();
+			if ( window.ConfigKit && window.ConfigKit.autoManaged ) {
+				window.ConfigKit.autoManaged.ready( render );
+			}
 		} catch ( err ) {
 			showError( err );
 			state.view = 'list';
@@ -519,7 +522,12 @@
 						t.name
 					)
 				),
-				el( 'td', { 'data-label': 'Technical key' }, el( 'code', null, t.lookup_table_key ) ),
+				el( 'td', { 'data-label': 'Technical key' },
+					el( 'code', null, t.lookup_table_key ),
+					( window.ConfigKit && window.ConfigKit.autoManaged && window.ConfigKit.autoManaged.is( 'lookup_table', t.lookup_table_key ) )
+						? window.ConfigKit.autoManaged.badge()
+						: null
+				),
 				el( 'td', { 'data-label': 'Family' }, t.family_key || '—' ),
 				el( 'td', { 'data-label': 'Match mode' }, matchModeCell( t.match_mode ) ),
 				el( 'td', { 'data-label': 'Unit' }, t.unit ),

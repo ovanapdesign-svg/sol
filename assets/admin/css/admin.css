@@ -2716,3 +2716,19 @@
 	color: #646970;
 	font-size: 12px;
 }
+
+/* Phase 4.3 — Product Builder auto-managed badge in admin lists. */
+.configkit-auto-managed-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	background: #fff5e6;
+	border: 1px solid #f0c97a;
+	color: #8a5a00;
+	border-radius: 999px;
+	font-size: 11px;
+	padding: 1px 8px;
+	margin-left: 6px;
+	font-weight: 500;
+	white-space: nowrap;
+}

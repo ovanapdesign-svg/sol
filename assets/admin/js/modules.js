@@ -182,6 +182,12 @@
 			state.editing = null;
 			clearMessages();
 			render();
+			// Phase 4.3 — re-render once the auto-managed snapshot
+			// arrives so badges appear without forcing a second
+			// page load.
+			if ( window.ConfigKit && window.ConfigKit.autoManaged ) {
+				window.ConfigKit.autoManaged.ready( render );
+			}
 		} catch ( err ) {
 			showError( err );
 			state.view = 'list';
@@ -514,7 +520,12 @@
 							m.name
 						)
 					),
-					el( 'td', { 'data-label': 'Technical key' }, el( 'code', null, m.module_key ) ),
+					el( 'td', { 'data-label': 'Technical key' },
+						el( 'code', null, m.module_key ),
+						( window.ConfigKit && window.ConfigKit.autoManaged && window.ConfigKit.autoManaged.is( 'module', m.module_key ) )
+							? window.ConfigKit.autoManaged.badge()
+							: null
+					),
 					el( 'td', { 'data-label': 'Capabilities' }, capCount + ' / ' + CAPABILITY_FLAGS.length ),
 					el(
 						'td',

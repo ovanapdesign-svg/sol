@@ -214,6 +214,9 @@
 			state.viewing = null;
 			clearMessages();
 			render();
+			if ( window.ConfigKit && window.ConfigKit.autoManaged ) {
+				window.ConfigKit.autoManaged.ready( render );
+			}
 		} catch ( err ) {
 			showError( err );
 			state.view = 'list';
@@ -1009,7 +1012,12 @@
 						t.name
 					)
 				),
-				el( 'td', { 'data-label': 'Technical key' }, el( 'code', null, t.template_key ) ),
+				el( 'td', { 'data-label': 'Technical key' },
+					el( 'code', null, t.template_key ),
+					( window.ConfigKit && window.ConfigKit.autoManaged && window.ConfigKit.autoManaged.is( 'template', t.template_key ) )
+						? window.ConfigKit.autoManaged.badge()
+						: null
+				),
 				el( 'td', { 'data-label': 'Family' }, t.family_key || '—' ),
 				el(
 					'td',

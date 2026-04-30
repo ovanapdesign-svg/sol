@@ -385,24 +385,28 @@ final class Plugin {
 		$router->add( new WooProductsController( new WooProductSearchProvider() ) );
 
 		// Phase 4.3 — Product Builder (Simple Mode) orchestrator.
-		$router->add( new ProductBuilderController( new ProductBuilderService(
-			new TemplateService( $template_repo ),
-			$template_repo,
-			new FamilyService( new FamilyRepository( $wpdb ) ),
-			new FamilyRepository( $wpdb ),
-			new ProductBuilderState(),
-			new AutoManagedRegistry(),
-			new LookupTableService( $lookup_repo, $cell_repo ),
-			$lookup_repo,
-			new LookupCellService( $cell_repo, $lookup_repo ),
-			$cell_repo,
-			new ModuleService( $module_repo ),
-			$module_repo,
-			new LibraryService( $library_repo, $module_repo ),
-			$library_repo,
-			new LibraryItemService( $item_repo, $library_repo, $module_repo ),
-			$item_repo
-		) ) );
+		$pb_registry = new AutoManagedRegistry();
+		$router->add( new ProductBuilderController(
+			new ProductBuilderService(
+				new TemplateService( $template_repo ),
+				$template_repo,
+				new FamilyService( new FamilyRepository( $wpdb ) ),
+				new FamilyRepository( $wpdb ),
+				new ProductBuilderState(),
+				$pb_registry,
+				new LookupTableService( $lookup_repo, $cell_repo ),
+				$lookup_repo,
+				new LookupCellService( $cell_repo, $lookup_repo ),
+				$cell_repo,
+				new ModuleService( $module_repo ),
+				$module_repo,
+				new LibraryService( $library_repo, $module_repo ),
+				$library_repo,
+				new LibraryItemService( $item_repo, $library_repo, $module_repo ),
+				$item_repo
+			),
+			$pb_registry
+		) );
 		return $router;
 	}
 

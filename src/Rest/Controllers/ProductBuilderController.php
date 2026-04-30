@@ -5,6 +5,7 @@ namespace ConfigKit\Rest\Controllers;
 
 use ConfigKit\Admin\ProductTypeRecipes;
 use ConfigKit\Rest\AbstractController;
+use ConfigKit\Service\AutoManagedRegistry;
 use ConfigKit\Service\ProductBuilderService;
 
 /**
@@ -22,13 +23,24 @@ final class ProductBuilderController extends AbstractController {
 
 	private const CAP = 'configkit_manage_products';
 
-	public function __construct( private ProductBuilderService $service ) {}
+	public function __construct(
+		private ProductBuilderService $service,
+		private ?AutoManagedRegistry $registry = null,
+	) {}
 
 	public function register_routes(): void {
 		\register_rest_route( self::NAMESPACE, '/product-builder/recipes', [
 			[
 				'methods'             => 'GET',
 				'callback'            => [ $this, 'list_recipes' ],
+				'permission_callback' => $this->require_cap( self::CAP ),
+			],
+		] );
+
+		\register_rest_route( self::NAMESPACE, '/product-builder/auto-managed', [
+			[
+				'methods'             => 'GET',
+				'callback'            => [ $this, 'list_auto_managed' ],
 				'permission_callback' => $this->require_cap( self::CAP ),
 			],
 		] );
@@ -113,6 +125,11 @@ final class ProductBuilderController extends AbstractController {
 
 	public function list_recipes( \WP_REST_Request $request ): \WP_REST_Response {
 		return $this->ok( [ 'recipes' => ProductTypeRecipes::all() ] );
+	}
+
+	public function list_auto_managed( \WP_REST_Request $request ): \WP_REST_Response {
+		$registry = $this->registry ?? new AutoManagedRegistry();
+		return $this->ok( $registry->snapshot() );
 	}
 
 	public function read_state( \WP_REST_Request $request ): \WP_REST_Response {

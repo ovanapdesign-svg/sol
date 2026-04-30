@@ -149,6 +149,9 @@
 			state.view = 'list';
 			clearMessages();
 			render();
+			if ( window.ConfigKit && window.ConfigKit.autoManaged ) {
+				window.ConfigKit.autoManaged.ready( render );
+			}
 		} catch ( err ) {
 			showError( err );
 			state.view = 'list';
@@ -629,7 +632,12 @@
 							lib.name
 						)
 					),
-					el( 'td', { 'data-label': 'Technical key' }, el( 'code', null, lib.library_key ) ),
+					el( 'td', { 'data-label': 'Technical key' },
+						el( 'code', null, lib.library_key ),
+						( window.ConfigKit && window.ConfigKit.autoManaged && window.ConfigKit.autoManaged.is( 'library', lib.library_key ) )
+							? window.ConfigKit.autoManaged.badge()
+							: null
+					),
 					el( 'td', { 'data-label': 'Brand' }, lib.brand || '—' ),
 					el( 'td', { 'data-label': 'Collection' }, lib.collection || '—' ),
 					el(

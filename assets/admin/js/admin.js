@@ -456,6 +456,71 @@
 		return s;
 	}
 
+	/**
+	 * Phase 4.3 — auto-managed-entity helper.
+	 *
+	 * Loads the Product-Builder auto-managed snapshot once, caches
+	 * it on `window.ConfigKit._autoManaged`, and exposes:
+	 *
+	 *   ConfigKit.autoManaged.ready( cb )    — calls cb() when the
+	 *     snapshot is loaded (or immediately if it already is).
+	 *   ConfigKit.autoManaged.is( type, key) — true when that type +
+	 *     key was created by Product Builder.
+	 *   ConfigKit.autoManaged.badge()        — returns a small DOM
+	 *     element ("🔧 Auto-managed") suitable for list rows.
+	 *
+	 * Snapshot shape:
+	 *   { module: [{key,product_id,role}], library: [...],
+	 *     lookup_table: [...], template: [...] }
+	 */
+	const autoManaged = ( function () {
+		let cache = null;
+		let loadPromise = null;
+		const subscribers = [];
+
+		function ensureLoaded() {
+			if ( cache !== null ) return Promise.resolve( cache );
+			if ( loadPromise ) return loadPromise;
+			loadPromise = request( '/product-builder/auto-managed' )
+				.then( ( data ) => {
+					cache = data && typeof data === 'object' ? data : {};
+					subscribers.splice( 0 ).forEach( ( cb ) => { try { cb(); } catch ( _e ) { /* ignore */ } } );
+					return cache;
+				} )
+				.catch( () => {
+					cache = {};
+					subscribers.splice( 0 ).forEach( ( cb ) => { try { cb(); } catch ( _e ) { /* ignore */ } } );
+					return cache;
+				} );
+			return loadPromise;
+		}
+
+		function ready( cb ) {
+			if ( cache !== null ) { cb(); return; }
+			subscribers.push( cb );
+			ensureLoaded();
+		}
+
+		function is( type, key ) {
+			if ( ! cache ) return false;
+			const list = cache[ type ];
+			if ( ! Array.isArray( list ) ) return false;
+			return list.some( ( row ) => row.key === key );
+		}
+
+		function badge() {
+			const span = document.createElement( 'span' );
+			span.className = 'configkit-auto-managed-badge';
+			span.title = 'Created by Product Builder. Editing here may overwrite when the owner saves the product.';
+			span.textContent = '🔧 Auto-managed';
+			return span;
+		}
+
+		// Trigger background load on init so the first ready() is instant.
+		setTimeout( ensureLoaded, 0 );
+		return { ready, is, badge };
+	} )();
+
 	window.ConfigKit = window.ConfigKit || {};
 	window.ConfigKit.request = request;
 	window.ConfigKit.describeError = describeError;
@@ -466,4 +531,5 @@
 	window.ConfigKit.renderSoftWarnings = renderSoftWarnings;
 	window.ConfigKit.subBreadcrumb = subBreadcrumb;
 	window.ConfigKit.slugify = slugify;
+	window.ConfigKit.autoManaged = autoManaged;
 } )();
