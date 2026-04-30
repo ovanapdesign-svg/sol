@@ -7,27 +7,29 @@
 		return;
 	}
 
+	// [ key, label, help, dashicon ]
 	const CAPABILITY_FLAGS = [
-		[ 'supports_sku', 'Item has a unique code (SKU)', 'A short identifier such as DICK-U171.' ],
-		[ 'supports_image', 'Item has a thumbnail image', 'Small image shown in pickers and carts.' ],
-		[ 'supports_main_image', 'Item has a large hero image', 'Big image shown in the detail view.' ],
-		[ 'supports_price', 'Item has a price', 'Base price stored on the item.' ],
-		[ 'supports_sale_price', 'Item can have a sale price', 'Discounted price alongside the base price.' ],
-		[ 'supports_filters', 'Items can be filtered by tags', 'Tags like "blackout" or "waterproof" used by frontend filters.' ],
-		[ 'supports_compatibility', 'Items have compatibility/rule tags', 'Tags like "io_protocol" used by rules.' ],
-		[ 'supports_price_group', 'Items belong to price groups (I, II, III)', 'Bucket key used by lookup tables to pick a row.' ],
-		[ 'supports_brand', 'Item has a brand name', 'Brand label like "Dickson".' ],
-		[ 'supports_collection', 'Item has a collection name', 'Collection label like "Orchestra Max".' ],
-		[ 'supports_color_family', 'Item has a color family', 'Group label like "blue" or "green" for color filtering.' ],
-		[ 'supports_woo_product_link', 'Item links to a WooCommerce product', 'Used to map items to existing Woo product IDs.' ],
+		[ 'supports_sku', 'Item has a unique code (SKU)', 'A short identifier such as DICK-U171.', 'tag' ],
+		[ 'supports_image', 'Item has a thumbnail image', 'Small image shown in pickers and carts.', 'format-image' ],
+		[ 'supports_main_image', 'Item has a large hero image', 'Big image shown in the detail view.', 'cover-image' ],
+		[ 'supports_price', 'Item has a price', 'Base price stored on the item.', 'money-alt' ],
+		[ 'supports_sale_price', 'Item can have a sale price', 'Discounted price alongside the base price.', 'tickets-alt' ],
+		[ 'supports_filters', 'Items can be filtered by tags', 'Tags like "blackout" or "waterproof" used by frontend filters.', 'filter' ],
+		[ 'supports_compatibility', 'Items have compatibility/rule tags', 'Tags like "io_protocol" used by rules.', 'admin-links' ],
+		[ 'supports_price_group', 'Items belong to price groups (I, II, III)', 'Bucket key used by lookup tables to pick a row.', 'groups' ],
+		[ 'supports_brand', 'Item has a brand name', 'Brand label like "Dickson".', 'awards' ],
+		[ 'supports_collection', 'Item has a collection name', 'Collection label like "Orchestra Max".', 'portfolio' ],
+		[ 'supports_color_family', 'Item has a color family', 'Group label like "blue" or "green" for color filtering.', 'art' ],
+		[ 'supports_woo_product_link', 'Item links to a WooCommerce product', 'Used to map items to existing Woo product IDs.', 'cart' ],
 	];
 
+	// [ key, help, dashicon ]
 	const FIELD_KINDS = [
-		[ 'input',    'Owner-pickable values (radio, dropdown, library cards).' ],
-		[ 'display',  'Read-only values rendered for context, not chosen.' ],
-		[ 'computed', 'Server-computed values (rule output, derived).' ],
-		[ 'addon',    'Optional add-on products that affect price.' ],
-		[ 'lookup',   'Dimensions used by lookup tables (width / height / depth).' ],
+		[ 'input',    'Owner-pickable values (radio, dropdown, library cards).', 'edit' ],
+		[ 'display',  'Read-only values rendered for context, not chosen.',     'info-outline' ],
+		[ 'computed', 'Server-computed values (rule output, derived).',         'calculator' ],
+		[ 'addon',    'Optional add-on products that affect price.',            'cart' ],
+		[ 'lookup',   'Dimensions used by lookup tables (width / height / depth).', 'grid-view' ],
 	];
 
 	// Mirrors src/Admin/ModuleTypePresets.php. The server applies the
@@ -623,11 +625,11 @@
 		] ) );
 
 		// Capabilities
-		const capChecks = CAPABILITY_FLAGS.map( ( [ key, label, help ] ) =>
+		const capChecks = CAPABILITY_FLAGS.map( ( [ key, label, help, icon ] ) =>
 			checkboxField( label, key, !! rec[ key ], ( v ) => {
 				rec[ key ] = v;
 				state.dirty = true;
-			}, help )
+			}, help, icon )
 		);
 		wrap.appendChild( fieldset( 'What items in this module can store', [
 			el(
@@ -638,7 +640,7 @@
 		], { collapsible: true, collapsed: ! isNew } ) );
 
 		// Allowed field kinds
-		const kindChecks = FIELD_KINDS.map( ( [ kind, help ] ) =>
+		const kindChecks = FIELD_KINDS.map( ( [ kind, help, icon ] ) =>
 			checkboxField(
 				kind,
 				'kind_' + kind,
@@ -649,7 +651,8 @@
 					rec.allowed_field_kinds = list;
 					state.dirty = true;
 				},
-				help
+				help,
+				icon
 			)
 		);
 		wrap.appendChild( fieldset( 'Where this module can be used', [
@@ -832,18 +835,22 @@
 		);
 	}
 
-	function checkboxField( label, name, checked, onChange, help ) {
-		const wrap = el(
-			'label',
-			{ class: 'configkit-checkbox' },
-			el( 'input', {
-				type: 'checkbox',
-				checked: !! checked,
-				onChange: ( ev ) => onChange( ev.target.checked ),
-			} ),
-			' ',
-			label
-		);
+	function checkboxField( label, name, checked, onChange, help, icon ) {
+		const checkbox = el( 'input', {
+			type: 'checkbox',
+			checked: !! checked,
+			onChange: ( ev ) => onChange( ev.target.checked ),
+		} );
+		const wrap = el( 'label', { class: 'configkit-checkbox' + ( icon ? ' configkit-checkbox--with-icon' : '' ) } );
+		wrap.appendChild( checkbox );
+		wrap.appendChild( document.createTextNode( ' ' ) );
+		if ( icon ) {
+			const iconClass = 'dashicons dashicons-' + icon
+				+ ' configkit-cap-icon'
+				+ ( checked ? ' configkit-cap-icon--checked' : '' );
+			wrap.appendChild( el( 'span', { class: iconClass, 'aria-hidden': 'true' } ) );
+		}
+		wrap.appendChild( document.createTextNode( label ) );
 		if ( help && window.ConfigKit && window.ConfigKit.help ) {
 			wrap.appendChild( window.ConfigKit.help( help ) );
 		}

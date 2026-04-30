@@ -926,49 +926,49 @@
 			props.push( textField( 'Unique code (SKU)', 'sku', rec.sku || '', ( v ) => {
 				rec.sku = v;
 				state.dirty = true;
-			}, { mono: true, tooltip: 'Unique product code, e.g. DICK-U171.' } ) );
+			}, { mono: true, icon: 'tag', tooltip: 'Unique product code, e.g. DICK-U171.' } ) );
 		}
 		if ( module.supports_image ) {
 			props.push( textField( 'Image URL', 'image_url', rec.image_url || '', ( v ) => {
 				rec.image_url = v;
 				state.dirty = true;
-			}, { tooltip: 'Small thumbnail shown in pickers and carts.' } ) );
+			}, { icon: 'format-image', tooltip: 'Small thumbnail shown in pickers and carts.' } ) );
 		}
 		if ( module.supports_main_image ) {
 			props.push( textField( 'Main image URL', 'main_image_url', rec.main_image_url || '', ( v ) => {
 				rec.main_image_url = v;
 				state.dirty = true;
-			}, { tooltip: 'Large hero image shown in detail views.' } ) );
+			}, { icon: 'cover-image', tooltip: 'Large hero image shown in detail views.' } ) );
 		}
 		if ( module.supports_price ) {
 			props.push( numberField( 'Price (NOK)', 'price', rec.price === '' || rec.price === null ? 0 : rec.price, ( v ) => {
 				rec.price = v;
 				state.dirty = true;
-			}, { allowFloat: true, tooltip: 'Base price in NOK. Use the sale price field for discounts.' } ) );
+			}, { allowFloat: true, icon: 'money-alt', tooltip: 'Base price in NOK. Use the sale price field for discounts.' } ) );
 		}
 		if ( module.supports_sale_price ) {
 			props.push( numberField( 'Sale price (NOK)', 'sale_price', rec.sale_price === '' || rec.sale_price === null ? 0 : rec.sale_price, ( v ) => {
 				rec.sale_price = v;
 				state.dirty = true;
-			}, { allowFloat: true, tooltip: 'Discounted price. Leave 0 / blank for no sale.' } ) );
+			}, { allowFloat: true, icon: 'tickets-alt', tooltip: 'Discounted price. Leave 0 / blank for no sale.' } ) );
 		}
 		if ( module.supports_price_group ) {
 			props.push( textField( 'Price group (I, II, III…)', 'price_group_key', rec.price_group_key || '', ( v ) => {
 				rec.price_group_key = v;
 				state.dirty = true;
-			}, { mono: true, tooltip: 'Bucket key (I, II, III…) used by lookup tables to pick a row.' } ) );
+			}, { mono: true, icon: 'groups', tooltip: 'Bucket key (I, II, III…) used by lookup tables to pick a row.' } ) );
 		}
 		if ( module.supports_color_family ) {
 			props.push( textField( 'Color family', 'color_family', rec.color_family || '', ( v ) => {
 				rec.color_family = v;
 				state.dirty = true;
-			}, { tooltip: 'Group label like "blue" / "green" / "neutral" for color filtering.' } ) );
+			}, { icon: 'art', tooltip: 'Group label like "blue" / "green" / "neutral" for color filtering.' } ) );
 		}
 		if ( module.supports_woo_product_link ) {
 			props.push( numberField( 'Linked Woo product ID', 'woo_product_id', rec.woo_product_id === '' || rec.woo_product_id === null ? 0 : rec.woo_product_id, ( v ) => {
 				rec.woo_product_id = v;
 				state.dirty = true;
-			}, { tooltip: 'WooCommerce product ID this item maps to (for cart line items).' } ) );
+			}, { icon: 'cart', tooltip: 'WooCommerce product ID this item maps to (for cart line items).' } ) );
 		}
 		if ( props.length > 0 ) {
 			wrap.appendChild( fieldset( 'Properties', props ) );
@@ -980,13 +980,13 @@
 			tagFields.push( tagsField( 'Filter tags (comma-separated)', 'filters', rec.filters || [], ( arr ) => {
 				rec.filters = arr;
 				state.dirty = true;
-			} ) );
+			}, { icon: 'filter' } ) );
 		}
 		if ( module.supports_compatibility ) {
 			tagFields.push( tagsField( 'Compatibility tags', 'compatibility', rec.compatibility || [], ( arr ) => {
 				rec.compatibility = arr;
 				state.dirty = true;
-			} ) );
+			}, { icon: 'admin-links' } ) );
 		}
 		if ( tagFields.length > 0 ) {
 			wrap.appendChild( fieldset( 'Tags', tagFields, { collapsible: true, collapsed: true } ) );
@@ -1094,7 +1094,14 @@
 
 	function textField( label, name, value, onChange, opts ) {
 		opts = opts || {};
-		const labelNode = el( 'label', { for: 'cf_' + name }, label );
+		const labelNode = el( 'label', { for: 'cf_' + name } );
+		if ( opts.icon ) {
+			labelNode.appendChild( el( 'span', {
+				class: 'dashicons dashicons-' + opts.icon + ' configkit-cap-icon configkit-cap-icon--checked',
+				'aria-hidden': 'true',
+			} ) );
+		}
+		labelNode.appendChild( document.createTextNode( label ) );
 		if ( opts.tooltip && window.ConfigKit && window.ConfigKit.help ) {
 			labelNode.appendChild( window.ConfigKit.help( opts.tooltip ) );
 		}
@@ -1145,7 +1152,14 @@
 
 	function numberField( label, name, value, onChange, opts ) {
 		opts = opts || {};
-		const labelNode = el( 'label', { for: 'cf_' + name }, label );
+		const labelNode = el( 'label', { for: 'cf_' + name } );
+		if ( opts.icon ) {
+			labelNode.appendChild( el( 'span', {
+				class: 'dashicons dashicons-' + opts.icon + ' configkit-cap-icon configkit-cap-icon--checked',
+				'aria-hidden': 'true',
+			} ) );
+		}
+		labelNode.appendChild( document.createTextNode( label ) );
 		if ( opts.tooltip && window.ConfigKit && window.ConfigKit.help ) {
 			labelNode.appendChild( window.ConfigKit.help( opts.tooltip ) );
 		}
@@ -1184,9 +1198,18 @@
 		return select;
 	}
 
-	function tagsField( label, name, values, onChange ) {
+	function tagsField( label, name, values, onChange, opts ) {
+		opts = opts || {};
 		const list = ( values || [] ).slice();
-		const wrap = el( 'div', { class: 'configkit-field' }, el( 'label', null, label ) );
+		const labelNode = el( 'label', null );
+		if ( opts.icon ) {
+			labelNode.appendChild( el( 'span', {
+				class: 'dashicons dashicons-' + opts.icon + ' configkit-cap-icon configkit-cap-icon--checked',
+				'aria-hidden': 'true',
+			} ) );
+		}
+		labelNode.appendChild( document.createTextNode( label ) );
+		const wrap = el( 'div', { class: 'configkit-field' }, labelNode );
 		const chipBox = el( 'div', { class: 'configkit-chips' } );
 
 		function rerender() {

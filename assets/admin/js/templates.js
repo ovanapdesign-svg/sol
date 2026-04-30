@@ -12,12 +12,12 @@
 	];
 
 	const FIELD_KIND_CHOICES = [
-		{ id: 'enter_number',  label: 'Enter a number', help: 'Numeric input with min/max/step.', axes: { field_kind: 'input',  input_type: 'number',   display_type: 'plain', behavior: 'normal_option', value_source: 'manual_options' } },
-		{ id: 'pick_one',      label: 'Pick one option', help: 'Single choice from a small set.',  axes: { field_kind: 'input',  input_type: 'radio',    display_type: 'plain', behavior: 'normal_option' } },
-		{ id: 'pick_multiple', label: 'Pick multiple options', help: 'Multi-select from a set.',   axes: { field_kind: 'input',  input_type: 'checkbox', display_type: 'plain', behavior: 'normal_option' } },
-		{ id: 'addon',         label: 'Pick a Woo product (add-on)', help: 'Customer attaches a Woo product as an add-on.', axes: { field_kind: 'addon', input_type: 'checkbox', display_type: 'cards', behavior: 'product_addon', value_source: 'woo_category' } },
-		{ id: 'show_info',     label: 'Show information (no input)', help: 'Static heading or info block.', axes: { field_kind: 'display', input_type: null, display_type: 'heading', value_source: 'manual_options', behavior: 'presentation_only' } },
-		{ id: 'lookup',        label: 'Configure as a lookup dimension', help: 'Advanced. Field feeds a lookup table.', axes: { field_kind: 'lookup', input_type: 'number', display_type: 'plain', behavior: 'lookup_dimension', value_source: 'lookup_table' }, advanced: true },
+		{ id: 'enter_number',  icon: 'edit',         label: 'Enter a number', help: 'Numeric input with min/max/step.', axes: { field_kind: 'input',  input_type: 'number',   display_type: 'plain', behavior: 'normal_option', value_source: 'manual_options' } },
+		{ id: 'pick_one',      icon: 'edit',         label: 'Pick one option', help: 'Single choice from a small set.',  axes: { field_kind: 'input',  input_type: 'radio',    display_type: 'plain', behavior: 'normal_option' } },
+		{ id: 'pick_multiple', icon: 'edit',         label: 'Pick multiple options', help: 'Multi-select from a set.',   axes: { field_kind: 'input',  input_type: 'checkbox', display_type: 'plain', behavior: 'normal_option' } },
+		{ id: 'addon',         icon: 'cart',         label: 'Pick a Woo product (add-on)', help: 'Customer attaches a Woo product as an add-on.', axes: { field_kind: 'addon', input_type: 'checkbox', display_type: 'cards', behavior: 'product_addon', value_source: 'woo_category' } },
+		{ id: 'show_info',     icon: 'info-outline', label: 'Show information (no input)', help: 'Static heading or info block.', axes: { field_kind: 'display', input_type: null, display_type: 'heading', value_source: 'manual_options', behavior: 'presentation_only' } },
+		{ id: 'lookup',        icon: 'grid-view',    label: 'Configure as a lookup dimension', help: 'Advanced. Field feeds a lookup table.', axes: { field_kind: 'lookup', input_type: 'number', display_type: 'plain', behavior: 'lookup_dimension', value_source: 'lookup_table' }, advanced: true },
 	];
 
 	const SOURCE_CHOICES_BY_KIND = {
@@ -1662,6 +1662,14 @@
 				class: 'configkit-wizard-choice' + ( isSel ? ' is-selected' : '' ),
 				onClick: () => onPick( choice.id ),
 			},
+			choice.icon
+				? el( 'span', {
+					class: 'dashicons dashicons-' + choice.icon
+						+ ' configkit-cap-icon configkit-wizard-choice__icon'
+						+ ( isSel ? ' configkit-cap-icon--checked' : '' ),
+					'aria-hidden': 'true',
+				} )
+				: null,
 			el( 'strong', null, choice.label ),
 			choice.help ? el( 'span', { class: 'description' }, choice.help ) : null
 		);
