@@ -2097,3 +2097,71 @@
 	color: #b32d2e;
 	font-size: 13px;
 }
+
+/* ================================================================
+ * Phase 4.2b.2 — radio groups for item type, pricing source, cart
+ * behavior, admin order display. UI_LABELS_MAPPING.md §3 / §5 / §7.
+ * ================================================================ */
+
+.configkit-radio-group {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.configkit-radio-group__legend {
+	font-weight: 500;
+	color: #1d2327;
+	margin-bottom: 4px;
+}
+
+.configkit-radio-row {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 10px 12px;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	cursor: pointer;
+	background: #fff;
+	transition: border-color 0.12s, background 0.12s;
+}
+
+.configkit-radio-row:hover {
+	border-color: #2271b1;
+}
+
+.configkit-radio-row.is-checked {
+	border-color: #2271b1;
+	background: #f0f6fc;
+}
+
+.configkit-radio-row input[type="radio"] {
+	margin: 3px 0 0 0;
+	flex: 0 0 auto;
+}
+
+.configkit-radio-row__meta {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	flex: 1 1 auto;
+}
+
+.configkit-radio-row__label {
+	color: #1d2327;
+	font-weight: 500;
+}
+
+.configkit-radio-row__help {
+	color: #50575e;
+	font-size: 12px;
+	line-height: 1.5;
+}
+
+.configkit-price-source-override-note {
+	background: #f6f7f7;
+	border-left: 3px solid #c3c4c7;
+	padding: 8px 10px;
+	margin: 8px 0 0;
+}

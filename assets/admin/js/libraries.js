@@ -264,8 +264,41 @@
 			is_active: true,
 			sort_order: 0,
 			version_hash: '',
+			// Phase 4.2b.2 — pricing source / bundle model. Enum values
+			// stay backend-only; UI labels per UI_LABELS_MAPPING.md.
+			item_type: 'simple_option',
+			price_source: 'configkit',
+			bundle_fixed_price: '',
+			cart_behavior: 'price_inside_main',
+			admin_order_display: 'expanded',
+			bundle_components: [],
 		};
 	}
+
+	// Phase 4.2b.2 — owner-friendly labels per UI_LABELS_MAPPING.md.
+	// The backend enum value is the radio's `value`; the UI never shows it.
+	const PRICE_SOURCE_LABELS = {
+		configkit:        { label: 'Use price entered in ConfigKit',         help: 'Set the price directly in this library item.' },
+		woo:              { label: 'Use WooCommerce product price',          help: 'Read the price from the linked WooCommerce product. The price freezes when customers add to cart.' },
+		product_override: { label: 'Use special price for this Woo product', help: 'Specific Woo products can override this price in their ConfigKit tab.' },
+		bundle_sum:       { label: 'Calculate package price from components', help: 'Sum the prices of each component (each component uses its own price source).' },
+		fixed_bundle:     { label: 'Use fixed package price',                 help: 'Set a fixed price for the whole package, regardless of component prices.' },
+	};
+
+	const ITEM_TYPE_LABELS = {
+		simple_option: { label: 'Single option', help: 'Default — one library item, optional Woo link.' },
+		bundle:        { label: 'Package (multiple products combined)', help: 'Combines multiple Woo products into one selection.' },
+	};
+
+	const CART_BEHAVIOR_LABELS = {
+		price_inside_main: { label: 'Show customer one configured product line', help: 'Customer sees one cart line for the whole configuration. Components still appear in the admin order breakdown.' },
+		add_child_lines:   { label: 'Show each component as a separate cart line', help: 'Customer sees the main product plus each component as separate cart lines.' },
+	};
+
+	const ADMIN_DISPLAY_LABELS = {
+		expanded:  { label: 'Show package components in admin order', help: 'Each component appears as a sub-line under the package in the admin order view.' },
+		collapsed: { label: 'Show only package name in admin order',  help: 'Cleaner admin orders — components are hidden but still tracked internally.' },
+	};
 
 	// ---- Save / Delete ----
 
@@ -350,6 +383,23 @@
 		if ( module.supports_woo_product_link ) payload.woo_product_id = rec.woo_product_id === '' ? null : rec.woo_product_id;
 		if ( module.supports_filters ) payload.filters = rec.filters || [];
 		if ( module.supports_compatibility ) payload.compatibility = rec.compatibility || [];
+
+		// Phase 4.2b.2 — send pricing source + bundle fields.
+		payload.item_type    = rec.item_type    || 'simple_option';
+		payload.price_source = rec.price_source || 'configkit';
+		if ( payload.item_type === 'bundle' ) {
+			payload.bundle_components   = Array.isArray( rec.bundle_components ) ? rec.bundle_components : [];
+			payload.cart_behavior       = rec.cart_behavior       || 'price_inside_main';
+			payload.admin_order_display = rec.admin_order_display || 'expanded';
+			payload.bundle_fixed_price  = ( payload.price_source === 'fixed_bundle' && rec.bundle_fixed_price !== '' && rec.bundle_fixed_price !== null )
+				? rec.bundle_fixed_price
+				: null;
+		} else {
+			payload.bundle_components   = [];
+			payload.cart_behavior       = null;
+			payload.admin_order_display = null;
+			payload.bundle_fixed_price  = null;
+		}
 
 		let success = false;
 		try {
@@ -897,6 +947,36 @@
 
 		if ( state.message ) wrap.appendChild( messageBanner( state.message ) );
 
+		// Phase 4.2b.2 — Item type picker. Lives at the very top so the
+		// owner picks Single / Package before filling out anything else;
+		// the rest of the form filters its fields off this choice.
+		// Spec: UI_LABELS_MAPPING.md §3.
+		wrap.appendChild( fieldset( 'Item type', [
+			radioGroup(
+				'Choose how this library item behaves',
+				'item_type',
+				rec.item_type || 'simple_option',
+				[
+					[ 'simple_option', ITEM_TYPE_LABELS.simple_option.label, ITEM_TYPE_LABELS.simple_option.help ],
+					[ 'bundle',        ITEM_TYPE_LABELS.bundle.label,        ITEM_TYPE_LABELS.bundle.help ],
+				],
+				( v ) => {
+					rec.item_type = v;
+					// When toggling type, snap price_source to a value
+					// that is valid under the new type. Spec: validation
+					// in LibraryItemService::validate (Phase 4.2b.1).
+					if ( v === 'bundle' && [ 'configkit', 'woo', 'product_override' ].includes( rec.price_source ) ) {
+						rec.price_source = 'bundle_sum';
+					}
+					if ( v === 'simple_option' && [ 'bundle_sum', 'fixed_bundle' ].includes( rec.price_source ) ) {
+						rec.price_source = 'configkit';
+					}
+					state.dirty = true;
+					render();
+				}
+			),
+		] ) );
+
 		// Basics
 		wrap.appendChild( fieldset( 'Basics', [
 			textField( 'Label', 'label', rec.label, ( v ) => {
@@ -907,7 +987,7 @@
 					render();
 				}
 			} ),
-			textField( 'item_key', 'item_key', rec.item_key, ( v ) => {
+			textField( 'Technical key', 'item_key', rec.item_key, ( v ) => {
 				rec.item_key = v;
 				state.dirty = true;
 			}, { mono: true } ),
@@ -920,6 +1000,62 @@
 				state.dirty = true;
 			} ),
 		] ) );
+
+		// Phase 4.2b.2 — Pricing source picker. The five-value enum
+		// becomes a filtered radio group: simple items see configkit /
+		// woo (and product_override read-only when set externally);
+		// packages see bundle_sum / fixed_bundle. Spec:
+		// UI_LABELS_MAPPING.md §2 + PRICING_SOURCE_MODEL.md §2.
+		const isBundle = rec.item_type === 'bundle';
+		const priceChoices = isBundle
+			? [
+				[ 'bundle_sum',   PRICE_SOURCE_LABELS.bundle_sum.label,   PRICE_SOURCE_LABELS.bundle_sum.help ],
+				[ 'fixed_bundle', PRICE_SOURCE_LABELS.fixed_bundle.label, PRICE_SOURCE_LABELS.fixed_bundle.help ],
+			]
+			: [
+				[ 'configkit', PRICE_SOURCE_LABELS.configkit.label, PRICE_SOURCE_LABELS.configkit.help ],
+				[ 'woo',       PRICE_SOURCE_LABELS.woo.label,       PRICE_SOURCE_LABELS.woo.help ],
+			];
+		// product_override is read-only — render an inert row when it's
+		// the current value (a binding has applied it externally).
+		const showProductOverrideRow = ! isBundle && rec.price_source === 'product_override';
+
+		const pricingChildren = [
+			radioGroup(
+				'How should the price be calculated?',
+				'price_source',
+				rec.price_source || ( isBundle ? 'bundle_sum' : 'configkit' ),
+				priceChoices,
+				( v ) => {
+					rec.price_source = v;
+					if ( v !== 'fixed_bundle' ) rec.bundle_fixed_price = '';
+					state.dirty = true;
+					render();
+				}
+			),
+		];
+		if ( showProductOverrideRow ) {
+			pricingChildren.push( el(
+				'p',
+				{ class: 'description configkit-price-source-override-note' },
+				PRICE_SOURCE_LABELS.product_override.label + ' — ' + PRICE_SOURCE_LABELS.product_override.help
+			) );
+		}
+		// Fixed package price field — visible only when the owner
+		// picked the fixed-bundle source.
+		if ( isBundle && rec.price_source === 'fixed_bundle' ) {
+			pricingChildren.push( numberField(
+				'Fixed package price (kr)',
+				'bundle_fixed_price',
+				rec.bundle_fixed_price === '' || rec.bundle_fixed_price === null ? 0 : rec.bundle_fixed_price,
+				( v ) => {
+					rec.bundle_fixed_price = v;
+					state.dirty = true;
+				},
+				{ allowFloat: true, icon: 'money-alt', tooltip: 'Customer sees this price for the whole package.' }
+			) );
+		}
+		wrap.appendChild( fieldset( 'Pricing', pricingChildren ) );
 
 		// Capability-conditional fields. Each tooltip explains the term
 		// for owners who don't think in technical capabilities.
@@ -942,7 +1078,12 @@
 				state.dirty = true;
 			}, { icon: 'cover-image', tooltip: 'Large hero image shown in detail views.' } ) );
 		}
-		if ( module.supports_price ) {
+		// Phase 4.2b.2 — the Price field belongs to the "ConfigKit"
+		// pricing source. Hidden when the owner picked a different
+		// source (woo / bundle_sum / fixed_bundle); in those modes
+		// price comes from elsewhere and a stale number here would be
+		// confusing.
+		if ( module.supports_price && rec.price_source === 'configkit' ) {
 			props.push( numberField( 'Price (NOK)', 'price', rec.price === '' || rec.price === null ? 0 : rec.price, ( v ) => {
 				rec.price = v;
 				state.dirty = true;
@@ -974,6 +1115,38 @@
 		}
 		if ( props.length > 0 ) {
 			wrap.appendChild( fieldset( 'Properties', props ) );
+		}
+
+		// Phase 4.2b.2 — bundle-only behavior toggles. Hidden entirely
+		// for simple items; the saved value stays at default until the
+		// owner toggles the item to a package. Specs: UI_LABELS_MAPPING
+		// §5 (cart) + §7 (admin order).
+		if ( isBundle ) {
+			wrap.appendChild( fieldset( 'Cart display', [
+				radioGroup(
+					'How should the package appear in the cart?',
+					'cart_behavior',
+					rec.cart_behavior || 'price_inside_main',
+					[
+						[ 'price_inside_main', CART_BEHAVIOR_LABELS.price_inside_main.label, CART_BEHAVIOR_LABELS.price_inside_main.help ],
+						[ 'add_child_lines',   CART_BEHAVIOR_LABELS.add_child_lines.label,   CART_BEHAVIOR_LABELS.add_child_lines.help ],
+					],
+					( v ) => { rec.cart_behavior = v; state.dirty = true; render(); }
+				),
+			] ) );
+
+			wrap.appendChild( fieldset( 'Admin order display', [
+				radioGroup(
+					'How should this package appear inside admin orders?',
+					'admin_order_display',
+					rec.admin_order_display || 'expanded',
+					[
+						[ 'expanded',  ADMIN_DISPLAY_LABELS.expanded.label,  ADMIN_DISPLAY_LABELS.expanded.help ],
+						[ 'collapsed', ADMIN_DISPLAY_LABELS.collapsed.label, ADMIN_DISPLAY_LABELS.collapsed.help ],
+					],
+					( v ) => { rec.admin_order_display = v; state.dirty = true; render(); }
+				),
+			] ) );
 		}
 
 		// Tags
@@ -1184,6 +1357,38 @@
 				},
 			} )
 		);
+	}
+
+	/**
+	 * Phase 4.2b.2 — vertical radio group with helper text under the
+	 * selected option. `choices` is a list of [value, label, helpText].
+	 * Renders nothing about the underlying enum value to the owner —
+	 * just the labels — per UI_LABELS_MAPPING.md.
+	 */
+	function radioGroup( legend, name, value, choices, onChange ) {
+		const group = el( 'div', { class: 'configkit-radio-group', role: 'radiogroup', 'aria-labelledby': 'cf_' + name + '_legend' } );
+		group.appendChild( el( 'div', { class: 'configkit-radio-group__legend', id: 'cf_' + name + '_legend' }, legend ) );
+		choices.forEach( ( [ v, label, helpText ] ) => {
+			const id = 'cf_' + name + '_' + v;
+			const checked = v === value;
+			const row = el( 'label', { class: 'configkit-radio-row' + ( checked ? ' is-checked' : '' ), for: id } );
+			row.appendChild( el( 'input', {
+				id,
+				type: 'radio',
+				name: 'cf_' + name,
+				value: v,
+				checked,
+				onChange: ( ev ) => { if ( ev.target.checked ) onChange( v ); },
+			} ) );
+			const meta = el( 'span', { class: 'configkit-radio-row__meta' } );
+			meta.appendChild( el( 'span', { class: 'configkit-radio-row__label' }, label ) );
+			if ( helpText ) {
+				meta.appendChild( el( 'span', { class: 'configkit-radio-row__help' }, helpText ) );
+			}
+			row.appendChild( meta );
+			group.appendChild( row );
+		} );
+		return group;
 	}
 
 	function selectField( value, choices, onChange, disabled ) {
