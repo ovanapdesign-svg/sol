@@ -435,3 +435,72 @@ Sign-off requires:
 - [ ] Edge cases (§16) accepted.
 
 After approval, Phase 2 may implement PricingEngine.
+
+---
+
+## 18. Pricing source resolution (Phase 4.2)
+
+The original PRICING_CONTRACT (§4 / §5 / §9) treats per-field
+pricing as a flat amount × quantity / area. From Phase 4.2 onward
+the per-field amount is itself the output of a small resolver that
+walks the item's `price_source` enum:
+
+> For library-backed fields, `priceSourceResolver(item)` replaces
+> the direct read of `library_item.price` in §5's formula. Lookup
+> dimensions, manual options, and addon fields are unchanged.
+
+See `PRICING_SOURCE_MODEL.md` for:
+
+- §2 — the five-value `price_source` enum
+- §3 — the deterministic resolution ladder (binding override →
+  item.price_source → sale / surcharge / discount / floor)
+- §5 — the `PriceProvider` adapter contract that keeps
+  `PricingEngine` pure (zero `wc_get_product()` calls inside
+  `src/Engines/`)
+- §6 — VAT-mode interaction across sources
+- §8 — required schema additions on `wp_configkit_library_items`
+
+Engineering implication: `PricingEngine`'s constructor signature
+changes from
+
+```
+new PricingEngine( LookupEngine $lookup )
+```
+
+to
+
+```
+new PricingEngine( LookupEngine $lookup, PriceProvider $price_provider )
+```
+
+The provider is injected by the Phase 4.2 cart wiring; tests
+provide a stub.
+
+---
+
+## 19. Bundle pricing (Phase 4.2)
+
+Bundles are composite library items whose resolved price is
+computed from component prices (`bundle_sum`) or a single fixed
+price (`fixed_bundle`). See `BUNDLE_MODEL.md` for:
+
+- §2 — `item_type = 'simple' | 'bundle'`
+- §3 — bundle component shape (`component_key`, `woo_product_id`,
+  `qty`, `price_source`, `price`, `stock_behavior`,
+  `label_in_cart`)
+- §4 — bundle pricing rules (`bundle_sum` walks components honouring
+  each component's `price_source`; `fixed_bundle` uses the bundle
+  item's `bundle_fixed_price`)
+- §5 — `cart_behavior` (`price_inside_main` default vs
+  `add_child_lines`)
+- §6 — `stock_behavior` per component; rejection on
+  `bundle.component_oos`
+- §7 — `admin_order_display` (`expanded` default)
+- §10 q2 — open question on `fixed_bundle` reconciliation across
+  child cart lines
+
+Engineering implication: `priceSourceResolver` recurses one level
+into `bundle_components_json` for `bundle_sum` items and emits a
+`pricing.bundle_recursion_exceeded` warning if asked to nest deeper.
+Recursion depth is capped at 2 in v1 (PRICING_SOURCE_MODEL §3 +
+BUNDLE_MODEL §10 q1).

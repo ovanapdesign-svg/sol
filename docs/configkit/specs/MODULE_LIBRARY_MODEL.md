@@ -415,3 +415,53 @@ Sign-off requires:
 
 After approval of all four Batch 1 documents (TARGET_ARCHITECTURE,
 DATA_MODEL, FIELD_MODEL, MODULE_LIBRARY_MODEL), proceed to Batch 2.
+
+---
+
+## 17. Item type + price source (Phase 4.2)
+
+Library items grow two orthogonal fields in Phase 4.2 that were
+previously implicit:
+
+### 17.1 `item_type`
+
+| Value     | Meaning                                                                                        |
+| --------- | ---------------------------------------------------------------------------------------------- |
+| `simple`  | Standalone option. Default for every existing item. Matches the current shape exactly.         |
+| `bundle`  | Composite item that maps to multiple Woo products under a single customer-visible label.       |
+
+Validation (server-side, on item create / update):
+
+- `bundle` items MUST carry a `bundle_components_json` array with at
+  least one component (BUNDLE_MODEL §3).
+- Each component MUST reference a real, published Woo product (no
+  trashed / deleted IDs).
+- A bundle component cannot itself be a `bundle` (no recursion in
+  v1 — BUNDLE_MODEL §10 q1).
+- `simple` items ignore bundle-only fields; the validator nulls them
+  out on save so the schema stays clean.
+
+See `BUNDLE_MODEL.md` for the full bundle model.
+
+### 17.2 `price_source`
+
+`price_source` is **per-item**, not per-module. Modules no longer
+constrain which `price_source` values their items can use — the
+constraint is local to the item:
+
+- `simple` items may use `configkit` (default), `woo`, or
+  `product_override` (set by the resolver, never authored).
+- `bundle` items may use `bundle_sum` or `fixed_bundle` only.
+- Validation is enforced by `LibraryItemService` per
+  PRICING_SOURCE_MODEL §2.
+
+This means a single module (e.g. `motors`) can hold items whose
+prices come from different sources — one motor priced from Woo's
+own table, another priced via a ConfigKit-side number, a third
+shipped as a bundle. The `module.supports_*` capability flags only
+gate which fields are *visible* on the library item form, not how
+prices are sourced.
+
+Modules created before Phase 4.2 keep working unchanged: their
+existing items default to `item_type = 'simple'` /
+`price_source = 'configkit'`, exactly the behaviour they already had.

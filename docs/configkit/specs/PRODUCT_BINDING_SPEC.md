@@ -497,3 +497,128 @@ Sign-off requires:
 
 After approval, Phase 3 Products binding chunk may be implemented
 following this spec as the source of truth.
+
+---
+
+## 18. Per-item price overrides (Phase 4.2)
+
+A binding can override the price of one or more library items
+**for THIS Woo product only**. The override wins the resolution
+ladder per `PRICING_SOURCE_MODEL.md §3`, regardless of what the
+library item declares.
+
+### 18.1 Storage
+
+Stored as a single post meta key on the bound Woo product:
+
+```
+_configkit_item_price_overrides
+```
+
+Value shape (JSON):
+
+```json
+{
+  "motors_somfy:somfy_io_premium": {
+    "price": 4200.00,
+    "price_source": "product_override",
+    "reason": "Volume discount agreement"
+  },
+  "textiles_dickson:orchestra_max_blue": {
+    "price": 0.00,
+    "price_source": "product_override",
+    "reason": "Free with motor purchase"
+  }
+}
+```
+
+Keyed by `library_key:item_key`. Each entry carries:
+
+| Field          | Type        | Notes                                                                            |
+| -------------- | ----------- | -------------------------------------------------------------------------------- |
+| `price`        | decimal ≥ 0 | Required. The override is what flows into PricingEngine for this binding.        |
+| `price_source` | string      | Always `'product_override'`. Stored for round-trip clarity; not owner-editable.   |
+| `reason`       | string      | Optional, free-text. Surfaced in the binding admin UI and Diagnostics.           |
+
+### 18.2 UI
+
+A new "Item price overrides" section appears in the binding admin
+between section 5 (Pricing overrides) and section 6 (Visibility /
+locking). For each library item that's reachable from the bound
+template's library-backed fields, the owner can:
+
+- See the resolved default price (and which source it came from —
+  `library`, `woo`, `bundle_*`).
+- Provide an override price, with optional reason.
+- Clear the override (returns to the library item's own resolution).
+
+Items with `item_type = 'bundle'` show their component breakdown
+read-only beneath the override input so the owner understands what
+they're overriding.
+
+### 18.3 Bundle override semantics
+
+When the override targets a bundle item:
+
+- `cart_behavior = 'price_inside_main'` → the override is the new
+  fixed price for the bundle. Component prices are still computed
+  for stock / order display, but the customer sees the override.
+- `cart_behavior = 'add_child_lines'` → the override wins the
+  cart-line price for the configurable product, but each child
+  component still bills at its own resolved price. The reconciliation
+  rule (BUNDLE_MODEL §10 q2) applies after the override is applied.
+
+### 18.4 Diagnostics
+
+ProductDiagnosticsService gains a new check:
+
+- `item_overrides_valid` (critical) — every key in
+  `_configkit_item_price_overrides` resolves to a real, active
+  library item that's reachable from the bound template. Stale
+  overrides referencing deleted items are flagged with a precise
+  fix link to this section.
+
+---
+
+## 19. Allowed item-level rules
+
+By default every library item reachable from the bound template
+can be overridden. Owners who want a tighter contract can pin the
+override surface via the binding's existing
+`allowed_sources[field_key].allowed_items` list (PRODUCT_BINDING §6):
+items NOT in that list cannot be overridden, and the admin UI
+hides their input rows.
+
+This is purely a UI guard — the resolver still respects whatever's
+stored in the JSON, so older bindings with overrides on now-disallowed
+items continue to work until the owner clears them. Diagnostics
+flags such drift as `item_overrides_disallowed` (warning).
+
+---
+
+## 20. Phase 4.2 deliverables
+
+For the Phase 4.2 implementation chunk these specs must land
+together:
+
+- [ ] `0017_extend_library_items_pricing_bundles.php` migration
+  adding the six columns enumerated in DATA_MODEL §3.3 / Phase 4.2
+  additions block.
+- [ ] `_configkit_item_price_overrides` post meta key in
+  PRODUCT_BINDING §18 storage.
+- [ ] `PriceProvider` interface + production binding under
+  `src/Frontend/`.
+- [ ] `PricingEngine` constructor takes the new dependency; existing
+  pure-PHP tests gain a stub provider.
+- [ ] `LibraryItemService` validates `item_type` / `price_source` /
+  `bundle_components_json` per the new specs.
+- [ ] Library item admin form gets the new fields (item type select,
+  bundle components editor, price source dropdown) per
+  MODULE_LIBRARY_MODEL.
+- [ ] Binding admin §18 UI for per-item overrides.
+- [ ] DiagnosticsService gains the new checks
+  `item_overrides_valid` (critical) and `item_overrides_disallowed`
+  (warning).
+- [ ] Cart integration picks up bundle components per
+  `cart_behavior` and emits stock decrements per `stock_behavior`.
+- [ ] Order admin honours `admin_order_display`.
