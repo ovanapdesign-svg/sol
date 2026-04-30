@@ -8,21 +8,27 @@
 	}
 
 	const CAPABILITY_FLAGS = [
-		[ 'supports_sku', 'SKU' ],
-		[ 'supports_image', 'Thumbnail image' ],
-		[ 'supports_main_image', 'Hero / main image' ],
-		[ 'supports_price', 'Price' ],
-		[ 'supports_sale_price', 'Sale price' ],
-		[ 'supports_filters', 'Filter tags' ],
-		[ 'supports_compatibility', 'Compatibility tags' ],
-		[ 'supports_price_group', 'Price group' ],
-		[ 'supports_brand', 'Brand' ],
-		[ 'supports_collection', 'Collection' ],
-		[ 'supports_color_family', 'Color family' ],
-		[ 'supports_woo_product_link', 'Linked Woo product' ],
+		[ 'supports_sku', 'SKU', 'Each item has a unique product code (e.g. DICK-U171).' ],
+		[ 'supports_image', 'Thumbnail image', 'Items can have a small thumbnail image.' ],
+		[ 'supports_main_image', 'Hero / main image', 'Items can have a large hero/main image for detail views.' ],
+		[ 'supports_price', 'Price', 'Items have a base price (numeric).' ],
+		[ 'supports_sale_price', 'Sale price', 'Items can have a discounted sale price alongside the base price.' ],
+		[ 'supports_filters', 'Filter tags', 'Items can be filtered by tags such as "blackout" or "waterproof".' ],
+		[ 'supports_compatibility', 'Compatibility tags', 'Items have compatibility tags (e.g. "io_protocol", "z_wave").' ],
+		[ 'supports_price_group', 'Price group', 'Items belong to a price group (e.g. I, II, III) used by lookup tables.' ],
+		[ 'supports_brand', 'Brand', 'Items have a brand label (e.g. "Dickson").' ],
+		[ 'supports_collection', 'Collection', 'Items belong to a collection (e.g. "Orchestra Max").' ],
+		[ 'supports_color_family', 'Color family', 'Items have a color family (e.g. "blue", "green") for grouping in pickers.' ],
+		[ 'supports_woo_product_link', 'Linked Woo product', 'Each item links to an existing WooCommerce product.' ],
 	];
 
-	const FIELD_KINDS = [ 'input', 'display', 'computed', 'addon', 'lookup' ];
+	const FIELD_KINDS = [
+		[ 'input',    'Owner-pickable values (radio, dropdown, library cards).' ],
+		[ 'display',  'Read-only values rendered for context, not chosen.' ],
+		[ 'computed', 'Server-computed values (rule output, derived).' ],
+		[ 'addon',    'Optional add-on products that affect price.' ],
+		[ 'lookup',   'Dimensions used by lookup tables (width / height / depth).' ],
+	];
 
 	const state = {
 		view: 'loading', // 'list' | 'form' | 'loading'
@@ -464,11 +470,11 @@
 		] ) );
 
 		// Capabilities
-		const capChecks = CAPABILITY_FLAGS.map( ( [ key, label ] ) =>
+		const capChecks = CAPABILITY_FLAGS.map( ( [ key, label, help ] ) =>
 			checkboxField( label, key, !! rec[ key ], ( v ) => {
 				rec[ key ] = v;
 				state.dirty = true;
-			} )
+			}, help )
 		);
 		wrap.appendChild( fieldset( 'Capabilities', [
 			el(
@@ -479,7 +485,7 @@
 		] ) );
 
 		// Allowed field kinds
-		const kindChecks = FIELD_KINDS.map( ( kind ) =>
+		const kindChecks = FIELD_KINDS.map( ( [ kind, help ] ) =>
 			checkboxField(
 				kind,
 				'kind_' + kind,
@@ -489,7 +495,8 @@
 					if ( v ) list.push( kind );
 					rec.allowed_field_kinds = list;
 					state.dirty = true;
-				}
+				},
+				help
 			)
 		);
 		wrap.appendChild( fieldset( 'Allowed field kinds', [
@@ -654,8 +661,8 @@
 		);
 	}
 
-	function checkboxField( label, name, checked, onChange ) {
-		return el(
+	function checkboxField( label, name, checked, onChange, help ) {
+		const wrap = el(
 			'label',
 			{ class: 'configkit-checkbox' },
 			el( 'input', {
@@ -666,6 +673,10 @@
 			' ',
 			label
 		);
+		if ( help && window.ConfigKit && window.ConfigKit.help ) {
+			wrap.appendChild( window.ConfigKit.help( help ) );
+		}
+		return wrap;
 	}
 
 	function numberField( label, name, value, onChange ) {

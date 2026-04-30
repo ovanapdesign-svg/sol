@@ -520,15 +520,15 @@
 			selectFieldRow( 'Unit', 'unit', UNITS, rec.unit, ( v ) => {
 				rec.unit = v;
 				state.dirty = true;
-			} ),
+			}, 'Measurement unit for width / height in this table.' ),
 			selectFieldRow( 'Match mode', 'match_mode', MATCH_MODES, rec.match_mode, ( v ) => {
 				rec.match_mode = v;
 				state.dirty = true;
-			} ),
+			}, 'How the engine picks a cell:\n• exact — width and height must match a row exactly.\n• round_up — pick the smallest cell that is ≥ both dimensions.\n• nearest — pick the closest cell by absolute distance.' ),
 			checkboxField( 'Supports price group', 'supports_price_group', !! rec.supports_price_group, ( v ) => {
 				rec.supports_price_group = v;
 				state.dirty = true;
-			} ),
+			}, 'Enables a third axis (e.g. fabric grade I / II / III) so the same width/height can resolve to different prices.' ),
 			fieldErrors( 'supports_price_group' ),
 		] ) );
 
@@ -647,15 +647,15 @@
 			selectFieldRow( 'Unit', 'unit', UNITS, editForm.unit, ( v ) => {
 				editForm.unit = v;
 				state.dirty = true;
-			} ),
+			}, 'Measurement unit for width / height in this table.' ),
 			selectFieldRow( 'Match mode', 'match_mode', MATCH_MODES, editForm.match_mode, ( v ) => {
 				editForm.match_mode = v;
 				state.dirty = true;
-			} ),
+			}, 'How the engine picks a cell:\n• exact — width and height must match a row exactly.\n• round_up — pick the smallest cell that is ≥ both dimensions.\n• nearest — pick the closest cell by absolute distance.' ),
 			checkboxField( 'Supports price group', 'supports_price_group', !! editForm.supports_price_group, ( v ) => {
 				editForm.supports_price_group = v;
 				state.dirty = true;
-			} ),
+			}, 'Enables a third axis (e.g. fabric grade I / II / III) so the same width/height can resolve to different prices.' ),
 			fieldErrors( 'supports_price_group' ),
 		] ) );
 		meta.appendChild( fieldset( 'Status', [
@@ -810,8 +810,8 @@
 		);
 	}
 
-	function checkboxField( label, name, checked, onChange ) {
-		return el(
+	function checkboxField( label, name, checked, onChange, help ) {
+		const wrap = el(
 			'label',
 			{ class: 'configkit-checkbox' },
 			el( 'input', {
@@ -822,6 +822,10 @@
 			' ',
 			label
 		);
+		if ( help && window.ConfigKit && window.ConfigKit.help ) {
+			wrap.appendChild( window.ConfigKit.help( help ) );
+		}
+		return wrap;
 	}
 
 	function numberFieldRow( label, name, value, onChange, opts ) {
@@ -847,7 +851,7 @@
 		);
 	}
 
-	function selectFieldRow( label, name, choices, value, onChange ) {
+	function selectFieldRow( label, name, choices, value, onChange, help ) {
 		const select = el( 'select', {
 			id: 'cf_' + name,
 			onChange: ( ev ) => onChange( ev.target.value ),
@@ -857,10 +861,14 @@
 			if ( v === value ) o.selected = true;
 			select.appendChild( o );
 		} );
+		const labelNode = el( 'label', { for: 'cf_' + name }, label );
+		if ( help && window.ConfigKit && window.ConfigKit.help ) {
+			labelNode.appendChild( window.ConfigKit.help( help ) );
+		}
 		return el(
 			'div',
 			{ class: 'configkit-field configkit-field--inline' },
-			el( 'label', { for: 'cf_' + name }, label ),
+			labelNode,
 			select
 		);
 	}

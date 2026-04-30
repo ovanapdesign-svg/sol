@@ -882,55 +882,56 @@
 			} ),
 		] ) );
 
-		// Capability-conditional fields
+		// Capability-conditional fields. Each tooltip explains the term
+		// for owners who don't think in technical capabilities.
 		const props = [];
 		if ( module.supports_sku ) {
 			props.push( textField( 'SKU', 'sku', rec.sku || '', ( v ) => {
 				rec.sku = v;
 				state.dirty = true;
-			}, { mono: true } ) );
+			}, { mono: true, tooltip: 'Unique product code, e.g. DICK-U171.' } ) );
 		}
 		if ( module.supports_image ) {
 			props.push( textField( 'Image URL', 'image_url', rec.image_url || '', ( v ) => {
 				rec.image_url = v;
 				state.dirty = true;
-			} ) );
+			}, { tooltip: 'Small thumbnail shown in pickers and carts.' } ) );
 		}
 		if ( module.supports_main_image ) {
 			props.push( textField( 'Main image URL', 'main_image_url', rec.main_image_url || '', ( v ) => {
 				rec.main_image_url = v;
 				state.dirty = true;
-			} ) );
+			}, { tooltip: 'Large hero image shown in detail views.' } ) );
 		}
 		if ( module.supports_price ) {
 			props.push( numberField( 'Price (NOK)', 'price', rec.price === '' || rec.price === null ? 0 : rec.price, ( v ) => {
 				rec.price = v;
 				state.dirty = true;
-			}, { allowFloat: true } ) );
+			}, { allowFloat: true, tooltip: 'Base price in NOK. Use the sale price field for discounts.' } ) );
 		}
 		if ( module.supports_sale_price ) {
 			props.push( numberField( 'Sale price (NOK)', 'sale_price', rec.sale_price === '' || rec.sale_price === null ? 0 : rec.sale_price, ( v ) => {
 				rec.sale_price = v;
 				state.dirty = true;
-			}, { allowFloat: true } ) );
+			}, { allowFloat: true, tooltip: 'Discounted price. Leave 0 / blank for no sale.' } ) );
 		}
 		if ( module.supports_price_group ) {
 			props.push( textField( 'Price group key', 'price_group_key', rec.price_group_key || '', ( v ) => {
 				rec.price_group_key = v;
 				state.dirty = true;
-			}, { mono: true } ) );
+			}, { mono: true, tooltip: 'Bucket key (I, II, III…) used by lookup tables to pick a row.' } ) );
 		}
 		if ( module.supports_color_family ) {
 			props.push( textField( 'Color family', 'color_family', rec.color_family || '', ( v ) => {
 				rec.color_family = v;
 				state.dirty = true;
-			} ) );
+			}, { tooltip: 'Group label like "blue" / "green" / "neutral" for color filtering.' } ) );
 		}
 		if ( module.supports_woo_product_link ) {
 			props.push( numberField( 'Linked Woo product ID', 'woo_product_id', rec.woo_product_id === '' || rec.woo_product_id === null ? 0 : rec.woo_product_id, ( v ) => {
 				rec.woo_product_id = v;
 				state.dirty = true;
-			} ) );
+			}, { tooltip: 'WooCommerce product ID this item maps to (for cart line items).' } ) );
 		}
 		if ( props.length > 0 ) {
 			wrap.appendChild( fieldset( 'Properties', props ) );
@@ -1043,10 +1044,14 @@
 
 	function textField( label, name, value, onChange, opts ) {
 		opts = opts || {};
+		const labelNode = el( 'label', { for: 'cf_' + name }, label );
+		if ( opts.tooltip && window.ConfigKit && window.ConfigKit.help ) {
+			labelNode.appendChild( window.ConfigKit.help( opts.tooltip ) );
+		}
 		return el(
 			'div',
 			{ class: 'configkit-field' },
-			el( 'label', { for: 'cf_' + name }, label ),
+			labelNode,
 			el( 'input', {
 				id: 'cf_' + name,
 				type: 'text',
@@ -1090,10 +1095,14 @@
 
 	function numberField( label, name, value, onChange, opts ) {
 		opts = opts || {};
+		const labelNode = el( 'label', { for: 'cf_' + name }, label );
+		if ( opts.tooltip && window.ConfigKit && window.ConfigKit.help ) {
+			labelNode.appendChild( window.ConfigKit.help( opts.tooltip ) );
+		}
 		return el(
 			'div',
 			{ class: 'configkit-field configkit-field--inline' },
-			el( 'label', { for: 'cf_' + name }, label ),
+			labelNode,
 			el( 'input', {
 				id: 'cf_' + name,
 				type: 'number',
