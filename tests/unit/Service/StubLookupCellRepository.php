@@ -116,4 +116,34 @@ final class StubLookupCellRepository extends LookupCellRepository {
 	public function delete( int $id ): void {
 		unset( $this->records[ $id ] );
 	}
+
+	public function find_by_coordinates(
+		string $lookup_table_key,
+		int $width,
+		int $height,
+		string $price_group_key
+	): ?array {
+		foreach ( $this->records as $rec ) {
+			if (
+				$rec['lookup_table_key'] === $lookup_table_key
+				&& (int) $rec['width']  === $width
+				&& (int) $rec['height'] === $height
+				&& (string) ( $rec['price_group_key'] ?? '' ) === $price_group_key
+			) {
+				return $rec;
+			}
+		}
+		return null;
+	}
+
+	public function delete_all_in_table( string $lookup_table_key ): int {
+		$deleted = 0;
+		foreach ( $this->records as $id => $rec ) {
+			if ( $rec['lookup_table_key'] === $lookup_table_key ) {
+				unset( $this->records[ $id ] );
+				$deleted++;
+			}
+		}
+		return $deleted;
+	}
 }

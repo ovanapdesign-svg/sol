@@ -44,30 +44,31 @@ final class Validator {
 		$target_key = (string) $context['target_lookup_table_key'];
 		$target     = $this->tables->find_by_key( $target_key );
 
-		// Map of (width|height|price_group_key) → row_number that "won" so far.
-		// Later occurrences are demoted to yellow + skip.
-		$winners = [];
+		// Single pass: validate each row, then if it's not red and
+		// targets a tuple another non-red row already claimed, demote
+		// the prior claimant (last row wins per spec §8.2).
+		$out     = [];
+		$winners = []; // key → index in $out
 		foreach ( $parsed_rows as $i => $row ) {
+			$row  = $this->validate_row( $row, $target_key, $target );
 			$norm = $row['normalized'] ?? [];
-			$key  = (string) ( $norm['width'] ?? '' ) . '|' . (string) ( $norm['height'] ?? '' ) . '|' . (string) ( $norm['price_group_key'] ?? '' );
-			$winners[ $key ] = $i;
-		}
-
-		$out = [];
-		foreach ( $parsed_rows as $i => $row ) {
-			$row     = $this->validate_row( $row, $target_key, $target );
-			$norm    = $row['normalized'] ?? [];
-			$key     = (string) ( $norm['width'] ?? '' ) . '|' . (string) ( $norm['height'] ?? '' ) . '|' . (string) ( $norm['price_group_key'] ?? '' );
-			if ( $row['severity'] !== ImportRowRepository::SEVERITY_RED && ( $winners[ $key ] ?? -1 ) !== $i ) {
-				// An earlier or later row also targets this tuple. The
-				// later row wins per spec §8.2; demote losers.
-				$row['severity'] = ImportRowRepository::SEVERITY_YELLOW;
-				$row['action']   = ImportRowRepository::ACTION_SKIP;
-				$row['message']  = trim( ( $row['message'] ?? '' ) . ' Duplicate within file — superseded by row ' . ( $winners[ $key ] + 1 ) . '.' );
+			if ( $row['severity'] !== ImportRowRepository::SEVERITY_RED ) {
+				$key = (string) ( $norm['width'] ?? '' )
+					. '|' . (string) ( $norm['height'] ?? '' )
+					. '|' . (string) ( $norm['price_group_key'] ?? '' );
+				if ( isset( $winners[ $key ] ) ) {
+					$prev_index = $winners[ $key ];
+					$out[ $prev_index ]['severity'] = ImportRowRepository::SEVERITY_YELLOW;
+					$out[ $prev_index ]['action']   = ImportRowRepository::ACTION_SKIP;
+					$out[ $prev_index ]['message']  = trim(
+						( $out[ $prev_index ]['message'] ?? '' )
+						. ' Duplicate within file — superseded by row ' . ( $i + 1 ) . '.'
+					);
+				}
+				$winners[ $key ] = count( $out );
 			}
 			$out[] = $row;
 		}
-
 		return $out;
 	}
 

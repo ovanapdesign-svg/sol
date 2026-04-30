@@ -41,6 +41,12 @@ if ( ! class_exists( 'wpdb', false ) ) {
 			return 1;
 		}
 
+		public function query( string $query ): int|false {
+			// Tests pass mock wpdb instances when transactional behaviour
+			// matters; the bare stub treats all queries as no-ops.
+			return 0;
+		}
+
 		public function get_charset_collate(): string {
 			return 'DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci';
 		}
