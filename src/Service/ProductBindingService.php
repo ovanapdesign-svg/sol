@@ -184,6 +184,56 @@ final class ProductBindingService {
 			}
 		}
 
+		// Phase 4.2b.2 — item_price_overrides keyed by "library_key:item_key"
+		// → { price: float >= 0, reason?: string }. Empty / cleared price
+		// is the signal to drop the entry; the sanitize() step prunes them
+		// so the validate() step only sees real overrides.
+		if ( array_key_exists( 'item_price_overrides', $input ) ) {
+			if ( ! is_array( $input['item_price_overrides'] ) ) {
+				$errors[] = [
+					'field'   => 'item_price_overrides',
+					'code'    => 'invalid_type',
+					'message' => 'item_price_overrides must be an object keyed by "library_key:item_key".',
+				];
+			} else {
+				foreach ( $input['item_price_overrides'] as $key => $entry ) {
+					if ( ! is_string( $key ) || ! str_contains( $key, ':' ) ) {
+						$errors[] = [
+							'field'   => 'item_price_overrides',
+							'code'    => 'invalid_key',
+							'message' => 'item_price_overrides keys must be "library_key:item_key".',
+						];
+						continue;
+					}
+					if ( ! is_array( $entry ) ) {
+						$errors[] = [
+							'field'   => 'item_price_overrides',
+							'code'    => 'invalid_type',
+							'message' => sprintf( 'item_price_overrides[%s] must be an object.', $key ),
+						];
+						continue;
+					}
+					if ( ! array_key_exists( 'price', $entry ) || $entry['price'] === '' || $entry['price'] === null ) {
+						// Empty price means "remove" — sanitize() drops it.
+						continue;
+					}
+					if ( ! is_numeric( $entry['price'] ) ) {
+						$errors[] = [
+							'field'   => 'item_price_overrides',
+							'code'    => 'invalid_price',
+							'message' => sprintf( 'item_price_overrides[%s].price must be numeric.', $key ),
+						];
+					} elseif ( (float) $entry['price'] < 0 ) {
+						$errors[] = [
+							'field'   => 'item_price_overrides',
+							'code'    => 'invalid_price',
+							'message' => sprintf( 'item_price_overrides[%s].price must be ≥ 0.', $key ),
+						];
+					}
+				}
+			}
+		}
+
 		// field_overrides: per-field { hide?, require?, lock?, preselect? }.
 		if ( array_key_exists( 'field_overrides', $input ) ) {
 			if ( ! is_array( $input['field_overrides'] ) ) {
@@ -226,6 +276,35 @@ final class ProductBindingService {
 			'allowed_sources'      => is_array( $input['allowed_sources'] ?? null ) ? $input['allowed_sources'] : [],
 			'pricing_overrides'    => is_array( $input['pricing_overrides'] ?? null ) ? $input['pricing_overrides'] : [],
 			'field_overrides'      => is_array( $input['field_overrides'] ?? null ) ? $input['field_overrides'] : [],
+			'item_price_overrides' => $this->sanitize_item_price_overrides( $input['item_price_overrides'] ?? [] ),
 		];
+	}
+
+	/**
+	 * Phase 4.2b.2 — drop empty / cleared overrides and force every
+	 * stored entry to `price_source = 'product_override'` so the
+	 * engine resolver knows where the value came from
+	 * (PRICING_SOURCE_MODEL §3 step 1). The owner-facing UI never
+	 * shows the price_source field — it's a system-managed key.
+	 *
+	 * @param mixed $raw
+	 * @return array<string,array{price:float,price_source:string,reason:string}>
+	 */
+	private function sanitize_item_price_overrides( mixed $raw ): array {
+		if ( ! is_array( $raw ) ) return [];
+		$out = [];
+		foreach ( $raw as $key => $entry ) {
+			if ( ! is_string( $key ) || ! str_contains( $key, ':' ) ) continue;
+			if ( ! is_array( $entry ) ) continue;
+			$price = $entry['price'] ?? null;
+			if ( $price === '' || $price === null || ! is_numeric( $price ) ) continue;
+			if ( (float) $price < 0 ) continue;
+			$out[ $key ] = [
+				'price'        => (float) $price,
+				'price_source' => 'product_override',
+				'reason'       => isset( $entry['reason'] ) ? (string) $entry['reason'] : '',
+			];
+		}
+		return $out;
 	}
 }

@@ -27,6 +27,18 @@ final class LibraryItemService {
 		return $this->items->list_in_library( (string) $library['library_key'], $page, $per_page );
 	}
 
+	/**
+	 * Phase 4.2b.2 — flat search across libraries. Used by the product
+	 * binding override editor (UI_LABELS_MAPPING §8) so the owner can
+	 * pick any library item by label without drilling into a library.
+	 *
+	 * @param array<string,mixed> $filters
+	 * @return array{items:list<array<string,mixed>>,total:int,page:int,per_page:int,total_pages:int}
+	 */
+	public function search_global( array $filters = [], int $page = 1, int $per_page = 50 ): array {
+		return $this->items->search_global( $filters, $page, $per_page );
+	}
+
 	public function get( int $library_id, int $item_id ): ?array {
 		$library = $this->libraries->find_by_id( $library_id );
 		if ( $library === null ) {

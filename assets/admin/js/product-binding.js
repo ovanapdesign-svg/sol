@@ -129,6 +129,7 @@
 			allowed_sources: r.allowed_sources && typeof r.allowed_sources === 'object' ? r.allowed_sources : {},
 			pricing_overrides: r.pricing_overrides && typeof r.pricing_overrides === 'object' ? r.pricing_overrides : {},
 			field_overrides: r.field_overrides && typeof r.field_overrides === 'object' ? r.field_overrides : {},
+			item_price_overrides: r.item_price_overrides && typeof r.item_price_overrides === 'object' ? r.item_price_overrides : {},
 			version_hash: r.version_hash || '',
 			updated_at: r.updated_at || null,
 		};
@@ -171,6 +172,7 @@
 			allowed_sources: b.allowed_sources,
 			pricing_overrides: b.pricing_overrides,
 			field_overrides: b.field_overrides,
+			item_price_overrides: b.item_price_overrides || {},
 			version_hash: b.version_hash,
 		};
 
@@ -245,6 +247,63 @@
 		setBinding( { pricing_overrides: next } );
 	}
 
+	// Phase 4.2b.2 — per-item override helpers. UI per UI_LABELS_MAPPING §8.
+	// Storage shape: { "library_key:item_key": { price, price_source, reason } }.
+	// price_source is system-managed (always 'product_override') and never
+	// shown to the owner.
+	function setItemOverride( key, patch ) {
+		const next = Object.assign( {}, state.binding.item_price_overrides || {} );
+		const cur  = Object.assign( {}, next[ key ] || {} );
+		Object.keys( patch ).forEach( ( k ) => {
+			if ( patch[ k ] === '' || patch[ k ] === null || patch[ k ] === undefined ) {
+				delete cur[ k ];
+			} else {
+				cur[ k ] = patch[ k ];
+			}
+		} );
+		// Empty entry → drop. The service also strips empty prices on save,
+		// but we drop client-side for instant table feedback.
+		if ( cur.price === undefined || cur.price === null || cur.price === '' ) {
+			delete next[ key ];
+		} else {
+			next[ key ] = Object.assign( cur, { price_source: 'product_override' } );
+		}
+		setBinding( { item_price_overrides: next } );
+	}
+
+	function removeItemOverride( key ) {
+		const next = Object.assign( {}, state.binding.item_price_overrides || {} );
+		delete next[ key ];
+		setBinding( { item_price_overrides: next } );
+	}
+
+	// Cache of resolved library item meta keyed by "library_key:item_key"
+	// so re-renders don't refetch labels for already-displayed rows.
+	const libraryItemCache = {};
+
+	function ensureLibraryItemMeta( key, onReady ) {
+		if ( libraryItemCache[ key ] ) return libraryItemCache[ key ];
+		const [ libKey, itemKey ] = key.split( ':' );
+		libraryItemCache[ key ] = { _loading: true, library_key: libKey, item_key: itemKey, label: itemKey };
+		ConfigKit.request( '/library-items?per_page=200&q=' + encodeURIComponent( itemKey ) )
+			.then( ( data ) => {
+				const found = ( data.items || [] ).find(
+					( r ) => r.library_key === libKey && r.item_key === itemKey
+				);
+				if ( found ) {
+					libraryItemCache[ key ] = Object.assign( {}, found, { _loading: false } );
+				} else {
+					libraryItemCache[ key ] = { _loading: false, library_key: libKey, item_key: itemKey, label: itemKey, _missing: true };
+				}
+				onReady && onReady();
+			} )
+			.catch( () => {
+				libraryItemCache[ key ] = { _loading: false, library_key: libKey, item_key: itemKey, label: itemKey, _error: true };
+				onReady && onReady();
+			} );
+		return libraryItemCache[ key ];
+	}
+
 	function setFieldOverride( fieldKey, key, value ) {
 		const next = Object.assign( {}, state.binding.field_overrides );
 		const cur = Object.assign( {}, next[ fieldKey ] || {} );
@@ -290,6 +349,7 @@
 		wrap.appendChild( renderDefaultsSection() );
 		wrap.appendChild( renderAllowedSourcesSection() );
 		wrap.appendChild( renderPricingSection() );
+		wrap.appendChild( renderItemPriceOverridesSection() );
 		wrap.appendChild( renderVisibilitySection() );
 		wrap.appendChild( renderDiagnosticsSection() );
 		wrap.appendChild( renderPreviewSection() );
@@ -722,6 +782,219 @@
 				),
 			]
 		);
+	}
+
+	/**
+	 * Phase 4.2b.2 — Item price overrides editor. Renders a table of
+	 * existing overrides with an inline picker for adding new ones.
+	 *
+	 * Spec: UI_LABELS_MAPPING.md §8 + PRODUCT_BINDING_SPEC.md §21. The
+	 * stored map keys (`library_key:item_key`) never appear as primary
+	 * UI labels — the rendered Item column shows the library item's
+	 * display label and a small ↗ link to edit it.
+	 */
+	function renderItemPriceOverridesSection() {
+		const overrides = state.binding.item_price_overrides || {};
+		const keys = Object.keys( overrides );
+
+		const intro = el( 'p', { class: 'description' },
+			'Override the price of specific library items only when this product is the main configurator. ' +
+			'Empty the override price and save to remove an entry.'
+		);
+
+		const table = el( 'table', { class: 'wp-list-table widefat striped configkit-item-overrides__table' } );
+		const thead = el( 'thead', null,
+			el( 'tr', null,
+				el( 'th', null, 'Item' ),
+				el( 'th', null, 'Original price' ),
+				el( 'th', null, 'Override price (kr)' ),
+				el( 'th', null, 'Reason / note (internal)' ),
+				el( 'th', { class: 'configkit-actions' }, '' )
+			)
+		);
+		table.appendChild( thead );
+
+		const tbody = el( 'tbody' );
+		if ( keys.length === 0 ) {
+			tbody.appendChild( el( 'tr', null,
+				el( 'td', { colspan: 5, class: 'configkit-item-overrides__empty' },
+					'No overrides yet. Use the picker below to add one.'
+				)
+			) );
+		} else {
+			keys.sort();
+			keys.forEach( ( key ) => {
+				tbody.appendChild( renderItemOverrideRow( key, overrides[ key ] ) );
+			} );
+		}
+		table.appendChild( tbody );
+
+		const adder = el( 'div', { class: 'configkit-item-overrides__add' } );
+		const pickerHost = el( 'div', { class: 'configkit-item-overrides__picker' } );
+		adder.appendChild( pickerHost );
+		mountLibraryItemPicker( pickerHost, ( pickedKey ) => {
+			if ( ! pickedKey ) return;
+			if ( overrides[ pickedKey ] ) {
+				state.message = { kind: 'conflict', text: 'That item already has an override. Edit it in the table above.' };
+				render();
+				return;
+			}
+			setItemOverride( pickedKey, { price: 0 } );
+		} );
+
+		return section(
+			'section-item-overrides',
+			'Item price overrides for this product',
+			[ intro, table, adder ]
+		);
+	}
+
+	function renderItemOverrideRow( key, entry ) {
+		const meta = ensureLibraryItemMeta( key, () => render() );
+		const itemLabel = meta && ! meta._loading ? ( meta.label || meta.item_key ) : 'Loading…';
+		const originalPrice = meta && meta.price !== null && meta.price !== undefined && meta.price !== '' ? Number( meta.price ) : null;
+		const editHref = ( window.location.pathname || '' ) + '?page=configkit-libraries&item_id=' + ( meta.id || 0 );
+
+		const itemCell = el( 'td', { 'data-label': 'Item' } );
+		const labelLine = el( 'span', { class: 'configkit-item-overrides__label' }, itemLabel );
+		itemCell.appendChild( labelLine );
+		if ( meta && meta.id ) {
+			itemCell.appendChild( document.createTextNode( ' ' ) );
+			itemCell.appendChild( el( 'a', {
+				class: 'configkit-item-overrides__edit-link',
+				href: editHref,
+				title: 'Edit this library item',
+			}, '↗' ) );
+		}
+		if ( meta._missing ) {
+			itemCell.appendChild( el(
+				'p',
+				{ class: 'configkit-item-overrides__missing' },
+				'Library item not found — the override will be ignored at checkout.'
+			) );
+		}
+
+		return el( 'tr', { 'data-key': key },
+			itemCell,
+			el( 'td', { 'data-label': 'Original price' },
+				originalPrice === null ? '—' : formatKr( originalPrice )
+			),
+			el( 'td', { 'data-label': 'Override price' },
+				el( 'input', {
+					type: 'number',
+					min: 0,
+					step: '0.01',
+					value: entry.price === null || entry.price === undefined ? '' : String( entry.price ),
+					onInput: ( ev ) => {
+						const raw = ev.target.value;
+						setItemOverride( key, { price: raw === '' ? '' : Number( raw ) } );
+					},
+				} )
+			),
+			el( 'td', { 'data-label': 'Reason' },
+				el( 'input', {
+					type: 'text',
+					class: 'regular-text',
+					value: entry.reason || '',
+					onInput: ( ev ) => setItemOverride( key, { reason: ev.target.value } ),
+				} )
+			),
+			el( 'td', { class: 'configkit-actions' },
+				el( 'button', {
+					type: 'button',
+					class: 'button button-link-delete',
+					onClick: () => removeItemOverride( key ),
+				}, 'Remove' )
+			)
+		);
+	}
+
+	/**
+	 * Inline library-item picker. Single search input + inline result
+	 * dropdown (debounced 250 ms). On selection, invokes onPick with
+	 * the canonical "library_key:item_key" key — the override editor
+	 * stores it directly. The picker resets itself after each pick so
+	 * the owner can chain multiple adds.
+	 */
+	function mountLibraryItemPicker( host, onPick ) {
+		host.innerHTML = '';
+		const wrap = el( 'div', { class: 'configkit-item-overrides__inline-picker' } );
+		const input = el( 'input', {
+			type: 'search',
+			class: 'regular-text',
+			placeholder: 'Search library items by label, key, or SKU…',
+			autocomplete: 'off',
+		} );
+		const dropdown = el( 'div', { class: 'configkit-item-overrides__dropdown', hidden: true } );
+		wrap.appendChild( el( 'button', {
+			type: 'button',
+			class: 'button',
+			onClick: () => input.focus(),
+		}, '+ Add price override' ) );
+		wrap.appendChild( input );
+		wrap.appendChild( dropdown );
+		host.appendChild( wrap );
+
+		let handle = null;
+		let lastQuery = '';
+		input.addEventListener( 'input', () => {
+			const q = input.value.trim();
+			if ( handle ) clearTimeout( handle );
+			if ( q.length < 2 ) {
+				dropdown.innerHTML = '';
+				dropdown.hidden = true;
+				return;
+			}
+			handle = setTimeout( () => {
+				if ( q === lastQuery ) return;
+				lastQuery = q;
+				ConfigKit.request( '/library-items?per_page=20&q=' + encodeURIComponent( q ) )
+					.then( ( data ) => renderResults( data ) )
+					.catch( () => {
+						dropdown.innerHTML = '';
+						dropdown.hidden = true;
+					} );
+			}, 250 );
+		} );
+
+		input.addEventListener( 'blur', () => {
+			setTimeout( () => { dropdown.hidden = true; }, 150 );
+		} );
+
+		function renderResults( data ) {
+			dropdown.innerHTML = '';
+			const items = ( data && data.items ) || [];
+			if ( items.length === 0 ) {
+				dropdown.appendChild( el( 'div', { class: 'configkit-item-overrides__no-results' }, 'No matches.' ) );
+				dropdown.hidden = false;
+				return;
+			}
+			items.forEach( ( row ) => {
+				const compoundKey = row.library_key + ':' + row.item_key;
+				libraryItemCache[ compoundKey ] = Object.assign( {}, row, { _loading: false } );
+				dropdown.appendChild( el( 'div', {
+					class: 'configkit-item-overrides__option',
+					onMousedown: ( ev ) => {
+						ev.preventDefault();
+						input.value = '';
+						dropdown.innerHTML = '';
+						dropdown.hidden = true;
+						onPick( compoundKey );
+					},
+				},
+				el( 'span', { class: 'configkit-item-overrides__option-label' }, row.label || row.item_key ),
+				row.library_key
+					? el( 'span', { class: 'configkit-item-overrides__option-meta' }, ' — ' + row.library_key )
+					: null
+				) );
+			} );
+			dropdown.hidden = false;
+		}
+	}
+
+	function formatKr( num ) {
+		if ( ! Number.isFinite( num ) ) return '—';
+		return num.toLocaleString( undefined, { maximumFractionDigits: 0 } ) + ' kr';
 	}
 
 	function renderVisibilitySection() {

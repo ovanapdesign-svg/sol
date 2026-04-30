@@ -2360,3 +2360,101 @@
 	font-size: 12px;
 	font-style: italic;
 }
+
+/* ================================================================
+ * Phase 4.2b.2 — item price overrides editor (UI_LABELS_MAPPING §8).
+ * ================================================================ */
+
+.configkit-item-overrides__table {
+	margin: 8px 0;
+}
+
+.configkit-item-overrides__table th,
+.configkit-item-overrides__table td {
+	vertical-align: top;
+}
+
+.configkit-item-overrides__empty {
+	color: #50575e;
+	font-style: italic;
+}
+
+.configkit-item-overrides__label {
+	font-weight: 500;
+}
+
+.configkit-item-overrides__edit-link {
+	color: #2271b1;
+	text-decoration: none;
+}
+
+.configkit-item-overrides__edit-link:hover,
+.configkit-item-overrides__edit-link:focus {
+	color: #135e96;
+	text-decoration: underline;
+}
+
+.configkit-item-overrides__missing {
+	color: #b32d2e;
+	font-size: 12px;
+	margin: 4px 0 0;
+}
+
+.configkit-item-overrides__add {
+	margin-top: 12px;
+	max-width: 480px;
+}
+
+.configkit-item-overrides__inline-picker {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	position: relative;
+}
+
+.configkit-item-overrides__inline-picker .button {
+	align-self: flex-start;
+}
+
+.configkit-item-overrides__dropdown {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	right: 0;
+	z-index: 50;
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	box-shadow: 0 4px 14px rgba( 0, 0, 0, 0.08 );
+	max-height: 280px;
+	overflow-y: auto;
+}
+
+.configkit-item-overrides__option {
+	padding: 8px 10px;
+	cursor: pointer;
+	border-bottom: 1px solid #f0f0f1;
+}
+
+.configkit-item-overrides__option:last-child {
+	border-bottom: 0;
+}
+
+.configkit-item-overrides__option:hover {
+	background: #f0f6fc;
+}
+
+.configkit-item-overrides__option-label {
+	font-weight: 500;
+}
+
+.configkit-item-overrides__option-meta {
+	color: #646970;
+	font-size: 12px;
+}
+
+.configkit-item-overrides__no-results {
+	padding: 8px 10px;
+	color: #646970;
+	font-style: italic;
+}

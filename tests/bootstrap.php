@@ -50,6 +50,18 @@ if ( ! class_exists( 'wpdb', false ) ) {
 		public function get_charset_collate(): string {
 			return 'DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci';
 		}
+
+		public function esc_like( string $text ): string {
+			return addcslashes( $text, '_%\\' );
+		}
+
+		/**
+		 * @param string $query
+		 * @return array<int,array<string,mixed>>
+		 */
+		public function get_results( string $query, string $output = 'OBJECT' ): array {
+			return [];
+		}
 	}
 }
 

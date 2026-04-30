@@ -112,6 +112,55 @@ final class ProductBindingServiceTest extends TestCase {
 		$this->assertFalse( $result['ok'] );
 	}
 
+	public function test_item_price_overrides_round_trip_and_force_product_override_source(): void {
+		$result = $this->service->update( self::PRODUCT_ID, [
+			'item_price_overrides' => [
+				'textiles_dickson:6500-bw' => [ 'price' => 1290.0, 'reason' => 'Promo' ],
+			],
+		], '' );
+		$this->assertTrue( $result['ok'], 'errors=' . json_encode( $result['errors'] ?? [] ) );
+		$rec = $result['record'];
+		$this->assertArrayHasKey( 'textiles_dickson:6500-bw', $rec['item_price_overrides'] );
+		$this->assertSame( 1290.0, $rec['item_price_overrides']['textiles_dickson:6500-bw']['price'] );
+		// Service must always force `price_source` on save so the engine
+		// resolver can dispatch on it.
+		$this->assertSame( 'product_override', $rec['item_price_overrides']['textiles_dickson:6500-bw']['price_source'] );
+		$this->assertSame( 'Promo', $rec['item_price_overrides']['textiles_dickson:6500-bw']['reason'] );
+	}
+
+	public function test_item_price_override_with_blank_price_is_dropped(): void {
+		$result = $this->service->update( self::PRODUCT_ID, [
+			'item_price_overrides' => [
+				'textiles_dickson:6500-bw' => [ 'price' => '' ],
+				'textiles_dickson:6500-cm' => [ 'price' => 999.0 ],
+			],
+		], '' );
+		$this->assertTrue( $result['ok'] );
+		$rec = $result['record'];
+		$this->assertArrayNotHasKey( 'textiles_dickson:6500-bw', $rec['item_price_overrides'] );
+		$this->assertArrayHasKey( 'textiles_dickson:6500-cm', $rec['item_price_overrides'] );
+	}
+
+	public function test_item_price_override_negative_price_is_rejected(): void {
+		$result = $this->service->update( self::PRODUCT_ID, [
+			'item_price_overrides' => [
+				'textiles_dickson:6500-bw' => [ 'price' => -50.0 ],
+			],
+		], '' );
+		$this->assertFalse( $result['ok'] );
+		$this->assertSame( 'item_price_overrides', $result['errors'][0]['field'] );
+	}
+
+	public function test_item_price_override_invalid_key_format_is_rejected(): void {
+		$result = $this->service->update( self::PRODUCT_ID, [
+			'item_price_overrides' => [
+				'no_colon_key' => [ 'price' => 100.0 ],
+			],
+		], '' );
+		$this->assertFalse( $result['ok'] );
+		$this->assertSame( 'invalid_key', $result['errors'][0]['code'] );
+	}
+
 	public function test_full_payload_round_trips(): void {
 		$result = $this->service->update( self::PRODUCT_ID, [
 			'enabled'              => true,

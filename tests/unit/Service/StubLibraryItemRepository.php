@@ -43,6 +43,38 @@ final class StubLibraryItemRepository extends LibraryItemRepository {
 		];
 	}
 
+	public function search_global( array $filters = [], int $page = 1, int $per_page = 50 ): array {
+		$items = array_values( $this->records );
+		if ( ! empty( $filters['q'] ) ) {
+			$needle = strtolower( (string) $filters['q'] );
+			$items  = array_values( array_filter( $items, static function ( array $r ) use ( $needle ): bool {
+				return str_contains( strtolower( (string) ( $r['label'] ?? '' ) ), $needle )
+					|| str_contains( strtolower( (string) ( $r['item_key'] ?? '' ) ), $needle )
+					|| str_contains( strtolower( (string) ( $r['sku'] ?? '' ) ), $needle );
+			} ) );
+		}
+		if ( array_key_exists( 'is_active', $filters ) && $filters['is_active'] !== null ) {
+			$wanted = (bool) $filters['is_active'];
+			$items  = array_values( array_filter( $items, static fn( array $r ): bool => (bool) ( $r['is_active'] ?? false ) === $wanted ) );
+		}
+		if ( ! empty( $filters['library_keys'] ) && is_array( $filters['library_keys'] ) ) {
+			$keys  = $filters['library_keys'];
+			$items = array_values( array_filter( $items, static fn( array $r ): bool => in_array( $r['library_key'] ?? '', $keys, true ) ) );
+		}
+
+		$total  = count( $items );
+		$offset = max( 0, ( $page - 1 ) * $per_page );
+		$slice  = array_slice( $items, $offset, $per_page );
+
+		return [
+			'items'       => $slice,
+			'total'       => $total,
+			'page'        => $page,
+			'per_page'    => $per_page,
+			'total_pages' => $total === 0 ? 0 : (int) ceil( $total / $per_page ),
+		];
+	}
+
 	public function count_in_library( string $library_key ): int {
 		return count( array_filter(
 			$this->records,

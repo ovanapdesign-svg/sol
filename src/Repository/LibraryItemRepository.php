@@ -74,6 +74,66 @@ class LibraryItemRepository {
 		];
 	}
 
+	/**
+	 * Phase 4.2b.2 — flat list across all libraries with optional name
+	 * search. Used by the product-binding override editor (UI labels
+	 * §8) so the owner can pick any reachable library item without
+	 * drilling into each library first.
+	 *
+	 * @param array<string,mixed> $filters
+	 * @return array{items:list<array<string,mixed>>,total:int,page:int,per_page:int,total_pages:int}
+	 */
+	public function search_global( array $filters = [], int $page = 1, int $per_page = 50 ): array {
+		$page     = max( 1, $page );
+		$per_page = max( 1, min( 200, $per_page ) );
+		$offset   = ( $page - 1 ) * $per_page;
+		$table    = $this->table();
+
+		$where  = '1=1';
+		$params = [];
+		if ( ! empty( $filters['q'] ) ) {
+			$where    .= ' AND ( label LIKE %s OR item_key LIKE %s OR sku LIKE %s )';
+			$needle    = '%' . $this->wpdb->esc_like( (string) $filters['q'] ) . '%';
+			$params[]  = $needle;
+			$params[]  = $needle;
+			$params[]  = $needle;
+		}
+		if ( array_key_exists( 'is_active', $filters ) && $filters['is_active'] !== null ) {
+			$where    .= ' AND is_active = %d';
+			$params[]  = $filters['is_active'] ? 1 : 0;
+		}
+		if ( ! empty( $filters['library_keys'] ) && is_array( $filters['library_keys'] ) ) {
+			$keys = array_values( array_filter( $filters['library_keys'], 'is_string' ) );
+			if ( count( $keys ) > 0 ) {
+				$placeholders = implode( ',', array_fill( 0, count( $keys ), '%s' ) );
+				$where       .= " AND library_key IN ( {$placeholders} )";
+				foreach ( $keys as $k ) $params[] = $k;
+			} else {
+				// Empty allow-list → no rows.
+				return [ 'items' => [], 'total' => 0, 'page' => $page, 'per_page' => $per_page, 'total_pages' => 0 ];
+			}
+		}
+
+		$total_query = "SELECT COUNT(*) FROM `{$table}` WHERE {$where}";
+		$total = (int) ( count( $params ) > 0
+			? $this->wpdb->get_var( $this->wpdb->prepare( $total_query, ...$params ) )
+			: $this->wpdb->get_var( $total_query ) );
+
+		$rows_query = "SELECT * FROM `{$table}` WHERE {$where} ORDER BY library_key ASC, sort_order ASC, label ASC LIMIT %d OFFSET %d";
+		$rows = count( $params ) > 0
+			? $this->wpdb->get_results( $this->wpdb->prepare( $rows_query, ...array_merge( $params, [ $per_page, $offset ] ) ), ARRAY_A )
+			: $this->wpdb->get_results( $this->wpdb->prepare( $rows_query, $per_page, $offset ), ARRAY_A );
+		$rows = is_array( $rows ) ? $rows : [];
+
+		return [
+			'items'       => array_values( array_map( [ $this, 'hydrate' ], $rows ) ),
+			'total'       => $total,
+			'page'        => $page,
+			'per_page'    => $per_page,
+			'total_pages' => $total === 0 ? 0 : (int) ceil( $total / $per_page ),
+		];
+	}
+
 	public function count_in_library( string $library_key ): int {
 		$table = $this->table();
 		$value = $this->wpdb->get_var(

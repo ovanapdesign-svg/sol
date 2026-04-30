@@ -41,6 +41,24 @@ final class LibraryItemsController extends AbstractController {
 
 		\register_rest_route(
 			self::NAMESPACE,
+			'/library-items',
+			[
+				[
+					'methods'             => 'GET',
+					'callback'            => [ $this, 'search_global' ],
+					'permission_callback' => $this->require_cap( self::CAP ),
+					'args'                => [
+						'q'         => [ 'type' => 'string', 'default' => '' ],
+						'page'      => [ 'type' => 'integer', 'default' => 1, 'minimum' => 1 ],
+						'per_page'  => [ 'type' => 'integer', 'default' => 50, 'minimum' => 1, 'maximum' => 200 ],
+						'is_active' => [ 'type' => 'boolean' ],
+					],
+				],
+			]
+		);
+
+		\register_rest_route(
+			self::NAMESPACE,
 			'/library-items/preview-price',
 			[
 				[
@@ -128,6 +146,18 @@ final class LibraryItemsController extends AbstractController {
 			return $this->error( 'validation_failed', 'Library item could not be updated.', [ 'errors' => $result['errors'] ?? [] ], 400 );
 		}
 		return $this->ok( [ 'record' => $result['record'] ?? null ] );
+	}
+
+	public function search_global( \WP_REST_Request $request ): \WP_REST_Response {
+		$filters = [];
+		$q = trim( (string) $request->get_param( 'q' ) );
+		if ( $q !== '' ) $filters['q'] = $q;
+		if ( $request->get_param( 'is_active' ) !== null ) {
+			$filters['is_active'] = (bool) $request->get_param( 'is_active' );
+		}
+		$page     = (int) $request->get_param( 'page' );
+		$per_page = (int) $request->get_param( 'per_page' );
+		return $this->ok( $this->service->search_global( $filters, $page === 0 ? 1 : $page, $per_page === 0 ? 50 : $per_page ) );
 	}
 
 	/**

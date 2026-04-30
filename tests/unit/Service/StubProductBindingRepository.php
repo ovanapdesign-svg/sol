@@ -56,6 +56,7 @@ final class StubProductBindingRepository extends ProductBindingRepository {
 			'allowed_sources'      => is_array( $data['allowed_sources'] ?? null ) ? $data['allowed_sources'] : [],
 			'pricing_overrides'    => is_array( $data['pricing_overrides'] ?? null ) ? $data['pricing_overrides'] : [],
 			'field_overrides'      => is_array( $data['field_overrides'] ?? null ) ? $data['field_overrides'] : [],
+			'item_price_overrides' => is_array( $data['item_price_overrides'] ?? null ) ? $data['item_price_overrides'] : [],
 			'updated_at'           => $now,
 			'version_hash'         => $hash,
 		];
@@ -108,6 +109,7 @@ final class StubProductBindingRepository extends ProductBindingRepository {
 			'allowed_sources'      => [],
 			'pricing_overrides'    => [],
 			'field_overrides'      => [],
+			'item_price_overrides' => [],
 			'updated_at'           => null,
 			'version_hash'         => '',
 		];

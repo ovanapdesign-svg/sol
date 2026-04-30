@@ -22,6 +22,12 @@ class ProductBindingRepository {
 	public const META_ALLOWED_SOURCES    = '_configkit_allowed_sources_json';
 	public const META_PRICING_OVERRIDES  = '_configkit_pricing_overrides_json';
 	public const META_FIELD_OVERRIDES    = '_configkit_field_overrides_json';
+	// Phase 4.2b.2 — per-item price overrides keyed by
+	// "library_key:item_key". UI lives on the Woo product ConfigKit
+	// tab (UI_LABELS_MAPPING §8). Always saved with
+	// price_source = 'product_override' so the engine knows to use
+	// the override at line-build time (PRICING_SOURCE_MODEL §3 step 1).
+	public const META_ITEM_PRICE_OVERRIDES = '_configkit_item_price_overrides';
 	public const META_VERSION_HASH       = '_configkit_binding_version_hash';
 	public const META_UPDATED_AT         = '_configkit_binding_updated_at';
 
@@ -60,6 +66,7 @@ class ProductBindingRepository {
 			'allowed_sources'      => $this->get_object( $product_id, self::META_ALLOWED_SOURCES ),
 			'pricing_overrides'    => $this->get_object( $product_id, self::META_PRICING_OVERRIDES ),
 			'field_overrides'      => $this->get_object( $product_id, self::META_FIELD_OVERRIDES ),
+			'item_price_overrides' => $this->get_object( $product_id, self::META_ITEM_PRICE_OVERRIDES ),
 			'updated_at'           => $this->get_string_or_null( $product_id, self::META_UPDATED_AT ),
 			'version_hash'         => $this->get_string_default( $product_id, self::META_VERSION_HASH, '' ),
 		];
@@ -85,6 +92,7 @@ class ProductBindingRepository {
 		$this->set_object( $product_id, self::META_ALLOWED_SOURCES, is_array( $data['allowed_sources'] ?? null ) ? $data['allowed_sources'] : [] );
 		$this->set_object( $product_id, self::META_PRICING_OVERRIDES, is_array( $data['pricing_overrides'] ?? null ) ? $data['pricing_overrides'] : [] );
 		$this->set_object( $product_id, self::META_FIELD_OVERRIDES, is_array( $data['field_overrides'] ?? null ) ? $data['field_overrides'] : [] );
+		$this->set_object( $product_id, self::META_ITEM_PRICE_OVERRIDES, is_array( $data['item_price_overrides'] ?? null ) ? $data['item_price_overrides'] : [] );
 		\update_post_meta( $product_id, self::META_UPDATED_AT, $now );
 		\update_post_meta( $product_id, self::META_VERSION_HASH, $hash );
 
