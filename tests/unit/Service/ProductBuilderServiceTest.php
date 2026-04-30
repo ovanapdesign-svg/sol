@@ -261,6 +261,80 @@ final class ProductBuilderServiceTest extends TestCase {
 		$this->assertNotEmpty( $result['errors'] );
 	}
 
+	public function test_save_motors_supports_woo_linked_and_bundle_items(): void {
+		$this->service->set_product_type( self::PRODUCT_ID, 'markise' );
+
+		$result = $this->service->save_motors( self::PRODUCT_ID, [
+			[
+				'name'           => 'Sonesse 30 IO',
+				'code'           => 'SOMFY-SO30IO',
+				'price_source'   => 'woo',
+				'woo_product_id' => 555,
+				'active'         => true,
+			],
+			[
+				// Bundle: motor + crank + sensor with fixed package price.
+				'name'        => 'Premium pack',
+				'code'        => 'PKG-PREM',
+				'fixed_price' => 8990,
+				'components'  => [
+					[ 'woo_product_id' => 555, 'qty' => 1, 'price_source' => 'woo' ],
+					[ 'woo_product_id' => 777, 'qty' => 1, 'price_source' => 'woo' ],
+				],
+				'active' => true,
+			],
+		] );
+		$this->assertTrue( $result['ok'], 'errors=' . json_encode( $result['errors'] ?? [] ) );
+
+		$lib = $this->libraries->find_by_key( 'product_4242_motors' );
+		$this->assertNotNull( $lib );
+		$this->assertSame( 'motors', $lib['module_key'] );
+
+		$active = array_values( array_filter( $this->items->records, static fn ( $r ) => ! empty( $r['is_active'] ) ) );
+		$this->assertCount( 2, $active );
+
+		$bundle = null;
+		foreach ( $active as $rec ) if ( ( $rec['item_type'] ?? '' ) === 'bundle' ) $bundle = $rec;
+		$this->assertNotNull( $bundle );
+		$this->assertSame( 'fixed_bundle', $bundle['price_source'] );
+		$this->assertSame( 8990.0, $bundle['bundle_fixed_price'] );
+	}
+
+	public function test_save_controls_creates_controls_library(): void {
+		$this->service->set_product_type( self::PRODUCT_ID, 'markise' );
+		$result = $this->service->save_controls( self::PRODUCT_ID, [
+			[ 'name' => 'Telis 4 RTS', 'code' => 'TLS4', 'price_source' => 'configkit', 'price' => 1490, 'active' => true ],
+		] );
+		$this->assertTrue( $result['ok'], 'errors=' . json_encode( $result['errors'] ?? [] ) );
+		$this->assertNotNull( $this->libraries->find_by_key( 'product_4242_controls' ) );
+		$this->assertTrue( $this->registry->is_auto_managed( AutoManagedRegistry::TYPE_LIBRARY, 'product_4242_controls' ) );
+	}
+
+	public function test_save_profile_colors_creates_colors_library(): void {
+		$this->service->set_product_type( self::PRODUCT_ID, 'markise' );
+		$result = $this->service->save_profile_colors( self::PRODUCT_ID, [
+			[ 'name' => 'Black', 'code' => 'BLK', 'color_family' => 'black', 'active' => true ],
+			[ 'name' => 'White', 'code' => 'WHT', 'color_family' => 'white', 'active' => true ],
+		] );
+		$this->assertTrue( $result['ok'], 'errors=' . json_encode( $result['errors'] ?? [] ) );
+		$lib = $this->libraries->find_by_key( 'product_4242_colors' );
+		$this->assertNotNull( $lib );
+		$this->assertSame( 'colors', $lib['module_key'] );
+	}
+
+	public function test_save_operation_mode_records_choice(): void {
+		$this->service->set_product_type( self::PRODUCT_ID, 'markise' );
+		$result = $this->service->save_operation_mode( self::PRODUCT_ID, 'both' );
+		$this->assertTrue( $result['ok'] );
+		$this->assertSame( 'both', $this->service->get_state( self::PRODUCT_ID )['operation_mode'] );
+	}
+
+	public function test_save_operation_mode_rejects_unknown_value(): void {
+		$this->service->set_product_type( self::PRODUCT_ID, 'markise' );
+		$result = $this->service->save_operation_mode( self::PRODUCT_ID, 'space_drive' );
+		$this->assertFalse( $result['ok'] );
+	}
+
 	public function test_state_marks_product_as_auto_managed_after_first_action(): void {
 		$this->assertFalse( $this->state->is_auto_managed( self::PRODUCT_ID ) );
 		$this->service->set_product_type( self::PRODUCT_ID, 'markise' );

@@ -62,15 +62,34 @@ final class ProductBuilderController extends AbstractController {
 			],
 		] );
 
-		\register_rest_route( self::NAMESPACE, '/product-builder/(?P<product_id>\d+)/fabrics', [
-			[
-				'methods'             => 'GET',
-				'callback'            => [ $this, 'read_fabrics' ],
-				'permission_callback' => $this->require_cap( self::CAP ),
-			],
+		// One block-saver endpoint per role. Each follows the same
+		// shape: GET returns the saved items, POST replaces them.
+		foreach ( [
+			'fabrics'        => [ 'read_fabrics',        'save_fabrics' ],
+			'profile-colors' => [ 'read_profile_colors', 'save_profile_colors' ],
+			'stangs'         => [ 'read_stangs',         'save_stangs' ],
+			'motors'         => [ 'read_motors',         'save_motors' ],
+			'controls'       => [ 'read_controls',       'save_controls' ],
+			'accessories'    => [ 'read_accessories',    'save_accessories' ],
+		] as $segment => [ $get_cb, $post_cb ] ) {
+			\register_rest_route( self::NAMESPACE, '/product-builder/(?P<product_id>\d+)/' . $segment, [
+				[
+					'methods'             => 'GET',
+					'callback'            => [ $this, $get_cb ],
+					'permission_callback' => $this->require_cap( self::CAP ),
+				],
+				[
+					'methods'             => 'POST',
+					'callback'            => [ $this, $post_cb ],
+					'permission_callback' => $this->require_cap( self::CAP ),
+				],
+			] );
+		}
+
+		\register_rest_route( self::NAMESPACE, '/product-builder/(?P<product_id>\d+)/operation-mode', [
 			[
 				'methods'             => 'POST',
-				'callback'            => [ $this, 'save_fabrics' ],
+				'callback'            => [ $this, 'save_operation_mode' ],
 				'permission_callback' => $this->require_cap( self::CAP ),
 			],
 		] );
@@ -114,23 +133,71 @@ final class ProductBuilderController extends AbstractController {
 	}
 
 	public function read_fabrics( \WP_REST_Request $request ): \WP_REST_Response {
+		return $this->read_block( $request, 'read_fabrics' );
+	}
+	public function save_fabrics( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		return $this->save_block( $request, 'fabrics', 'save_fabrics' );
+	}
+	public function read_profile_colors( \WP_REST_Request $request ): \WP_REST_Response {
+		return $this->read_block( $request, 'read_profile_colors' );
+	}
+	public function save_profile_colors( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		return $this->save_block( $request, 'colors', 'save_profile_colors' );
+	}
+	public function read_stangs( \WP_REST_Request $request ): \WP_REST_Response {
+		return $this->read_block( $request, 'read_stangs' );
+	}
+	public function save_stangs( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		return $this->save_block( $request, 'stangs', 'save_stangs' );
+	}
+	public function read_motors( \WP_REST_Request $request ): \WP_REST_Response {
+		return $this->read_block( $request, 'read_motors' );
+	}
+	public function save_motors( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		return $this->save_block( $request, 'motors', 'save_motors' );
+	}
+	public function read_controls( \WP_REST_Request $request ): \WP_REST_Response {
+		return $this->read_block( $request, 'read_controls' );
+	}
+	public function save_controls( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		return $this->save_block( $request, 'controls', 'save_controls' );
+	}
+	public function read_accessories( \WP_REST_Request $request ): \WP_REST_Response {
+		return $this->read_block( $request, 'read_accessories' );
+	}
+	public function save_accessories( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		return $this->save_block( $request, 'accessories', 'save_accessories' );
+	}
+
+	public function save_operation_mode( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$product_id = (int) $request['product_id'];
+		$body       = $this->payload( $request );
+		$mode       = (string) ( $body['mode'] ?? '' );
+		$result     = $this->service->save_operation_mode( $product_id, $mode );
+		if ( ! ( $result['ok'] ?? false ) ) {
+			return $this->error( 'product_builder_failed', (string) ( $result['message'] ?? 'Could not save operation mode.' ), [], 400 );
+		}
+		return $this->ok( $result );
+	}
+
+	private function read_block( \WP_REST_Request $request, string $method ): \WP_REST_Response {
 		$product_id = (int) $request['product_id'];
 		return $this->ok( [
 			'product_id' => $product_id,
-			'items'      => $this->service->read_fabrics( $product_id ),
+			'items'      => $this->service->{$method}( $product_id ),
 		] );
 	}
 
-	public function save_fabrics( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+	private function save_block( \WP_REST_Request $request, string $body_key, string $method ): \WP_REST_Response|\WP_Error {
 		$product_id = (int) $request['product_id'];
 		$body       = $this->payload( $request );
-		$fabrics    = is_array( $body['fabrics'] ?? null ) ? $body['fabrics'] : [];
+		$items      = is_array( $body[ $body_key ] ?? null ) ? $body[ $body_key ] : [];
 
-		$result = $this->service->save_fabrics( $product_id, $fabrics );
+		$result = $this->service->{$method}( $product_id, $items );
 		if ( ! ( $result['ok'] ?? false ) ) {
 			return $this->error(
 				'product_builder_failed',
-				(string) ( $result['message'] ?? 'Could not save fabrics.' ),
+				(string) ( $result['message'] ?? 'Could not save ' . $body_key . '.' ),
 				[ 'errors' => $result['errors'] ?? [] ],
 				400
 			);

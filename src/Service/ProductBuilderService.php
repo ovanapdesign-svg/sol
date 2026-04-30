@@ -341,6 +341,272 @@ final class ProductBuilderService {
 		return $this->read_role_library_items( $product_id, 'fabric_library_key' );
 	}
 
+	/** @param list<array<string,mixed>> $items */
+	public function save_profile_colors( int $product_id, array $items ): array {
+		return $this->save_role_items( $product_id, 'color', [
+			'module_id'         => 'colors',
+			'library_role'      => 'product_profile_colors',
+			'library_label_fmt' => 'Profile colors for product #%d',
+			'state_key'         => 'color_library_key',
+			'noun_singular'     => 'color',
+			'noun_plural'       => 'colors',
+		], $items );
+	}
+
+	public function read_profile_colors( int $product_id ): array {
+		return $this->read_role_library_items( $product_id, 'color_library_key' );
+	}
+
+	/** @param list<array<string,mixed>> $items */
+	public function save_stangs( int $product_id, array $items ): array {
+		// Manual operators: simple SKU + image + price, no compatibility tags.
+		return $this->save_role_items( $product_id, 'stang', [
+			'module_id'         => 'accessories',
+			'library_role'      => 'product_stangs',
+			'library_label_fmt' => 'Stang options for product #%d',
+			'state_key'         => 'stang_library_key',
+			'noun_singular'     => 'stang option',
+			'noun_plural'       => 'stang options',
+		], $items );
+	}
+
+	public function read_stangs( int $product_id ): array {
+		return $this->read_role_library_items( $product_id, 'stang_library_key' );
+	}
+
+	/** @param list<array<string,mixed>> $items */
+	public function save_motors( int $product_id, array $items ): array {
+		return $this->save_role_items( $product_id, 'motor', [
+			'module_id'         => 'motors',
+			'library_role'      => 'product_motors',
+			'library_label_fmt' => 'Motor options for product #%d',
+			'state_key'         => 'motor_library_key',
+			'noun_singular'     => 'motor',
+			'noun_plural'       => 'motors',
+		], $items );
+	}
+
+	public function read_motors( int $product_id ): array {
+		return $this->read_role_library_items( $product_id, 'motor_library_key' );
+	}
+
+	/** @param list<array<string,mixed>> $items */
+	public function save_controls( int $product_id, array $items ): array {
+		return $this->save_role_items( $product_id, 'control', [
+			'module_id'         => 'controls',
+			'library_role'      => 'product_controls',
+			'library_label_fmt' => 'Controls for product #%d',
+			'state_key'         => 'control_library_key',
+			'noun_singular'     => 'control',
+			'noun_plural'       => 'controls',
+		], $items );
+	}
+
+	public function read_controls( int $product_id ): array {
+		return $this->read_role_library_items( $product_id, 'control_library_key' );
+	}
+
+	/** @param list<array<string,mixed>> $items */
+	public function save_accessories( int $product_id, array $items ): array {
+		return $this->save_role_items( $product_id, 'accessory', [
+			'module_id'         => 'accessories',
+			'library_role'      => 'product_accessories',
+			'library_label_fmt' => 'Accessories for product #%d',
+			'state_key'         => 'accessory_library_key',
+			'noun_singular'     => 'accessory',
+			'noun_plural'       => 'accessories',
+		], $items );
+	}
+
+	public function read_accessories( int $product_id ): array {
+		return $this->read_role_library_items( $product_id, 'accessory_library_key' );
+	}
+
+	/**
+	 * Record the customer-facing operation mode for the product:
+	 *   manual_only      — only stang options shown to the customer
+	 *   motorized_only   — only motor options shown
+	 *   both             — customer picks, JS renders accordingly
+	 *
+	 * Stored on `_configkit_pb_meta`. The actual show/hide rule
+	 * wiring lives on the template — for now the Simple-Mode UI
+	 * uses the recorded mode to decide which blocks to render. A
+	 * future chunk can promote this into a structured Rule when
+	 * the template builder accepts simpler inputs.
+	 *
+	 * @return array{ok:bool, message?:string, state?:array<string,mixed>}
+	 */
+	public function save_operation_mode( int $product_id, string $mode ): array {
+		$valid = [ 'manual_only', 'motorized_only', 'both' ];
+		if ( ! in_array( $mode, $valid, true ) ) {
+			return [
+				'ok'      => false,
+				'message' => 'Pick how the product is operated: manual, motorized, or both.',
+			];
+		}
+		if ( $this->state->product_type( $product_id ) === null ) {
+			return [
+				'ok'      => false,
+				'message' => 'Pick a product type before setting the operation mode.',
+			];
+		}
+		$state = $this->state->patch( $product_id, [ 'operation_mode' => $mode ] );
+		$message = match ( $mode ) {
+			'manual_only'    => 'Customer will only see stang options.',
+			'motorized_only' => 'Customer will only see motor options.',
+			default          => 'Customer will choose between stang and motor.',
+		};
+		return [ 'ok' => true, 'message' => $message, 'state' => $state ];
+	}
+
+	/**
+	 * Generic per-product items saver shared by stangs / motors /
+	 * controls / accessories / profile colors. Same shape as
+	 * save_fabrics but the input rows are mapped through a
+	 * generic_to_item_payload that respects the target module's
+	 * capabilities (so a Motors module that doesn't advertise
+	 * supports_color_family won't try to store color_family on a
+	 * motor item).
+	 *
+	 * @param array{
+	 *   module_id:string, library_role:string, library_label_fmt:string,
+	 *   state_key:string, noun_singular:string, noun_plural:string
+	 * } $cfg
+	 * @param list<array<string,mixed>> $items
+	 *
+	 * @return array{ok:bool, message?:string, state?:array<string,mixed>, errors?:list<array<string,mixed>>}
+	 */
+	private function save_role_items( int $product_id, string $role, array $cfg, array $items ): array {
+		$context = $this->ensure_role_library( $product_id, $role, $cfg );
+		if ( ! $context['ok'] ) return $context;
+
+		$lib = $context['library'];
+		if ( $this->item_repo !== null && $lib !== null ) {
+			$this->item_repo->soft_delete_all_in_library( (string) $lib['library_key'] );
+		}
+
+		$module   = $this->module_repo !== null ? $this->module_repo->find_by_key( (string) $lib['module_key'] ) : null;
+		$inserted = 0;
+		$errors   = [];
+		foreach ( $items as $i => $row ) {
+			$payload = $this->generic_to_item_payload( $row, $module ?? [] );
+			if ( empty( $payload['label'] ) ) {
+				$errors[] = [ 'field' => 'name', 'code' => 'required', 'message' => sprintf( '%s #%d needs a name.', ucfirst( $cfg['noun_singular'] ), $i + 1 ) ];
+				continue;
+			}
+			$payload['item_key'] = $this->mint_item_key( (string) $lib['library_key'], $payload['label'], $payload['sku'] ?? null );
+			$result = $this->items->create( (int) $lib['id'], $payload );
+			if ( ! ( $result['ok'] ?? false ) ) {
+				$errors[] = [
+					'field'   => $cfg['noun_singular'],
+					'code'    => 'create_failed',
+					'message' => sprintf( '%s #%d (%s) could not be saved: %s', ucfirst( $cfg['noun_singular'] ), $i + 1, (string) $payload['label'], (string) ( $result['errors'][0]['message'] ?? 'unknown' ) ),
+				];
+				continue;
+			}
+			$inserted++;
+		}
+
+		if ( count( $errors ) > 0 ) {
+			return [ 'ok' => false, 'message' => sprintf( '%d %s failed.', count( $errors ), $cfg['noun_plural'] ), 'errors' => $errors ];
+		}
+
+		$state = $this->state->patch( $product_id, [ $cfg['state_key'] => (string) $lib['library_key'] ] );
+		return [
+			'ok'      => true,
+			'message' => sprintf( '%d %s saved.', $inserted, $cfg['noun_plural'] ),
+			'state'   => $state,
+		];
+	}
+
+	/**
+	 * Capability-aware row → item payload for the generic role saver.
+	 *
+	 * Recognised input fields:
+	 *   name (required), code, image_url, main_image_url, color_family,
+	 *   hex (mapped to color_family for the Colors block when no
+	 *   palette label is supplied), price_source ('configkit' / 'woo'),
+	 *   price, woo_product_id, components (motor bundle), active.
+	 *
+	 * @param array<string,mixed> $row
+	 * @param array<string,mixed> $module
+	 * @return array<string,mixed>
+	 */
+	private function generic_to_item_payload( array $row, array $module ): array {
+		$payload = [
+			'label'        => isset( $row['name'] ) ? trim( (string) $row['name'] ) : '',
+			'sku'          => isset( $row['code'] ) && $row['code'] !== '' ? (string) $row['code'] : null,
+			'is_active'    => array_key_exists( 'active', $row ) ? (bool) $row['active'] : true,
+			'attributes'   => [],
+			'price_source' => $this->normalise_price_source( $row, $module ),
+			'item_type'    => isset( $row['components'] ) && is_array( $row['components'] ) && count( $row['components'] ) > 0 ? 'bundle' : 'simple_option',
+		];
+
+		if ( ! empty( $module['supports_image'] ) && ! empty( $row['image_url'] ) ) {
+			$payload['image_url'] = (string) $row['image_url'];
+		}
+		if ( ! empty( $module['supports_main_image'] ) && ! empty( $row['main_image_url'] ) ) {
+			$payload['main_image_url'] = (string) $row['main_image_url'];
+		}
+		if ( ! empty( $module['supports_color_family'] ) ) {
+			$cf = $row['color_family'] ?? $row['hex'] ?? null;
+			if ( $cf !== null && $cf !== '' ) $payload['color_family'] = (string) $cf;
+		}
+		if ( ! empty( $module['supports_price'] ) && isset( $row['price'] )
+			&& $row['price'] !== '' && $row['price'] !== null && (float) $row['price'] >= 0
+		) {
+			$payload['price'] = (float) $row['price'];
+		}
+		if ( ! empty( $module['supports_woo_product_link'] ) && isset( $row['woo_product_id'] )
+			&& (int) $row['woo_product_id'] > 0
+		) {
+			$payload['woo_product_id'] = (int) $row['woo_product_id'];
+		}
+
+		// Bundle components — Phase 4.2b shape.
+		if ( $payload['item_type'] === 'bundle' ) {
+			$payload['bundle_components'] = array_values( array_filter( array_map( static function ( $c ): ?array {
+				if ( ! is_array( $c ) ) return null;
+				$wid = isset( $c['woo_product_id'] ) ? (int) $c['woo_product_id'] : 0;
+				if ( $wid <= 0 ) return null;
+				return [
+					'component_key'  => isset( $c['component_key'] ) ? (string) $c['component_key'] : 'c_' . $wid,
+					'woo_product_id' => $wid,
+					'qty'            => isset( $c['qty'] ) && (int) $c['qty'] > 0 ? (int) $c['qty'] : 1,
+					'price_source'   => isset( $c['price_source'] ) ? (string) $c['price_source'] : 'woo',
+				];
+			}, $row['components'] ) ) );
+			if ( count( $payload['bundle_components'] ) === 0 ) {
+				$payload['item_type'] = 'simple_option';
+				unset( $payload['bundle_components'] );
+				$payload['price_source'] = 'configkit';
+			} elseif ( ! empty( $row['fixed_price'] ) ) {
+				$payload['price_source']       = 'fixed_bundle';
+				$payload['bundle_fixed_price'] = (float) $row['fixed_price'];
+			} else {
+				$payload['price_source'] = 'bundle_sum';
+			}
+		}
+
+		return $payload;
+	}
+
+	/**
+	 * @param array<string,mixed> $row
+	 * @param array<string,mixed> $module
+	 */
+	private function normalise_price_source( array $row, array $module ): string {
+		$raw = isset( $row['price_source'] ) ? strtolower( (string) $row['price_source'] ) : '';
+		if ( $raw === 'woo' && ! empty( $module['supports_woo_product_link'] ) ) return 'woo';
+		if ( $raw === 'free' )      return 'configkit'; // free → 0 stored as configkit price
+		if ( $raw === 'configkit' ) return 'configkit';
+		// Implicit: a Woo-linked row with no explicit source hints uses Woo when supported.
+		if ( ! empty( $module['supports_woo_product_link'] ) && isset( $row['woo_product_id'] ) && (int) $row['woo_product_id'] > 0 && empty( $row['price'] ) ) {
+			return 'woo';
+		}
+		return 'configkit';
+	}
+
 	/**
 	 * @return list<array<string,mixed>>
 	 */
