@@ -7,6 +7,8 @@ use ConfigKit\Admin\ProductTypeRecipes;
 use ConfigKit\Rest\AbstractController;
 use ConfigKit\Service\AutoManagedRegistry;
 use ConfigKit\Service\ProductBuilderService;
+use ConfigKit\Service\SetupSourceResolver;
+use ConfigKit\Service\SetupSourceService;
 
 /**
  * Phase 4.3 — Product Builder REST surface (Simple Mode).
@@ -26,6 +28,8 @@ final class ProductBuilderController extends AbstractController {
 	public function __construct(
 		private ProductBuilderService $service,
 		private ?AutoManagedRegistry $registry = null,
+		private ?SetupSourceService $setup_source = null,
+		private ?SetupSourceResolver $resolver = null,
 	) {}
 
 	public function register_routes(): void {
@@ -129,6 +133,157 @@ final class ProductBuilderController extends AbstractController {
 				'permission_callback' => $this->require_cap( self::CAP ),
 			],
 		] );
+
+		// Phase 4.3b half B — setup-source actions.
+		\register_rest_route( self::NAMESPACE, '/product-builder/(?P<product_id>\d+)/setup-source', [
+			[
+				'methods'             => 'GET',
+				'callback'            => [ $this, 'read_setup_source' ],
+				'permission_callback' => $this->require_cap( self::CAP ),
+			],
+		] );
+
+		\register_rest_route( self::NAMESPACE, '/product-builder/(?P<product_id>\d+)/copy-from-product', [
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'copy_from_product' ],
+				'permission_callback' => $this->require_cap( self::CAP ),
+			],
+		] );
+
+		\register_rest_route( self::NAMESPACE, '/product-builder/(?P<product_id>\d+)/link-to-setup', [
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'link_to_setup' ],
+				'permission_callback' => $this->require_cap( self::CAP ),
+			],
+		] );
+
+		\register_rest_route( self::NAMESPACE, '/product-builder/(?P<product_id>\d+)/detach-from-preset', [
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'detach_from_preset' ],
+				'permission_callback' => $this->require_cap( self::CAP ),
+			],
+		] );
+
+		\register_rest_route( self::NAMESPACE, '/product-builder/(?P<product_id>\d+)/reset-override', [
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'reset_override' ],
+				'permission_callback' => $this->require_cap( self::CAP ),
+			],
+		] );
+
+		\register_rest_route( self::NAMESPACE, '/product-builder/(?P<product_id>\d+)/write-override', [
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'write_override' ],
+				'permission_callback' => $this->require_cap( self::CAP ),
+			],
+		] );
+	}
+
+	public function read_setup_source( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		if ( $this->resolver === null ) {
+			return $this->error( 'half_b_not_wired', 'Setup-source resolver is not wired.', [], 500 );
+		}
+		$product_id = (int) $request['product_id'];
+		$resolved   = $this->resolver->resolve( $product_id );
+		// Surface the parts the UI needs without dumping the full
+		// section list — the existing /configurator/{id}/sections
+		// endpoint already returns those.
+		return $this->ok( [
+			'setup_source'      => $resolved['setup_source'],
+			'preset_id'         => $resolved['preset_id'],
+			'source_product_id' => $resolved['source_product_id'],
+			'preset'            => $resolved['preset'] !== null ? [
+				'id'           => $resolved['preset']['id'],
+				'preset_key'   => $resolved['preset']['preset_key'],
+				'name'         => $resolved['preset']['name'],
+				'product_type' => $resolved['preset']['product_type'],
+			] : null,
+			'overrides'         => $resolved['overrides'],
+			'global_overrides'  => $resolved['global_overrides'],
+			'orphan_paths'      => $resolved['orphan_paths'],
+		] );
+	}
+
+	public function copy_from_product( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		if ( $this->setup_source === null ) {
+			return $this->error( 'half_b_not_wired', 'Setup-source service is not wired.', [], 500 );
+		}
+		$product_id = (int) $request['product_id'];
+		$body       = $this->payload( $request );
+		$source_id  = (int) ( $body['source_product_id'] ?? 0 );
+		if ( $source_id <= 0 ) {
+			return $this->error( 'copy_failed', 'source_product_id is required.', [], 400 );
+		}
+		$choice    = (string) ( $body['lookup_table_choice'] ?? SetupSourceService::LOOKUP_INHERIT );
+		$reuse_key = isset( $body['lookup_table_key'] ) ? (string) $body['lookup_table_key'] : null;
+		$result    = $this->setup_source->copy_from_product( $product_id, $source_id, $choice, $reuse_key );
+		if ( ! ( $result['ok'] ?? false ) ) {
+			return $this->error( 'copy_failed', (string) ( $result['message'] ?? 'Copy failed.' ), [], 400 );
+		}
+		return $this->ok( $result );
+	}
+
+	public function link_to_setup( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		if ( $this->setup_source === null ) {
+			return $this->error( 'half_b_not_wired', 'Setup-source service is not wired.', [], 500 );
+		}
+		$product_id = (int) $request['product_id'];
+		$body       = $this->payload( $request );
+		$source_id  = (int) ( $body['source_product_id'] ?? 0 );
+		if ( $source_id <= 0 ) {
+			return $this->error( 'link_failed', 'source_product_id is required.', [], 400 );
+		}
+		$result = $this->setup_source->link_to_setup( $product_id, $source_id );
+		if ( ! ( $result['ok'] ?? false ) ) {
+			return $this->error( 'link_failed', (string) ( $result['message'] ?? 'Link failed.' ), [], 400 );
+		}
+		return $this->ok( $result );
+	}
+
+	public function detach_from_preset( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		if ( $this->setup_source === null ) {
+			return $this->error( 'half_b_not_wired', 'Setup-source service is not wired.', [], 500 );
+		}
+		$product_id = (int) $request['product_id'];
+		$result     = $this->setup_source->detach_from_preset( $product_id );
+		if ( ! ( $result['ok'] ?? false ) ) {
+			return $this->error( 'detach_failed', (string) ( $result['message'] ?? 'Detach failed.' ), [], 400 );
+		}
+		return $this->ok( $result );
+	}
+
+	public function reset_override( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		if ( $this->setup_source === null ) {
+			return $this->error( 'half_b_not_wired', 'Setup-source service is not wired.', [], 500 );
+		}
+		$product_id = (int) $request['product_id'];
+		$body       = $this->payload( $request );
+		$path       = (string) ( $body['override_path'] ?? '' );
+		$result     = $this->setup_source->reset_override( $product_id, $path );
+		if ( ! ( $result['ok'] ?? false ) ) {
+			return $this->error( 'reset_failed', (string) ( $result['message'] ?? 'Reset failed.' ), [], 400 );
+		}
+		return $this->ok( $result );
+	}
+
+	public function write_override( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		if ( $this->setup_source === null ) {
+			return $this->error( 'half_b_not_wired', 'Setup-source service is not wired.', [], 500 );
+		}
+		$product_id = (int) $request['product_id'];
+		$body       = $this->payload( $request );
+		$path       = (string) ( $body['path'] ?? '' );
+		$value      = $body['value'] ?? null;
+		$result     = $this->setup_source->write_override( $product_id, $path, $value );
+		if ( ! ( $result['ok'] ?? false ) ) {
+			return $this->error( 'write_failed', (string) ( $result['message'] ?? 'Write failed.' ), [], 400 );
+		}
+		return $this->ok( $result );
 	}
 
 	public function list_recipes( \WP_REST_Request $request ): \WP_REST_Response {

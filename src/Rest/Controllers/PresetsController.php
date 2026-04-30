@@ -57,6 +57,22 @@ final class PresetsController extends AbstractController {
 				'permission_callback' => $this->require_cap( self::CAP ),
 			],
 		] );
+
+		\register_rest_route( self::NAMESPACE, '/presets/(?P<preset_id>\d+)/products-using', [
+			[
+				'methods'             => 'GET',
+				'callback'            => [ $this, 'products_using' ],
+				'permission_callback' => $this->require_cap( self::CAP ),
+			],
+		] );
+	}
+
+	public function products_using( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$id = (int) $request['preset_id'];
+		if ( $this->service->get_preset( $id ) === null ) {
+			return $this->error( 'preset_not_found', 'Preset not found.', [], 404 );
+		}
+		return $this->ok( [ 'products' => $this->service->products_using( $id ) ] );
 	}
 
 	public function list_presets( \WP_REST_Request $request ): \WP_REST_Response {

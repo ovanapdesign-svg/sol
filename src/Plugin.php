@@ -93,8 +93,12 @@ use ConfigKit\Service\RuleService;
 use ConfigKit\Service\StepService;
 use ConfigKit\Service\AutoManagedRegistry;
 use ConfigKit\Service\ConfiguratorBuilderService;
+use ConfigKit\Service\OverrideApplier;
 use ConfigKit\Service\PresetService;
 use ConfigKit\Service\ProductBuilderService;
+use ConfigKit\Service\SetupSourceResolver;
+use ConfigKit\Service\SetupSourceService;
+use ConfigKit\Service\SetupSourceState;
 use ConfigKit\Service\ProductBuilderState;
 use ConfigKit\Service\SectionListState;
 use ConfigKit\Service\QuickImportService;
@@ -410,13 +414,30 @@ final class Plugin {
 			$module_repo,
 			new WooSkuResolverImpl()
 		) ) );
-		$preset_repo = new PresetRepository( $wpdb );
-		$router->add( new PresetsController( new PresetService(
+		$preset_repo     = new PresetRepository( $wpdb );
+		$setup_source_state = new SetupSourceState();
+		$override_applier   = new OverrideApplier();
+		$setup_source_resolver = new SetupSourceResolver(
+			$setup_source_state,
+			$section_state,
+			$preset_repo,
+			$override_applier,
+		);
+		$preset_service = new PresetService(
 			$preset_repo,
 			$section_state,
 			$library_repo,
 			$lookup_repo,
-		) ) );
+			$setup_source_state,
+		);
+		$setup_source_service = new SetupSourceService(
+			$setup_source_state,
+			$section_state,
+			$setup_source_resolver,
+			new LookupTableService( $lookup_repo, $cell_repo ),
+			$lookup_repo,
+		);
+		$router->add( new PresetsController( $preset_service ) );
 		$router->add( new ProductBuilderController(
 			new ProductBuilderService(
 				new TemplateService( $template_repo ),
@@ -436,7 +457,9 @@ final class Plugin {
 				new LibraryItemService( $item_repo, $library_repo, $module_repo ),
 				$item_repo
 			),
-			$pb_registry
+			$pb_registry,
+			$setup_source_service,
+			$setup_source_resolver
 		) );
 		return $router;
 	}

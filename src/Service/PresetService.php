@@ -49,6 +49,7 @@ final class PresetService {
 		private SectionListState $sections,
 		private ?LibraryRepository $libraries = null,
 		private ?LookupTableRepository $lookup_tables = null,
+		private ?SetupSourceState $setup_source = null,
 	) {}
 
 	/**
@@ -118,10 +119,38 @@ final class PresetService {
 		if ( $preset === null || $preset['deleted_at'] !== null ) {
 			return [ 'ok' => false, 'message' => 'Preset not found.' ];
 		}
+
+		// Half B: apply_preset flips the product into use_preset mode.
+		// SetupSourceResolver synthesizes the effective sections from
+		// preset.sections on every read, so we DO NOT clone into
+		// SectionListState. Local sections are wiped so a later
+		// detach (which materializes the resolved view back into the
+		// local list) starts from a clean slate.
+		if ( $this->setup_source !== null ) {
+			foreach ( $this->sections->list( $product_id ) as $row ) {
+				$id = (string) ( $row['id'] ?? '' );
+				if ( $id !== '' ) $this->sections->remove( $product_id, $id );
+			}
+			$this->setup_source->patch( $product_id, [
+				'setup_source'      => SetupSourceState::SOURCE_PRESET,
+				'preset_id'         => $preset_id,
+				'source_product_id' => 0,
+				'overrides'         => [],
+			] );
+			return [
+				'ok'       => true,
+				'message'  => sprintf( '%d section(s) inherited from preset.', count( is_array( $preset['sections'] ?? null ) ? $preset['sections'] : [] ) ),
+				'preset'   => $preset,
+				'sections' => [], // resolver-driven; UI re-fetches via /configurator/{id}/sections
+			];
+		}
+
+		// Legacy path (Half A test wiring without SetupSourceState):
+		// behave as Half A did — clone the preset into SectionListState
+		// directly so the data-layer tests written against the
+		// pre-resolver model still verify the snapshot/apply contract.
 		$snapshot = is_array( $preset['sections'] ?? null ) ? $preset['sections'] : [];
 
-		// Pre-mint new section ids so visibility conditions can be
-		// rewritten in a second pass.
 		$id_map = [];
 		$new_rows = [];
 		foreach ( $snapshot as $i => $snap ) {
@@ -165,10 +194,6 @@ final class PresetService {
 			$out[] = $row;
 		}
 
-		// Replace the target's section list — wipe-and-write rather
-		// than diff-and-patch so use_preset semantics are predictable.
-		// Underlying entities the target used to own are left in place
-		// (Phase 4.4 soft-detach already preserves them).
 		$existing = $this->sections->list( $product_id );
 		foreach ( $existing as $row ) {
 			$id = (string) ( $row['id'] ?? '' );
@@ -203,6 +228,46 @@ final class PresetService {
 
 	public function get_preset( int $id ): ?array {
 		return $this->presets->find_by_id( $id );
+	}
+
+	/**
+	 * Phase 4.3b half B — list products that currently use this preset.
+	 * Implementation walks `_configkit_setup_source` post meta via
+	 * WP_Query (available at request time). Returns minimal records:
+	 *   list<{ product_id:int, name:string, edit_url?:string }>
+	 *
+	 * The post-meta query is broad on purpose: WP_Query with a
+	 * meta_query on a JSON-serialized field scans every product. The
+	 * cost is acceptable for the small product counts (~30-60) the
+	 * sol1 owner is targeting and avoids a custom index column.
+	 *
+	 * @return list<array<string,mixed>>
+	 */
+	public function products_using( int $preset_id ): array {
+		if ( ! function_exists( 'get_posts' ) || ! function_exists( 'get_post_meta' ) ) return [];
+		$post_ids = \get_posts( [
+			'post_type'      => [ 'product' ],
+			'post_status'    => 'any',
+			'numberposts'    => 200,
+			'fields'         => 'ids',
+			'no_found_rows'  => true,
+			'meta_query'     => [
+				[ 'key' => SetupSourceState::META_KEY, 'compare' => 'EXISTS' ],
+			],
+		] );
+		$out = [];
+		foreach ( (array) $post_ids as $pid ) {
+			$pid = (int) $pid;
+			$meta = \get_post_meta( $pid, SetupSourceState::META_KEY, true );
+			if ( ! is_array( $meta ) || (int) ( $meta['preset_id'] ?? 0 ) !== $preset_id ) continue;
+			if ( ( $meta['setup_source'] ?? '' ) !== SetupSourceState::SOURCE_PRESET ) continue;
+			$out[] = [
+				'product_id' => $pid,
+				'name'       => function_exists( 'get_the_title' ) ? (string) \get_the_title( $pid ) : '',
+				'edit_url'   => function_exists( 'get_edit_post_link' ) ? (string) \get_edit_post_link( $pid, 'raw' ) : '',
+			];
+		}
+		return $out;
 	}
 
 	// =========================================================
