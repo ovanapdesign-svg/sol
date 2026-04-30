@@ -69,6 +69,7 @@ use ConfigKit\Rest\Controllers\ModulesController;
 use ConfigKit\Rest\Controllers\ProductsController;
 use ConfigKit\Rest\Controllers\RulesController;
 use ConfigKit\Rest\Controllers\StepsController;
+use ConfigKit\Rest\Controllers\ProductBuilderController;
 use ConfigKit\Rest\Controllers\TemplatesController;
 use ConfigKit\Rest\Controllers\TemplateVersionsController;
 use ConfigKit\Rest\Controllers\WooProductsController;
@@ -87,6 +88,9 @@ use ConfigKit\Service\ProductBindingService;
 use ConfigKit\Service\ProductDiagnosticsService;
 use ConfigKit\Service\RuleService;
 use ConfigKit\Service\StepService;
+use ConfigKit\Service\AutoManagedRegistry;
+use ConfigKit\Service\ProductBuilderService;
+use ConfigKit\Service\ProductBuilderState;
 use ConfigKit\Service\QuickImportService;
 use ConfigKit\Service\SystemDiagnosticsService;
 use ConfigKit\Service\TemplateService;
@@ -379,6 +383,16 @@ final class Plugin {
 		) );
 
 		$router->add( new WooProductsController( new WooProductSearchProvider() ) );
+
+		// Phase 4.3 — Product Builder (Simple Mode) orchestrator.
+		$router->add( new ProductBuilderController( new ProductBuilderService(
+			new TemplateService( $template_repo ),
+			$template_repo,
+			new FamilyService( new FamilyRepository( $wpdb ) ),
+			new FamilyRepository( $wpdb ),
+			new ProductBuilderState(),
+			new AutoManagedRegistry()
+		) ) );
 		return $router;
 	}
 
