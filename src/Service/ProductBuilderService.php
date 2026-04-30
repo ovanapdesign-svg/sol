@@ -893,6 +893,42 @@ final class ProductBuilderService {
 	}
 
 	/**
+	 * Phase 4.3 dalis 2 — single aggregated snapshot the Simple Mode
+	 * UI loads on page open. One round-trip returns everything the
+	 *10 blocks need to render pre-filled.
+	 *
+	 * Shape:
+	 *   {
+	 *     state:           ProductBuilderState meta (product_type,
+	 *                      template_key, library keys, operation_mode,
+	 *                      auto_managed, builder_version),
+	 *     pricing_rows:    list,
+	 *     fabrics:         list,
+	 *     profile_colors:  list,
+	 *     stangs:          list,
+	 *     motors:          list,
+	 *     controls:        list,
+	 *     accessories:     list,
+	 *     checklist:       can_enable_configurator() output
+	 *   }
+	 *
+	 * @return array<string,mixed>
+	 */
+	public function get_full_snapshot( int $product_id ): array {
+		return [
+			'state'           => $this->state->get( $product_id ),
+			'pricing_rows'    => $this->read_pricing_rows( $product_id ),
+			'fabrics'         => $this->read_fabrics( $product_id ),
+			'profile_colors'  => $this->read_profile_colors( $product_id ),
+			'stangs'          => $this->read_stangs( $product_id ),
+			'motors'          => $this->read_motors( $product_id ),
+			'controls'        => $this->read_controls( $product_id ),
+			'accessories'    => $this->read_accessories( $product_id ),
+			'checklist'       => $this->can_enable_configurator( $product_id ),
+		];
+	}
+
+	/**
 	 * Read the saved pricing rows so the JS can rehydrate the editor
 	 * after a page reload. Returns the cells in (height ASC, width ASC)
 	 * order so the table reads top-to-bottom-left-to-right.
@@ -903,7 +939,7 @@ final class ProductBuilderService {
 		if ( $this->lookup_cell_repo === null ) return [];
 		$key = $this->state->get_string( $product_id, 'lookup_table_key' );
 		if ( $key === null ) return [];
-		$cells = $this->lookup_cell_repo->list_in_table( $key, 1, 5000 )['items'] ?? [];
+		$cells = $this->lookup_cell_repo->list_in_table( $key, [], 1, 5000 )['items'] ?? [];
 		$out   = [];
 		foreach ( $cells as $c ) {
 			$out[] = [

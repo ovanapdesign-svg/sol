@@ -385,6 +385,38 @@ final class ProductBuilderServiceTest extends TestCase {
 		$this->assertSame( 'product_4242_pricing', $writes['_configkit_lookup_table_key'] );
 	}
 
+	public function test_get_full_snapshot_aggregates_every_block(): void {
+		$this->service->set_product_type( self::PRODUCT_ID, 'markise' );
+		$this->service->save_pricing_rows( self::PRODUCT_ID, [
+			[ 'to_width' => 2400, 'to_height' => 2000, 'price' => 12000 ],
+		] );
+		$this->service->save_fabrics( self::PRODUCT_ID, [ [ 'name' => 'Beige', 'code' => 'U171' ] ] );
+		$this->service->save_operation_mode( self::PRODUCT_ID, 'both' );
+		$this->service->save_motors( self::PRODUCT_ID, [
+			[ 'name' => 'Sonesse 30', 'code' => 'SO30', 'price_source' => 'configkit', 'price' => 4500 ],
+		] );
+
+		$snap = $this->service->get_full_snapshot( self::PRODUCT_ID );
+
+		$this->assertSame( 'markise', $snap['state']['product_type'] );
+		$this->assertCount( 1, $snap['pricing_rows'] );
+		$this->assertCount( 1, $snap['fabrics'] );
+		$this->assertSame( 'both', $snap['state']['operation_mode'] );
+		$this->assertCount( 1, $snap['motors'] );
+		$this->assertSame( [], $snap['controls'] );
+		$this->assertArrayHasKey( 'checklist', $snap );
+		$this->assertArrayHasKey( 'ready', $snap['checklist'] );
+	}
+
+	public function test_get_full_snapshot_returns_empty_blocks_for_unconfigured_product(): void {
+		$snap = $this->service->get_full_snapshot( 9999 );
+		$this->assertSame( [], $snap['state'] );
+		$this->assertSame( [], $snap['pricing_rows'] );
+		$this->assertSame( [], $snap['fabrics'] );
+		$this->assertSame( [], $snap['motors'] );
+		$this->assertFalse( $snap['checklist']['ready'] );
+	}
+
 	public function test_state_marks_product_as_auto_managed_after_first_action(): void {
 		$this->assertFalse( $this->state->is_auto_managed( self::PRODUCT_ID ) );
 		$this->service->set_product_type( self::PRODUCT_ID, 'markise' );

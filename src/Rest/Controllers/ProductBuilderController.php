@@ -53,6 +53,14 @@ final class ProductBuilderController extends AbstractController {
 			],
 		] );
 
+		\register_rest_route( self::NAMESPACE, '/product-builder/(?P<product_id>\d+)/snapshot', [
+			[
+				'methods'             => 'GET',
+				'callback'            => [ $this, 'read_snapshot' ],
+				'permission_callback' => $this->require_cap( self::CAP ),
+			],
+		] );
+
 		\register_rest_route( self::NAMESPACE, '/product-builder/(?P<product_id>\d+)/product-type', [
 			[
 				'methods'             => 'POST',
@@ -138,6 +146,14 @@ final class ProductBuilderController extends AbstractController {
 			'product_id' => $product_id,
 			'state'      => $this->service->get_state( $product_id ),
 		] );
+	}
+
+	public function read_snapshot( \WP_REST_Request $request ): \WP_REST_Response {
+		$product_id = (int) $request['product_id'];
+		return $this->ok( array_merge(
+			[ 'product_id' => $product_id ],
+			$this->service->get_full_snapshot( $product_id )
+		) );
 	}
 
 	public function set_product_type( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
