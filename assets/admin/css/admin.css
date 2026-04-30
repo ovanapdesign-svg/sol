@@ -3914,6 +3914,61 @@
 	gap: 6px;
 }
 
+/* Phase 4.4 chunk 7 — visibility tab. */
+.configkit-cb__visibility {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.configkit-cb__visibility-mode {
+	display: flex;
+	gap: 18px;
+	font-size: 13px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid #f0f0f1;
+}
+
+.configkit-cb__visibility-when {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.configkit-cb__visibility-match {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 13px;
+	color: #50575e;
+}
+
+.configkit-cb__condition-list {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.configkit-cb__condition {
+	display: grid;
+	grid-template-columns: 1.4fr 0.6fr 1.4fr 30px;
+	gap: 8px;
+	align-items: center;
+}
+
+.configkit-cb__condition-input {
+	width: 100%;
+	padding: 4px 6px;
+	font-size: 13px;
+}
+
+.configkit-cb__visibility-actions {
+	display: flex;
+	justify-content: flex-end;
+	border-top: 1px solid #f0f0f1;
+	padding-top: 10px;
+}
+
 /* Phase 4.3 — Product Builder auto-managed badge in admin lists. */
 .configkit-auto-managed-badge {
 	display: inline-flex;

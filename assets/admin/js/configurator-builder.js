@@ -52,9 +52,10 @@
 		message:      null,
 		sections:     [],
 		sectionTypes: [],
-		modal:        null, // { sectionId, tab, ranges?, rangeDiagnostics?, options?, zipMatch? }
+		modal:        null, // { sectionId, tab, ranges?, rangeDiagnostics?, options?, zipMatch?, visibility? }
 		bulkPaste:    null, // { sectionId, text, errors }
 		optionCounts: {},   // sectionId → number of saved options (for card meta)
+		valueCache:   {},   // sectionId → list<{value, label}> for visibility dropdowns
 		// drag-drop bookkeeping
 		dragId:       null,
 	};
@@ -462,9 +463,7 @@
 		if ( state.modal.tab === 'choices' ) {
 			body.appendChild( renderChoicesTab( section ) );
 		} else if ( state.modal.tab === 'visibility' ) {
-			body.appendChild( el( 'p', { class: 'description' },
-				'Visibility rule builder lands in chunk 7.'
-			) );
+			body.appendChild( renderVisibilityTab( section ) );
 		}
 		modal.appendChild( body );
 
@@ -1609,6 +1608,264 @@
 		const existing = ( state.modal.options || [] ).filter( ( o ) => ( o.label || '' ).trim() !== '' );
 		state.modal.options = existing.concat( parsed );
 		closeBulkPaste();
+	}
+
+	// =========================================================
+	// Visibility tab — visual rule builder per section.
+	// Persists via PUT /sections/{id} with the existing visibility
+	// patch shape sanitised by ConfiguratorBuilderService.
+	// =========================================================
+
+	function ensureVisibilityDraft( section ) {
+		if ( ! state.modal ) return null;
+		if ( state.modal.visibility ) return state.modal.visibility;
+		const v = section.visibility || { mode: 'always', conditions: [], match: 'all' };
+		state.modal.visibility = {
+			mode:       v.mode === 'when' ? 'when' : 'always',
+			match:      v.match === 'any' ? 'any' : 'all',
+			conditions: ( v.conditions || [] ).map( ( c ) => ( {
+				section_id: c.section_id || '',
+				op:         c.op === 'not_equals' ? 'not_equals' : 'equals',
+				value:      c.value === undefined || c.value === null ? '' : String( c.value ),
+			} ) ),
+		};
+		return state.modal.visibility;
+	}
+
+	function renderVisibilityTab( section ) {
+		const draft = ensureVisibilityDraft( section );
+		const wrap  = el( 'div', { class: 'configkit-cb__visibility' } );
+
+		const modeRow = el( 'div', { class: 'configkit-cb__visibility-mode' } );
+		modeRow.appendChild( el( 'label', null,
+			el( 'input', {
+				type: 'radio',
+				name: 'vis-mode-' + section.id,
+				value: 'always',
+				checked: draft.mode === 'always',
+				onChange: () => {
+					draft.mode = 'always';
+					render();
+				},
+			} ),
+			document.createTextNode( ' Always visible' )
+		) );
+		modeRow.appendChild( el( 'label', null,
+			el( 'input', {
+				type: 'radio',
+				name: 'vis-mode-' + section.id,
+				value: 'when',
+				checked: draft.mode === 'when',
+				onChange: () => {
+					draft.mode = 'when';
+					if ( draft.conditions.length === 0 ) {
+						draft.conditions.push( { section_id: '', op: 'equals', value: '' } );
+					}
+					render();
+				},
+			} ),
+			document.createTextNode( ' Show only when…' )
+		) );
+		wrap.appendChild( modeRow );
+
+		if ( draft.mode === 'when' ) {
+			wrap.appendChild( renderVisibilityWhen( section, draft ) );
+		} else {
+			wrap.appendChild( el( 'p', { class: 'description' },
+				'This section is shown to every customer. Switch to "Show only when" to add a rule.'
+			) );
+		}
+
+		wrap.appendChild( el( 'div', { class: 'configkit-cb__visibility-actions' },
+			el( 'button', {
+				type: 'button',
+				class: 'button button-primary',
+				disabled: state.busy,
+				onClick: saveVisibility,
+			}, state.busy ? 'Saving…' : 'Save visibility' )
+		) );
+		return wrap;
+	}
+
+	function renderVisibilityWhen( section, draft ) {
+		const wrap = el( 'div', { class: 'configkit-cb__visibility-when' } );
+
+		const matchRow = el( 'div', { class: 'configkit-cb__visibility-match' } );
+		matchRow.appendChild( el( 'span', null, 'Match' ) );
+		const matchSel = el( 'select', null,
+			el( 'option', { value: 'all', selected: draft.match === 'all' }, 'all conditions' ),
+			el( 'option', { value: 'any', selected: draft.match === 'any' }, 'any condition' )
+		);
+		matchSel.addEventListener( 'change', ( ev ) => {
+			draft.match = ev.target.value === 'any' ? 'any' : 'all';
+		} );
+		matchRow.appendChild( matchSel );
+		wrap.appendChild( matchRow );
+
+		const list = el( 'div', { class: 'configkit-cb__condition-list' } );
+		draft.conditions.forEach( ( cond, i ) => {
+			list.appendChild( renderConditionRow( section, draft, cond, i ) );
+		} );
+		wrap.appendChild( list );
+
+		wrap.appendChild( el( 'button', {
+			type: 'button',
+			class: 'button-link',
+			onClick: () => {
+				draft.conditions.push( { section_id: '', op: 'equals', value: '' } );
+				render();
+			},
+		}, '+ Add condition' ) );
+		return wrap;
+	}
+
+	function renderConditionRow( section, draft, cond, index ) {
+		const row = el( 'div', { class: 'configkit-cb__condition' } );
+
+		// Section dropdown — exclude self.
+		const secSel = el( 'select', { class: 'configkit-cb__condition-input' } );
+		secSel.appendChild( el( 'option', { value: '' }, 'When section…' ) );
+		state.sections.forEach( ( s ) => {
+			if ( s.id === section.id ) return;
+			secSel.appendChild( el( 'option', {
+				value: s.id,
+				selected: cond.section_id === s.id,
+			}, s.label || s.id ) );
+		} );
+		secSel.addEventListener( 'change', ( ev ) => {
+			cond.section_id = ev.target.value;
+			cond.value = '';
+			ensureValueCache( cond.section_id ).then( () => render() );
+			render();
+		} );
+		row.appendChild( secSel );
+
+		// Operator dropdown.
+		const opSel = el( 'select', { class: 'configkit-cb__condition-input' } );
+		opSel.appendChild( el( 'option', { value: 'equals',     selected: cond.op === 'equals' }, 'is' ) );
+		opSel.appendChild( el( 'option', { value: 'not_equals', selected: cond.op === 'not_equals' }, 'is not' ) );
+		opSel.addEventListener( 'change', ( ev ) => {
+			cond.op = ev.target.value === 'not_equals' ? 'not_equals' : 'equals';
+		} );
+		row.appendChild( opSel );
+
+		// Value picker — dropdown when we have cached values, otherwise free text.
+		row.appendChild( renderConditionValueInput( cond ) );
+
+		row.appendChild( el( 'button', {
+			type: 'button',
+			class: 'configkit-cb__row-remove',
+			'aria-label': 'Remove condition',
+			onClick: () => {
+				draft.conditions.splice( index, 1 );
+				render();
+			},
+		}, '✕' ) );
+		return row;
+	}
+
+	function renderConditionValueInput( cond ) {
+		const cached = cond.section_id ? state.valueCache[ cond.section_id ] : null;
+		if ( ! cond.section_id ) {
+			return el( 'input', {
+				type: 'text',
+				class: 'configkit-cb__condition-input',
+				placeholder: 'Pick a section first',
+				disabled: true,
+				value: cond.value || '',
+			} );
+		}
+		if ( ! Array.isArray( cached ) ) {
+			// Kick off the fetch the first time we render this row.
+			ensureValueCache( cond.section_id ).then( () => render() );
+			return el( 'input', {
+				type: 'text',
+				class: 'configkit-cb__condition-input',
+				placeholder: 'Loading values…',
+				disabled: true,
+				value: cond.value || '',
+			} );
+		}
+		if ( cached.length === 0 ) {
+			// Section has no enumerable values — fall back to free text
+			// so size_pricing-style sections still work as triggers.
+			const inp = el( 'input', {
+				type: 'text',
+				class: 'configkit-cb__condition-input',
+				placeholder: 'Enter value (e.g. SKU)',
+				value: cond.value || '',
+			} );
+			inp.addEventListener( 'change', ( ev ) => { cond.value = ev.target.value; } );
+			return inp;
+		}
+		const sel = el( 'select', { class: 'configkit-cb__condition-input' } );
+		sel.appendChild( el( 'option', { value: '', selected: ! cond.value }, 'Pick a value…' ) );
+		cached.forEach( ( v ) => {
+			sel.appendChild( el( 'option', {
+				value: v.value,
+				selected: cond.value === v.value,
+			}, v.label ) );
+		} );
+		sel.addEventListener( 'change', ( ev ) => { cond.value = ev.target.value; } );
+		return sel;
+	}
+
+	async function ensureValueCache( sectionId ) {
+		if ( ! sectionId ) return;
+		if ( state.valueCache[ sectionId ] !== undefined ) return;
+		const section = findSection( sectionId );
+		if ( ! section ) {
+			state.valueCache[ sectionId ] = [];
+			return;
+		}
+		// size_pricing has no enumerable values — leave empty so the
+		// editor falls back to free text.
+		if ( section.type === 'size_pricing' ) {
+			state.valueCache[ sectionId ] = [];
+			return;
+		}
+		try {
+			const data = await window.ConfigKit.request(
+				'/configurator/' + productId + '/sections/' + encodeURIComponent( sectionId ) + '/options'
+			);
+			const opts = ( data && data.options ) || [];
+			state.valueCache[ sectionId ] = opts
+				.filter( ( o ) => ( o.sku || o.item_key ) && o.is_active !== false )
+				.map( ( o ) => ( {
+					value: o.sku || o.item_key,
+					label: ( o.label || o.sku || o.item_key ) + ( o.sku ? ' (' + o.sku + ')' : '' ),
+				} ) );
+		} catch ( e ) {
+			state.valueCache[ sectionId ] = [];
+		}
+	}
+
+	async function saveVisibility() {
+		if ( ! state.modal || ! state.modal.visibility ) return;
+		const draft = state.modal.visibility;
+		const payload = {
+			mode:       draft.mode,
+			match:      draft.match,
+			conditions: draft.mode === 'when' ? draft.conditions.filter( ( c ) => c.section_id ) : [],
+		};
+		try {
+			const result = await cbRequest(
+				'/sections/' + encodeURIComponent( state.modal.sectionId ),
+				{ method: 'PUT', body: { visibility: payload } }
+			);
+			state.sections = result.sections || state.sections;
+			showMessage( 'success', 'Visibility saved.' );
+			// Refresh the working copy from the server-sanitised version.
+			const fresh = findSection( state.modal.sectionId );
+			if ( fresh ) {
+				state.modal.visibility = null;
+				ensureVisibilityDraft( fresh );
+			}
+			render();
+		} catch ( err ) {
+			showMessage( 'error', explainError( err ) );
+			render();
+		}
 	}
 
 	function renderEditableLabel( section ) {
