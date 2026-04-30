@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace ConfigKit\Rest\Controllers;
 
+use ConfigKit\Import\UploadPaths;
 use ConfigKit\Rest\AbstractController;
 use ConfigKit\Service\ImportService;
 
@@ -199,29 +200,21 @@ final class ImportsController extends AbstractController {
 	}
 
 	/**
-	 * Move the upload into a private plugin uploads dir.
-	 * Owner-supplied filename is sanitized; the on-disk name is a
-	 * unique batch-keyed slug to avoid collisions.
+	 * Move the upload into the plugin's uploads dir. Owner-supplied
+	 * filename is sanitized; the on-disk name is a unique batch-keyed
+	 * slug to avoid collisions. Falls back to sys_get_temp_dir() in
+	 * raw CLI / test contexts where wp_upload_dir() is not loaded.
 	 */
 	private function store_upload( string $tmp_name, string $original_name ): ?string {
-		if ( ! function_exists( 'wp_upload_dir' ) ) {
-			// Test/CLI fallback: use a temp file.
+		$dir = UploadPaths::ensure();
+		if ( $dir === null ) {
+			// CLI fallback: use a temp file. Production should never
+			// land here because activation hook ran ensure() at install
+			// time.
 			$tmp = tempnam( sys_get_temp_dir(), 'configkit-import-' );
 			if ( $tmp === false ) return null;
 			if ( ! @copy( $tmp_name, $tmp ) ) return null;
 			return $tmp;
-		}
-
-		$uploads = \wp_upload_dir();
-		$base    = ( is_array( $uploads ) && isset( $uploads['basedir'] ) ) ? (string) $uploads['basedir'] : sys_get_temp_dir();
-		$dir     = rtrim( $base, '/\\' ) . '/configkit-imports';
-		if ( ! is_dir( $dir ) && ! @mkdir( $dir, 0700, true ) && ! is_dir( $dir ) ) {
-			return null;
-		}
-		// Guard rail: drop a .htaccess that denies direct access.
-		$htaccess = $dir . '/.htaccess';
-		if ( ! file_exists( $htaccess ) ) {
-			@file_put_contents( $htaccess, "Require all denied\n" );
 		}
 
 		$ext  = strtolower( pathinfo( $original_name, PATHINFO_EXTENSION ) );

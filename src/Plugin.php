@@ -32,6 +32,7 @@ use ConfigKit\Repository\FieldOptionRepository;
 use ConfigKit\Repository\FieldRepository;
 use ConfigKit\Import\Parser as ImportParser;
 use ConfigKit\Import\Runner as ImportRunner;
+use ConfigKit\Import\UploadPaths as ImportUploadPaths;
 use ConfigKit\Import\Validator as ImportValidator;
 use ConfigKit\Repository\ImportBatchRepository;
 use ConfigKit\Repository\ImportRowRepository;
@@ -117,6 +118,7 @@ final class Plugin {
 	public function on_activation(): void {
 		$this->build_runner()->migrate();
 		( new Registrar() )->register();
+		ImportUploadPaths::ensure();
 	}
 
 	public function on_deactivation(): void {
@@ -134,6 +136,10 @@ final class Plugin {
 	public function register_admin_init(): void {
 		$this->build_general_settings()->register();
 		( new Registrar() )->ensure_registered();
+		// Belt-and-suspenders: existing installs that pre-date the
+		// activation hook get the upload dir lazily on first admin
+		// page load. Idempotent.
+		ImportUploadPaths::ensure();
 	}
 
 	private function build_general_settings(): GeneralSettings {
