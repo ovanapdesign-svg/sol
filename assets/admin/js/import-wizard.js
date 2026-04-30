@@ -348,9 +348,14 @@
 			quick.detected     = payload;
 			quick.name         = payload.suggested_name || '';
 			quick.technicalKey = payload.suggested_key  || '';
-			quick.moduleKey    = ( payload.available_modules && payload.available_modules.length > 0 )
-				? payload.available_modules[0].module_key
-				: '';
+			// Phase 4.2c — prefer the auto-detected module when the
+			// header overlap was confident (>= threshold). Otherwise
+			// fall back to the first active module so the dropdown
+			// doesn't render unselected.
+			quick.moduleKey    = payload.suggested_module
+				|| ( ( payload.available_modules && payload.available_modules.length > 0 )
+					? payload.available_modules[0].module_key
+					: '' );
 			quick.userEditedKey = false;
 			quick.step = 'confirm';
 			render();
@@ -516,6 +521,22 @@
 			},
 		} ) );
 		wrap.appendChild( nameField );
+
+		// Phase 4.2c — auto-detected module note before the dropdown.
+		if ( d.target_type === 'library' && d.suggested_module ) {
+			const ratio = d.module_match ? Math.round( ( d.module_match.ratio || 0 ) * 100 ) : 0;
+			const matched = ( d.available_modules || [] ).find( ( m ) => m.module_key === d.suggested_module );
+			const moduleName = matched ? matched.name : d.suggested_module;
+			wrap.appendChild( el(
+				'p',
+				{ class: 'description configkit-quick-import__detected' },
+				'Detected module: ',
+				el( 'strong', null, moduleName ),
+				' (',
+				ratio + '% of headers match',
+				')'
+			) );
+		}
 
 		// Module dropdown for libraries.
 		if ( d.target_type === 'library' ) {

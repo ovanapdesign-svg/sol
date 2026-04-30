@@ -37,6 +37,7 @@ use ConfigKit\Repository\FieldRepository;
 use ConfigKit\Import\LibraryItemParser;
 use ConfigKit\Import\LibraryItemRunner;
 use ConfigKit\Import\LibraryItemValidator;
+use ConfigKit\Import\ModuleDetector;
 use ConfigKit\Import\Parser as ImportParser;
 use ConfigKit\Import\Runner as ImportRunner;
 use ConfigKit\Import\UploadPaths as ImportUploadPaths;
@@ -72,6 +73,7 @@ use ConfigKit\Rest\Controllers\TemplatesController;
 use ConfigKit\Rest\Controllers\TemplateVersionsController;
 use ConfigKit\Rest\Controllers\WooProductsController;
 use ConfigKit\Rest\Router;
+use ConfigKit\Service\CapabilityFormSchema;
 use ConfigKit\Service\FamilyService;
 use ConfigKit\Service\FieldOptionService;
 use ConfigKit\Service\FieldService;
@@ -342,7 +344,8 @@ final class Plugin {
 			$lookup_repo,
 			$library_repo,
 			$import_runner,
-			$library_item_runner
+			$library_item_runner,
+			new ModuleDetector( new CapabilityFormSchema() )
 		);
 		$router->add( new ImportsController(
 			new ImportService(

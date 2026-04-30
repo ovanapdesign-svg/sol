@@ -6,6 +6,7 @@ namespace ConfigKit\Service;
 use ConfigKit\Import\FormatDetector;
 use ConfigKit\Import\LibraryItemParser;
 use ConfigKit\Import\LibraryItemRunner;
+use ConfigKit\Import\ModuleDetector;
 use ConfigKit\Import\Parser as LookupParser;
 use ConfigKit\Import\Runner as LookupRunner;
 use ConfigKit\Repository\LibraryRepository;
@@ -39,6 +40,7 @@ final class QuickImportService {
 		private LibraryRepository $library_repo,
 		private LookupRunner $lookup_runner,
 		private LibraryItemRunner $library_runner,
+		private ?ModuleDetector $module_detector = null,
 	) {}
 
 	/**
@@ -92,12 +94,24 @@ final class QuickImportService {
 			$suggested_key  = count( $lib_keys ) === 1 ? $lib_keys[0] : $this->slugify( $base_name );
 			$suggested_name = $base_name !== '' ? $base_name : $this->humanize( $suggested_key );
 
+			// Phase 4.2c — score the headers against every active
+			// module so the wizard can pre-fill the module dropdown.
+			$detection = $this->detect_module( $result['columns'] ?? [] );
+
 			return [
 				'ok'                => true,
 				'format'            => $format,
 				'target_type'       => 'library',
 				'suggested_name'    => $suggested_name,
 				'suggested_key'     => $suggested_key !== '' ? $suggested_key : 'imported_library',
+				'suggested_module'  => $detection['module'],   // null if no good match
+				'module_match'      => [
+					'matched'   => $detection['matched'],
+					'total'     => $detection['total'],
+					'ratio'     => $detection['ratio'],
+					'threshold' => $detection['threshold'],
+					'ranked'    => $detection['ranked'],
+				],
 				'sample'            => [
 					'rows_total' => count( $result['rows'] ),
 					'columns'    => $result['columns'] ?? [],
@@ -286,6 +300,29 @@ final class QuickImportService {
 		$out = preg_replace( '/[^a-z0-9]+/', '_', $out );
 		$out = preg_replace( '/^_+|_+$/', '', (string) $out );
 		return (string) $out;
+	}
+
+	/**
+	 * @param list<string> $headers
+	 * @return array{module:?string,matched:int,total:int,ratio:float,threshold:float,ranked:list<array<string,mixed>>}
+	 */
+	private function detect_module( array $headers ): array {
+		$empty = [ 'module' => null, 'matched' => 0, 'total' => 0, 'ratio' => 0.0, 'threshold' => 0.0, 'ranked' => [] ];
+		if ( $this->module_detector === null ) return $empty;
+
+		$active = [];
+		foreach ( $this->modules->list( 1, 200 )['items'] ?? [] as $m ) {
+			if ( ! empty( $m['is_active'] ) ) $active[] = $m;
+		}
+		$result = $this->module_detector->pick_best( $active, $headers );
+		return [
+			'module'    => $result['module'] !== null ? (string) ( $result['module']['module_key'] ?? '' ) : null,
+			'matched'   => $result['matched'],
+			'total'     => $result['total'],
+			'ratio'     => $result['ratio'],
+			'threshold' => $result['threshold'],
+			'ranked'    => $result['ranked'],
+		];
 	}
 
 	/**
