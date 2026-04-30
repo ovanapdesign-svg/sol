@@ -34,10 +34,14 @@ use ConfigKit\Repository\CountsService;
 use ConfigKit\Repository\FamilyRepository;
 use ConfigKit\Repository\FieldOptionRepository;
 use ConfigKit\Repository\FieldRepository;
+use ConfigKit\Import\LibraryItemParser;
+use ConfigKit\Import\LibraryItemRunner;
+use ConfigKit\Import\LibraryItemValidator;
 use ConfigKit\Import\Parser as ImportParser;
 use ConfigKit\Import\Runner as ImportRunner;
 use ConfigKit\Import\UploadPaths as ImportUploadPaths;
 use ConfigKit\Import\Validator as ImportValidator;
+use ConfigKit\Adapters\WooSkuResolverImpl;
 use ConfigKit\Repository\ImportBatchRepository;
 use ConfigKit\Repository\ImportRowRepository;
 use ConfigKit\Repository\LibraryItemRepository;
@@ -320,7 +324,21 @@ final class Plugin {
 			$import_parser,
 			$import_validator
 		);
-		$router->add( new ImportsController( new ImportService( $import_runner, $import_batches, $import_rows ) ) );
+		$library_item_runner = new LibraryItemRunner(
+			$wpdb,
+			$import_batches,
+			$import_rows,
+			$item_repo,
+			$library_repo,
+			new LibraryItemParser(),
+			new LibraryItemValidator( $library_repo, $module_repo, $item_repo, new WooSkuResolverImpl() )
+		);
+		$router->add( new ImportsController( new ImportService(
+			$import_runner,
+			$import_batches,
+			$import_rows,
+			$library_item_runner
+		) ) );
 
 		$router->add( new RenderDataController(
 			$binding_repo,

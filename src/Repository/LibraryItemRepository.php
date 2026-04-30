@@ -19,6 +19,44 @@ class LibraryItemRepository {
 		return is_array( $row ) ? $this->hydrate( $row ) : null;
 	}
 
+	/**
+	 * Phase 4 dalis 3 — fetch a row by its (library_key, item_key)
+	 * tuple. Used by the importer's idempotent insert/update path so
+	 * the runner doesn't need a second round-trip after
+	 * `key_exists_in_library` to grab the existing id.
+	 */
+	public function find_by_library_and_key( string $library_key, string $item_key ): ?array {
+		$table = $this->table();
+		/** @var array<string,mixed>|null $row */
+		$row = $this->wpdb->get_row(
+			$this->wpdb->prepare(
+				"SELECT * FROM `{$table}` WHERE library_key = %s AND item_key = %s LIMIT 1",
+				$library_key,
+				$item_key
+			),
+			ARRAY_A
+		);
+		return is_array( $row ) ? $this->hydrate( $row ) : null;
+	}
+
+	/**
+	 * Phase 4 dalis 3 — bulk soft-delete every item in a library
+	 * (used by the importer's "replace all" mode). Sets `is_active=0`
+	 * and bumps `version_hash` so any subsequent edit observes the
+	 * stale-write check. Returns the affected row count.
+	 */
+	public function soft_delete_all_in_library( string $library_key ): int {
+		$table = $this->table();
+		$now   = $this->now();
+		$rows  = $this->wpdb->query( $this->wpdb->prepare(
+			"UPDATE `{$table}` SET is_active = 0, updated_at = %s, version_hash = %s WHERE library_key = %s AND is_active = 1",
+			$now,
+			sha1( $now . $library_key ),
+			$library_key
+		) );
+		return is_int( $rows ) ? $rows : 0;
+	}
+
 	public function key_exists_in_library( string $library_key, string $item_key, ?int $exclude_id = null ): bool {
 		$table = $this->table();
 		if ( $exclude_id === null ) {
