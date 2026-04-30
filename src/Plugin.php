@@ -69,6 +69,7 @@ use ConfigKit\Rest\Controllers\ModulesController;
 use ConfigKit\Rest\Controllers\ProductsController;
 use ConfigKit\Rest\Controllers\RulesController;
 use ConfigKit\Rest\Controllers\StepsController;
+use ConfigKit\Rest\Controllers\ConfiguratorBuilderController;
 use ConfigKit\Rest\Controllers\ProductBuilderController;
 use ConfigKit\Rest\Controllers\TemplatesController;
 use ConfigKit\Rest\Controllers\TemplateVersionsController;
@@ -89,8 +90,10 @@ use ConfigKit\Service\ProductDiagnosticsService;
 use ConfigKit\Service\RuleService;
 use ConfigKit\Service\StepService;
 use ConfigKit\Service\AutoManagedRegistry;
+use ConfigKit\Service\ConfiguratorBuilderService;
 use ConfigKit\Service\ProductBuilderService;
 use ConfigKit\Service\ProductBuilderState;
+use ConfigKit\Service\SectionListState;
 use ConfigKit\Service\QuickImportService;
 use ConfigKit\Service\SystemDiagnosticsService;
 use ConfigKit\Service\TemplateService;
@@ -386,6 +389,18 @@ final class Plugin {
 
 		// Phase 4.3 — Product Builder (Simple Mode) orchestrator.
 		$pb_registry = new AutoManagedRegistry();
+		$pb_state    = new ProductBuilderState();
+		$section_state = new SectionListState();
+		$router->add( new ConfiguratorBuilderController( new ConfiguratorBuilderService(
+			$section_state,
+			$pb_state,
+			$pb_registry,
+			new LookupTableService( $lookup_repo, $cell_repo ),
+			$lookup_repo,
+			new ModuleService( $module_repo ),
+			new LibraryService( $library_repo, $module_repo ),
+			$library_repo
+		) ) );
 		$router->add( new ProductBuilderController(
 			new ProductBuilderService(
 				new TemplateService( $template_repo ),
