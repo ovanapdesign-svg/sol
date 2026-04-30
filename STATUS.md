@@ -613,13 +613,76 @@ save/replace-all, motor SKU resolution + bundle composition +
 fixed_bundle pricing + empty-bundle fallback, dangling
 visibility refs, and section-empty diagnostics).
 
-Awaiting Phase 4.2b.3 cart wiring + bundle reconciliation
-across child cart lines + full snapshot pricing for the test
-panel, OR real-data Sologtak re-test of the new Configurator
-Builder flow on demo.ovanap.dev/sol1/, OR the optional
-operation-mode rule auto-wiring (creating show/hide rules in
-the template when "Both" is picked — currently the JS UI
-handles show/hide visually based on the recorded mode).
+**Phase 4.3b Half A** — Configurator Presets data layer.
+Owner identified the architectural gap that was about to block
+real Sologtak adoption: ~30-60 product variants across 4 product
+types means rebuilding similar products from scratch costs
+60+ hours of repetitive work. Phase 4.3b introduces presets so
+similar products take ~2 minutes each instead.
+
+Half A delivers the entity + snapshot + apply at the data
+layer; Half B (override resolution, copy / link / detach,
+inline reset, source panel + section badges in the Phase 4.4
+configurator-builder.js) lands once the owner reviews Half A.
+
+Migration 0019 creates `wp_configkit_presets` (preset_key,
+name, description, product_type, sections_json,
+default_lookup_table_key, default_frontend_mode, created_by,
+timestamps, version_hash, deleted_at). The schema diverges
+from the spec on one column: `default_lookup_table_key`
+(VARCHAR) replaces the spec's `default_lookup_table_id`
+(BIGINT) — keys are the canonical refs in this codebase per
+CLAUDE.md ("Numeric IDs are NOT canonical references") and
+that's how Phase 4.4 already wires section→table refs.
+
+PresetService.save_as_preset walks the source product's
+section list and builds a typed snapshot keyed by
+{type, type_position} so override paths in Half B
+(`price_overrides.motor.0.somfy_io`) resolve regardless of
+the random hex section ids used in the DOM. Each section
+records label, visibility, and a library_key /
+lookup_table_key REFERENCE — never a copy of items or cells.
+
+PresetService.apply_preset replaces the target product's
+section list with sections that point at the SAME shared
+library_key / lookup_table_key strings. Library items + lookup
+cells are NEVER duplicated — the new product reads the same
+underlying entities the source product owned.
+AutoManagedRegistry is NOT touched on apply: original ownership
+stays with the source product (so a later soft-delete of the
+source's section won't yank the data out from under the target,
+and a later `wp configkit migrate` of the source product's
+entity stays with the original owner). Visibility conditions
+referencing the source's section_ids are rewritten via an
+old→new id map; conditions referencing sections OUTSIDE the
+snapshot are dropped (would never resolve).
+
+Four routes under /configkit/v1 (cap configkit_manage_products):
+- GET  /presets                                    — list
+- GET  /presets/{preset_id}                        — fetch one
+- POST /product-builder/{product_id}/save-as-preset — snapshot
+- POST /product-builder/{product_id}/apply-preset   — apply
+
+Half B will add copy_from_product, link_to_setup,
+detach_from_preset, reset-override under the same gate, plus
+the SetupSourceResolver + OverrideApplier + UI integration into
+the Phase 4.4 section cards and modals.
+
+Suite 599 / 1644 → 613 / 1693 (14 new tests cover snapshot
+shape, apply with shared keys, replace-existing semantics,
+visibility id rewrite, dangling-condition drop, no-duplication
+guarantee, missing/soft-deleted preset rejection, key
+collision suffix, list filters).
+
+Awaiting owner review of Half A before Half B integrates with
+the Phase 4.4 UI. Other work still pending: Phase 4.2b.3 cart
+wiring + bundle reconciliation across child cart lines + full
+snapshot pricing for the test panel, real-data Sologtak re-test
+of the new Configurator Builder flow on demo.ovanap.dev/sol1/,
+and the optional operation-mode rule auto-wiring (creating
+show/hide rules in the template when "Both" is picked —
+currently the JS UI handles show/hide visually based on the
+recorded mode).
 
 ---
 
