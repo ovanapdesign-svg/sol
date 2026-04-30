@@ -167,6 +167,50 @@ class LookupCellRepository {
 		}
 	}
 
+	/**
+	 * Find a single cell by its business-key tuple. Used by the
+	 * importer's idempotent insert/update path.
+	 *
+	 * @return array<string,mixed>|null
+	 */
+	public function find_by_coordinates(
+		string $lookup_table_key,
+		int $width,
+		int $height,
+		string $price_group_key
+	): ?array {
+		$table = $this->table();
+		$row = $this->wpdb->get_row(
+			$this->wpdb->prepare(
+				"SELECT * FROM `{$table}` WHERE lookup_table_key = %s AND width = %d AND height = %d AND price_group_key = %s LIMIT 1",
+				$lookup_table_key,
+				$width,
+				$height,
+				$price_group_key
+			),
+			ARRAY_A
+		);
+		return is_array( $row ) ? $this->hydrate( $row ) : null;
+	}
+
+	/**
+	 * Hard-delete every cell in a lookup table. Used by the importer's
+	 * "Replace all" mode after the owner explicitly confirms.
+	 */
+	public function delete_all_in_table( string $lookup_table_key ): int {
+		$table  = $this->table();
+		$result = $this->wpdb->query(
+			$this->wpdb->prepare(
+				"DELETE FROM `{$table}` WHERE lookup_table_key = %s",
+				$lookup_table_key
+			)
+		);
+		if ( $result === false ) {
+			throw new \RuntimeException( 'Failed to delete cells: ' . (string) $this->wpdb->last_error );
+		}
+		return (int) $result;
+	}
+
 	private function table(): string {
 		return $this->wpdb->prefix . self::TABLE;
 	}
