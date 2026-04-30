@@ -1,4 +1,4 @@
-/* ConfigKit storefront configurator — CHUNK 1 minimal styles. */
+/* ConfigKit storefront configurator. Not WordPress-admin. */
 
 .configkit-frontend {
 	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -7,6 +7,8 @@
 	margin: 32px auto;
 	padding: 0 16px;
 	box-sizing: border-box;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 }
 
 .configkit-frontend *,
@@ -15,6 +17,7 @@
 	box-sizing: border-box;
 }
 
+/* Loading skeleton (also used for boot state). */
 .configkit-frontend__loading {
 	display: flex;
 	flex-direction: column;
@@ -36,4 +39,337 @@
 @keyframes configkit-skeleton {
 	0%   { background-position: 200% 0; }
 	100% { background-position: -200% 0; }
+}
+
+/* Error state */
+.configkit-c__error {
+	background: #fff8f7;
+	border: 1px solid #fbcfc7;
+	border-radius: 10px;
+	padding: 20px 24px;
+	color: #5a1d18;
+}
+
+.configkit-c__error h2 { margin: 0 0 6px; font-size: 18px; }
+.configkit-c__error p  { margin: 0 0 8px; line-height: 1.5; }
+
+/* App shell */
+.configkit-c {
+	display: block;
+}
+
+.configkit-c__header {
+	margin-bottom: 24px;
+}
+
+.configkit-c__title {
+	font-size: 28px;
+	font-weight: 700;
+	margin: 0;
+	letter-spacing: -0.01em;
+}
+
+.configkit-c__body {
+	display: block;
+}
+
+/* Step */
+.configkit-c__step {
+	background: #fff;
+	border: 1px solid #ececef;
+	border-radius: 12px;
+	padding: 24px 28px;
+	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.03 );
+}
+
+.configkit-c__step-head {
+	margin-bottom: 16px;
+	padding-bottom: 16px;
+	border-bottom: 1px solid #f1f1f3;
+}
+
+.configkit-c__step-title {
+	font-size: 20px;
+	font-weight: 600;
+	margin: 0 0 4px;
+	letter-spacing: -0.005em;
+}
+
+.configkit-c__step-helper {
+	color: #5e6470;
+	font-size: 14px;
+	margin: 0;
+	line-height: 1.5;
+}
+
+.configkit-c__fields {
+	display: flex;
+	flex-direction: column;
+	gap: 24px;
+}
+
+/* Field */
+.configkit-c__field-head {
+	margin-bottom: 12px;
+}
+
+.configkit-c__field-label {
+	display: block;
+	font-size: 15px;
+	font-weight: 600;
+	color: #1d2128;
+}
+
+.configkit-c__required {
+	color: #b32d2e;
+}
+
+.configkit-c__field-helper {
+	color: #5e6470;
+	font-size: 13px;
+	margin: 4px 0 0;
+	line-height: 1.45;
+}
+
+/* Number input with +/- */
+.configkit-c__number {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	background: #fff;
+	border: 1px solid #d8dadf;
+	border-radius: 999px;
+	padding: 4px 6px;
+	max-width: 100%;
+}
+
+.configkit-c__number-step {
+	border: 0;
+	background: #f3f4f6;
+	color: #1d2128;
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	font-size: 22px;
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	transition: background 0.12s;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.configkit-c__number-step:hover:not( :disabled ) {
+	background: #e6e8ec;
+}
+
+.configkit-c__number-step:active:not( :disabled ) {
+	background: #d8dadf;
+}
+
+.configkit-c__number-step:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.configkit-c__number-input {
+	border: 0;
+	font-size: 18px;
+	font-weight: 600;
+	width: 90px;
+	text-align: center;
+	color: #1d2128;
+	-moz-appearance: textfield;
+	background: transparent;
+	outline: 0;
+}
+
+.configkit-c__number-input::-webkit-outer-spin-button,
+.configkit-c__number-input::-webkit-inner-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+
+.configkit-c__number-unit {
+	color: #5e6470;
+	font-size: 14px;
+}
+
+/* Radio plain */
+.configkit-c__radio-list {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.configkit-c__radio-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 12px 14px;
+	border: 1px solid #ececef;
+	border-radius: 10px;
+	cursor: pointer;
+	transition: border-color 0.12s, background 0.12s;
+	min-height: 48px;
+}
+
+.configkit-c__radio-row:hover { background: #fafafb; }
+
+.configkit-c__radio-row input[ type="radio" ]:checked ~ .configkit-c__radio-label {
+	font-weight: 600;
+}
+
+.configkit-c__radio-row.is-disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+	background: #f7f7f8;
+}
+
+/* Card grid (radio_cards / checkbox_cards) */
+.configkit-c__cards {
+	display: grid;
+	grid-template-columns: repeat( auto-fill, minmax( 160px, 1fr ) );
+	gap: 12px;
+}
+
+.configkit-c__card {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	padding: 0;
+	background: #fff;
+	border: 2px solid #ececef;
+	border-radius: 12px;
+	cursor: pointer;
+	transition: border-color 0.15s, box-shadow 0.15s, transform 0.05s;
+	overflow: hidden;
+	font-family: inherit;
+	color: inherit;
+	text-align: left;
+	min-height: 44px;
+}
+
+.configkit-c__card:hover:not( :disabled ) {
+	border-color: #c2c5cc;
+}
+
+.configkit-c__card.is-selected {
+	border-color: #1d2128;
+	box-shadow: 0 0 0 3px rgba( 29, 33, 40, 0.08 );
+}
+
+.configkit-c__card.is-disabled,
+.configkit-c__card:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.configkit-c__card-image {
+	display: block;
+	width: 100%;
+	height: 120px;
+	object-fit: cover;
+	background: #f3f4f6;
+}
+
+.configkit-c__card-placeholder {
+	display: block;
+	width: 100%;
+	height: 64px;
+	background: linear-gradient( 135deg, #f3f4f6 0%, #ececef 100% );
+}
+
+.configkit-c__card-label {
+	padding: 10px 12px 6px;
+	font-size: 14px;
+	font-weight: 600;
+}
+
+.configkit-c__card-helper {
+	padding: 0 12px 10px;
+	font-size: 12px;
+	color: #5e6470;
+}
+
+/* Swatch grid (compact, image-driven) */
+.configkit-c__cards--swatch {
+	grid-template-columns: repeat( auto-fill, minmax( 96px, 1fr ) );
+}
+
+.configkit-c__cards--swatch .configkit-c__card-image,
+.configkit-c__cards--swatch .configkit-c__card-placeholder {
+	aspect-ratio: 1 / 1;
+	height: auto;
+}
+
+.configkit-c__cards--swatch .configkit-c__card-label {
+	font-size: 12px;
+	padding: 6px 8px;
+}
+
+.configkit-c__cards--swatch .configkit-c__card-helper {
+	display: none;
+}
+
+/* Checkbox list */
+.configkit-c__check-list {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.configkit-c__check-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 12px 14px;
+	border: 1px solid #ececef;
+	border-radius: 10px;
+	cursor: pointer;
+	min-height: 48px;
+}
+
+.configkit-c__check-row.is-disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+	background: #f7f7f8;
+}
+
+/* Display field (heading / info-only) */
+.configkit-c__display {
+	margin: 0;
+	padding: 14px 16px;
+	background: #f8f9fb;
+	border-radius: 10px;
+	color: #34394a;
+	font-size: 14px;
+	line-height: 1.5;
+}
+
+/* Text fallback */
+.configkit-c__text-input {
+	width: 100%;
+	padding: 12px 14px;
+	border: 1px solid #d8dadf;
+	border-radius: 10px;
+	font-size: 15px;
+	color: #1d2128;
+	background: #fff;
+	outline: 0;
+}
+
+.configkit-c__text-input:focus {
+	border-color: #1d2128;
+	box-shadow: 0 0 0 3px rgba( 29, 33, 40, 0.08 );
+}
+
+@media ( max-width: 768px ) {
+	.configkit-c__step {
+		padding: 18px 16px;
+		border-radius: 10px;
+	}
+	.configkit-c__title {
+		font-size: 22px;
+	}
 }
