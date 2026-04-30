@@ -454,18 +454,12 @@
 
 		const items = state.list.items || [];
 		if ( items.length === 0 ) {
-			wrap.appendChild(
-				el(
-					'div',
-					{ class: 'configkit-empty' },
-					el( 'p', null, 'No modules yet.' ),
-					el(
-						'p',
-						{ class: 'configkit-empty__hint' },
-						'A module declares a kind of option group (textiles, motors, colors, etc.). Create one to start adding libraries.'
-					)
-				)
-			);
+			wrap.appendChild( window.ConfigKit.emptyState( {
+				icon: '📦',
+				title: 'No modules yet',
+				message: 'A module declares a kind of option group (textiles, motors, colors). Create one to start adding libraries.',
+				primary: { label: '+ Create first module', onClick: showNewForm },
+			} ) );
 			return wrap;
 		}
 

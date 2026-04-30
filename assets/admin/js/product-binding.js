@@ -425,9 +425,18 @@
 		const fields = state.fields;
 		const children = [];
 		if ( ! b.template_key ) {
-			children.push( el( 'p', { class: 'description' }, 'Select a template to set defaults.' ) );
+			children.push( emptyStateCta( {
+				icon: '↑',
+				title: 'No template selected',
+				message: 'Pick a template in section 2 — defaults are per-field, so we need to know which fields exist.',
+				primary: { label: 'Go to template picker ↑', onClick: () => scrollToSection( 'section-base-setup' ) },
+			} ) );
 		} else if ( fields.length === 0 ) {
-			children.push( el( 'p', { class: 'description' }, 'This template has no fields yet.' ) );
+			children.push( emptyStateCta( {
+				icon: '🧱',
+				title: 'This template has no fields yet',
+				message: 'Open the template builder and add fields, then come back to set defaults.',
+			} ) );
 		} else {
 			children.push( el( 'p', { class: 'description' }, 'Set the initial value for each field. Leave blank to use the field\'s own default.' ) );
 			fields.forEach( ( f ) => {
@@ -435,6 +444,21 @@
 			} );
 		}
 		return section( 'section-defaults', '3. Product defaults', children );
+	}
+
+	function emptyStateCta( opts ) {
+		if ( window.ConfigKit && window.ConfigKit.emptyState ) {
+			return window.ConfigKit.emptyState( opts );
+		}
+		// Fallback: simple paragraph if helper unavailable.
+		return el( 'p', { class: 'description' }, opts.message || opts.title || '' );
+	}
+
+	function scrollToSection( id ) {
+		const node = document.getElementById( id );
+		if ( node && typeof node.scrollIntoView === 'function' ) {
+			node.scrollIntoView( { behavior: 'smooth', block: 'start' } );
+		}
 	}
 
 	function renderFieldDefault( field, value ) {
@@ -470,9 +494,18 @@
 		const b = state.binding;
 		const children = [];
 		if ( ! b.template_key ) {
-			children.push( el( 'p', { class: 'description' }, 'Select a template to configure allowed sources.' ) );
+			children.push( emptyStateCta( {
+				icon: '↑',
+				title: 'No template selected',
+				message: 'Allowed sources filter per-field libraries, options, and price groups — they need a template first.',
+				primary: { label: 'Go to template picker ↑', onClick: () => scrollToSection( 'section-base-setup' ) },
+			} ) );
 		} else if ( state.fields.length === 0 ) {
-			children.push( el( 'p', { class: 'description' }, 'This template has no fields yet.' ) );
+			children.push( emptyStateCta( {
+				icon: '🧱',
+				title: 'This template has no fields yet',
+				message: 'Allowed sources are configured per field.',
+			} ) );
 		} else {
 			children.push( el( 'p', { class: 'description' }, 'Restrict which library items, options, or price groups appear for each field. Leave a list empty to inherit the template defaults.' ) );
 			state.fields.forEach( ( f ) => {
@@ -558,15 +591,20 @@
 					'po__sale_mode',
 					po.sale_mode || '',
 					[ { value: '', label: '— inherit —' } ].concat( SALE_MODES.map( ( m ) => ( { value: m, label: m } ) ) ),
-					( v ) => setPricing( 'sale_mode', v )
+					( v ) => {
+						setPricing( 'sale_mode', v );
+						if ( v !== 'discount_percent' ) setPricing( 'discount_percent', '' );
+					}
 				),
-				numberField(
-					'Discount %',
-					'po__discount_percent',
-					po.discount_percent,
-					( v ) => setPricing( 'discount_percent', v === '' ? '' : Number( v ) ),
-					{ min: 0, step: '0.01', help: 'Used when sale_mode = discount_percent.' }
-				),
+				po.sale_mode === 'discount_percent'
+					? numberField(
+						'Discount %',
+						'po__discount_percent',
+						po.discount_percent,
+						( v ) => setPricing( 'discount_percent', v === '' ? '' : Number( v ) ),
+						{ min: 0, step: '0.01', help: 'Percent off the resolved price.' }
+					)
+					: null,
 				csvListField(
 					'Allowed price groups',
 					po.allowed_price_groups || [],
@@ -588,9 +626,18 @@
 		const b = state.binding;
 		const children = [];
 		if ( ! b.template_key ) {
-			children.push( el( 'p', { class: 'description' }, 'Select a template to configure visibility.' ) );
+			children.push( emptyStateCta( {
+				icon: '↑',
+				title: 'No template selected',
+				message: 'Visibility / locking applies to fields, so we need a template first.',
+				primary: { label: 'Go to template picker ↑', onClick: () => scrollToSection( 'section-base-setup' ) },
+			} ) );
 		} else if ( state.fields.length === 0 ) {
-			children.push( el( 'p', { class: 'description' }, 'This template has no fields yet.' ) );
+			children.push( emptyStateCta( {
+				icon: '🧱',
+				title: 'This template has no fields yet',
+				message: 'Visibility settings are per field.',
+			} ) );
 		} else {
 			children.push( el( 'p', { class: 'description' }, 'Hide a field, force-require it, or lock it to a specific value for this product only.' ) );
 			state.fields.forEach( ( f ) => {

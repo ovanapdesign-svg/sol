@@ -414,12 +414,12 @@
 
 		const items = state.list.items || [];
 		if ( items.length === 0 ) {
-			wrap.appendChild( el(
-				'div',
-				{ class: 'configkit-empty' },
-				el( 'p', null, 'No lookup tables yet.' ),
-				el( 'p', { class: 'configkit-empty__hint' }, 'Lookup tables map (width, height) — and optionally a price group — to a price.' )
-			) );
+			wrap.appendChild( window.ConfigKit.emptyState( {
+				icon: '📐',
+				title: 'No lookup tables yet',
+				message: 'Lookup tables map (width × height) — and optionally a price group — to a price.',
+				primary: { label: '+ Create first lookup table', onClick: showNewTableForm },
+			} ) );
 			return wrap;
 		}
 

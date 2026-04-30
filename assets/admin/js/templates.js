@@ -887,12 +887,12 @@
 
 		const items = state.list.items || [];
 		if ( items.length === 0 ) {
-			wrap.appendChild( el(
-				'div',
-				{ class: 'configkit-empty' },
-				el( 'p', null, 'No templates yet.' ),
-				el( 'p', { class: 'configkit-empty__hint' }, 'Templates define the configurator for a family of products. Create one to start.' )
-			) );
+			wrap.appendChild( window.ConfigKit.emptyState( {
+				icon: '📄',
+				title: 'No templates yet',
+				message: 'Templates define the configurator for a family of products: steps, fields, and rules.',
+				primary: { label: '+ Create first template', onClick: showNewForm },
+			} ) );
 			return wrap;
 		}
 

@@ -475,16 +475,17 @@
 
 		const items = state.list.items || [];
 		if ( items.length === 0 ) {
-			wrap.appendChild( el(
-				'div',
-				{ class: 'configkit-empty' },
-				el( 'p', null, 'No libraries yet.' ),
-				el(
-					'p',
-					{ class: 'configkit-empty__hint' },
-					'A library is a concrete dataset belonging to a module. Create a module first if you have not already, then add libraries to it.'
-				)
-			) );
+			const noModules = state.modules.length === 0;
+			wrap.appendChild( window.ConfigKit.emptyState( {
+				icon: '📚',
+				title: noModules ? 'No modules yet — start there' : 'No libraries yet',
+				message: noModules
+					? 'A library belongs to a module. Create a module first, then come back and add libraries.'
+					: 'A library is a concrete dataset (a fabric collection, a color set, etc.) inside a module.',
+				primary: noModules
+					? { label: 'Go to Modules', href: ( window.location.pathname || '' ) + '?page=configkit-modules' }
+					: { label: '+ Create first library', onClick: showNewLibraryForm },
+			} ) );
 			return wrap;
 		}
 

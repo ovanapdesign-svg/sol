@@ -252,12 +252,12 @@
 
 		const items = state.list.items || [];
 		if ( items.length === 0 ) {
-			wrap.appendChild( el(
-				'div',
-				{ class: 'configkit-empty' },
-				el( 'p', null, 'No families yet.' ),
-				el( 'p', { class: 'configkit-empty__hint' }, 'Families group templates by product taxonomy. Create one to start binding products to templates.' )
-			) );
+			wrap.appendChild( window.ConfigKit.emptyState( {
+				icon: '🗂',
+				title: 'No families yet',
+				message: 'Families group templates by product taxonomy. Create one before binding products to templates.',
+				primary: { label: '+ Create first family', onClick: showNewForm },
+			} ) );
 			return wrap;
 		}
 
