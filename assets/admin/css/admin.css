@@ -1471,3 +1471,157 @@
 	margin: 4px 0 0;
 	color: #2c3338;
 }
+
+/* ---- Product binding setup progress checklist ---- */
+
+.configkit-progress {
+	background: #fff;
+	border: 1px solid #2271b1;
+	border-radius: 6px;
+	padding: 16px 20px;
+	margin: 0 0 20px;
+	box-shadow: 0 2px 6px rgba( 34, 113, 177, 0.08 );
+}
+
+.configkit-progress__header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+	margin-bottom: 12px;
+	flex-wrap: wrap;
+}
+
+.configkit-progress__heading {
+	margin: 0;
+	font-size: 14px;
+	font-weight: 600;
+	color: #1d2327;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.configkit-progress__status {
+	margin: 0;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 13px;
+	color: #50575e;
+}
+
+.configkit-progress__status-label {
+	font-weight: 500;
+	color: #1d2327;
+}
+
+.configkit-progress__list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	counter-reset: configkit-step;
+}
+
+.configkit-progress__step {
+	margin: 0;
+	padding: 0;
+}
+
+.configkit-progress__step-link {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 6px 8px;
+	border-radius: 3px;
+	color: #2c3338;
+	text-decoration: none;
+	font-size: 14px;
+}
+
+.configkit-progress__step-link:hover,
+.configkit-progress__step-link:focus {
+	background: #f0f6fc;
+	outline: none;
+}
+
+.configkit-progress__icon {
+	display: inline-flex;
+	width: 22px;
+	height: 22px;
+	align-items: center;
+	justify-content: center;
+	border-radius: 50%;
+	font-weight: 700;
+	font-size: 12px;
+	flex-shrink: 0;
+}
+
+.configkit-progress__num {
+	color: #50575e;
+	min-width: 18px;
+	font-weight: 600;
+}
+
+.configkit-progress__label {
+	color: #2c3338;
+}
+
+.configkit-progress__step--done .configkit-progress__icon {
+	background: #2e8b57;
+	color: #fff;
+}
+
+.configkit-progress__step--done .configkit-progress__label {
+	color: #50575e;
+	text-decoration: line-through;
+}
+
+.configkit-progress__step--current .configkit-progress__icon {
+	background: #fcb900;
+	color: #1d2327;
+}
+
+.configkit-progress__step--current .configkit-progress__label {
+	font-weight: 600;
+}
+
+.configkit-progress__step--pending .configkit-progress__icon {
+	background: #f0f0f1;
+	color: #8c8f94;
+	border: 1px solid #c3c4c7;
+}
+
+.configkit-progress__step--pending .configkit-progress__label {
+	color: #8c8f94;
+}
+
+/* ---- Locked binding section ---- */
+
+.configkit-binding__section--locked {
+	opacity: 0.55;
+	background: #fafafa;
+	pointer-events: none;
+	user-select: none;
+}
+
+.configkit-binding__section--locked .configkit-binding__section-title {
+	color: #50575e;
+}
+
+.configkit-binding__lock {
+	font-size: 13px;
+	margin-left: 6px;
+}
+
+@media ( max-width: 768px ) {
+	.configkit-progress {
+		padding: 12px 14px;
+	}
+	.configkit-progress__header {
+		flex-direction: column;
+		align-items: flex-start;
+	}
+}

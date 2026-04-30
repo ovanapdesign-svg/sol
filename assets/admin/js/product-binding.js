@@ -283,6 +283,8 @@
 		const wrap = el( 'div', { class: 'configkit-binding' } );
 		if ( state.message ) wrap.appendChild( messageBanner( state.message ) );
 
+		wrap.appendChild( renderProgressChecklist() );
+
 		wrap.appendChild( renderEnableSection() );
 		wrap.appendChild( renderBaseSetupSection() );
 		wrap.appendChild( renderDefaultsSection() );
@@ -294,6 +296,78 @@
 		wrap.appendChild( renderSaveBar() );
 
 		root.appendChild( wrap );
+	}
+
+	function progressSteps() {
+		const b = state.binding || {};
+		const status = state.diagnostics && state.diagnostics.status ? state.diagnostics.status : null;
+		const ready = status === 'ready';
+		return [
+			{ id: 'enable',       label: 'Enable ConfigKit',     done: !! b.enabled,                 anchor: 'section-enable' },
+			{ id: 'template',     label: 'Select template',      done: !! b.template_key,            anchor: 'section-base-setup' },
+			{ id: 'lookup',       label: 'Select lookup table',  done: !! b.lookup_table_key,        anchor: 'section-base-setup' },
+			{ id: 'diagnostics',  label: 'Run diagnostics',      done: !! state.diagnostics,         anchor: 'section-diagnostics' },
+			{ id: 'save',         label: 'Save binding',         done: !! b.updated_at && ready,     anchor: 'section-pricing' },
+		];
+	}
+
+	function statusLabel() {
+		if ( ! state.diagnostics || ! state.diagnostics.status ) return 'Loading status…';
+		const labels = {
+			ready: 'Ready',
+			disabled: 'Disabled',
+			missing_template: 'Missing template',
+			missing_lookup_table: 'Missing lookup table',
+			invalid_defaults: 'Invalid defaults',
+			pricing_unresolved: 'Pricing unresolved',
+		};
+		return labels[ state.diagnostics.status ] || state.diagnostics.status;
+	}
+
+	function renderProgressChecklist() {
+		const steps = progressSteps();
+		const wrap = el( 'section', { class: 'configkit-progress', id: 'section-progress' } );
+		wrap.appendChild( el(
+			'div',
+			{ class: 'configkit-progress__header' },
+			el( 'h3', { class: 'configkit-progress__heading' }, 'Setup progress' ),
+			el(
+				'p',
+				{ class: 'configkit-progress__status' },
+				'Status: ',
+				statusBadge(),
+				' ',
+				el( 'span', { class: 'configkit-progress__status-label' }, statusLabel() )
+			)
+		) );
+
+		// Identify the current step: first not-done step is "current",
+		// rest are pending; everything before is done.
+		let currentIndex = steps.findIndex( ( s ) => ! s.done );
+		if ( currentIndex === -1 ) currentIndex = steps.length;
+
+		const list = el( 'ol', { class: 'configkit-progress__list' } );
+		steps.forEach( ( step, i ) => {
+			const stateClass = step.done
+				? 'configkit-progress__step--done'
+				: ( i === currentIndex ? 'configkit-progress__step--current' : 'configkit-progress__step--pending' );
+			const icon = step.done ? '✓' : ( i === currentIndex ? '⏳' : '○' );
+			list.appendChild( el(
+				'li',
+				{ class: 'configkit-progress__step ' + stateClass },
+				el( 'a', {
+					href: '#' + step.anchor,
+					class: 'configkit-progress__step-link',
+					onClick: ( ev ) => { ev.preventDefault(); scrollToSection( step.anchor ); },
+				},
+					el( 'span', { class: 'configkit-progress__icon', 'aria-hidden': 'true' }, icon ),
+					el( 'span', { class: 'configkit-progress__num' }, ( i + 1 ) + '.' ),
+					el( 'span', { class: 'configkit-progress__label' }, step.label )
+				)
+			) );
+		} );
+		wrap.appendChild( list );
+		return wrap;
 	}
 
 	function messageBanner( m ) {
@@ -332,9 +406,15 @@
 		return el( 'span', { class: 'configkit-badge ' + cls }, labels[ status ] || status );
 	}
 
-	function section( id, title, children, extra ) {
-		const wrap = el( 'section', { class: 'configkit-binding__section', id: id } );
+	function section( id, title, children, extra, opts ) {
+		opts = opts || {};
+		const cls = 'configkit-binding__section'
+			+ ( opts.locked ? ' configkit-binding__section--locked' : '' );
+		const wrap = el( 'section', { class: cls, id: id } );
 		const head = el( 'h3', { class: 'configkit-binding__section-title' }, title );
+		if ( opts.locked ) {
+			head.appendChild( el( 'span', { class: 'configkit-binding__lock', 'aria-hidden': 'true' }, ' 🔒' ) );
+		}
 		if ( extra ) head.appendChild( extra );
 		wrap.appendChild( head );
 		children.forEach( ( c ) => c && wrap.appendChild( c ) );
@@ -443,7 +523,7 @@
 				children.push( renderFieldDefault( f, b.defaults[ f.field_key ] ) );
 			} );
 		}
-		return section( 'section-defaults', '3. Product defaults', children );
+		return section( 'section-defaults', '3. Product defaults', children, null, { locked: ! state.binding.template_key } );
 	}
 
 	function emptyStateCta( opts ) {
@@ -513,7 +593,7 @@
 				children.push( renderFieldAllowedSources( f, cfg ) );
 			} );
 		}
-		return section( 'section-allowed-sources', '4. Allowed sources', children );
+		return section( 'section-allowed-sources', '4. Allowed sources', children, null, { locked: ! state.binding.template_key } );
 	}
 
 	function renderFieldAllowedSources( field, cfg ) {
@@ -645,7 +725,7 @@
 				children.push( renderFieldOverride( f, cfg ) );
 			} );
 		}
-		return section( 'section-visibility', '6. Visibility & locking', children );
+		return section( 'section-visibility', '6. Visibility & locking', children, null, { locked: ! state.binding.template_key } );
 	}
 
 	function renderFieldOverride( field, cfg ) {
@@ -752,12 +832,15 @@
 	}
 
 	function renderPreviewSection() {
+		const ready = state.diagnostics && state.diagnostics.status === 'ready';
 		return section(
 			'section-preview',
 			'8. Preview',
 			[
 				el( 'p', { class: 'description' }, 'Frontend preview will land in Phase 4 with the storefront app. Save your binding and use the WooCommerce product preview to verify the live experience.' ),
-			]
+			],
+			null,
+			{ locked: ! ready }
 		);
 	}
 
