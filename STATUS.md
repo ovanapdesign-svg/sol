@@ -545,13 +545,81 @@ against existing keys. Multi-library Format C files are rejected
 back to the standard wizard. 12 new PHPUnit tests; suite 496 /
 1272 → 508 / 1313.
 
-Awaiting Phase 4.2b.3 cart wiring + bundle reconciliation across
-child cart lines + full snapshot pricing for the test panel, OR
-real-data Sologtak re-test of the new Product Builder flow on
-demo.ovanap.dev/sol1/, OR the optional operation-mode rule
-auto-wiring (creating show/hide rules in the template when "Both"
-is picked — currently the JS UI handles show/hide visually based
-on the recorded mode).
+**Phase 4.4** — Yith-style Product Configurator Builder reset.
+After real-data testing the Phase 4.3 dalis 2 Product Builder felt
+"still too technical": ten fixed blocks per product type, with
+fabric / motor / accessory libraries surfaced as their own forms.
+Phase 4.4 replaces that with a Yith Product Add-Ons-like workflow:
+sections are owner-added cards on a vertical drag-drop list, each
+section opens a modal editor whose tabs differ by section type.
+Sections are typed (size_pricing / option_group / motor /
+manual_operation / controls / accessories / custom — see
+`SectionTypeRegistry`); each section gets a stable per-product
+element_id (`sec_{type}_{4hex}`) and provisions its own
+auto-managed underlying entity (lookup_table for size_pricing,
+library for the rest), so the same product can carry multiple
+sections of the same type without key collisions.
+
+Per-section editors landed:
+- size_pricing — width × height × price range table, +Add row,
+  Bulk paste from Excel, server-side overlap + gap diagnostics
+  surfaced inline (overlapping rows highlighted red; gap lines
+  shown as info notes). Storage strategy keeps the engine
+  untouched: each range row is written as a single lookup_cell
+  at (width = width_to, height = height_to) — `round_up` already
+  gives range semantics, so no DB schema or LookupEngine change
+  was required.
+- option_group / accessories / controls / manual_operation /
+  custom — option cards with image (wp.media picker), name, SKU,
+  brand, collection, color family, price group, price, active
+  toggle. Bulk paste route uses each section type's
+  `bulk_paste_columns` to map positional values into draft
+  options; image-by-SKU matcher pastes a filename list and
+  auto-fills option image fields case-insensitively against the
+  drafts' SKUs (ignoring extension and trailing
+  _main/_thumb/_large/_small/_alt and -N/_N suffixes).
+- motor — single + bundle variants on one card. Single motors
+  carry a Woo product SKU + custom price + price source
+  dropdown (configkit / woo). Bundles add a components subtable
+  (Woo SKU × qty × component price source) plus a bundle
+  pricing toggle (sum of components vs fixed price). Woo SKUs
+  are resolved through the existing WooSkuResolver adapter, so
+  bulk paste works without numeric IDs.
+- visibility — every section gets a Visibility tab with a visual
+  rule builder: "Always visible" or "Show only when…" with a
+  match-all/any toggle and condition rows. Each row is a
+  section dropdown (excluding self) × is/is-not × value
+  dropdown. Value lists are lazy-loaded from the existing
+  /options endpoint and cached per section; size_pricing
+  sections fall back to a free-text value field.
+
+A new `GET /configurator/{id}/diagnostics` endpoint runs
+`ConfiguratorBuilderService::analyse_product` — per-section
+status (ready / setup_needed / issues) plus an overall roll-up.
+Drives the header status pill (Ready / N section(s) need
+attention / Setup in progress / Disabled), the "View
+diagnostics" modal listing every section's issues with an
+"Open →" jump, and an inline status pill on each section card.
+Diagnostics auto-refresh after every save / add / delete /
+visibility change.
+
+Advanced admin remains: a "Show advanced settings" header link
+swaps the Yith builder for the existing 8-section advanced view
+when an owner needs the power-user surface.
+
+Suite 565 / 1531 → 599 / 1644 (new tests cover section
+provisioning, range save/read/overlap analysis, option
+save/replace-all, motor SKU resolution + bundle composition +
+fixed_bundle pricing + empty-bundle fallback, dangling
+visibility refs, and section-empty diagnostics).
+
+Awaiting Phase 4.2b.3 cart wiring + bundle reconciliation
+across child cart lines + full snapshot pricing for the test
+panel, OR real-data Sologtak re-test of the new Configurator
+Builder flow on demo.ovanap.dev/sol1/, OR the optional
+operation-mode rule auto-wiring (creating show/hide rules in
+the template when "Both" is picked — currently the JS UI
+handles show/hide visually based on the recorded mode).
 
 ---
 
