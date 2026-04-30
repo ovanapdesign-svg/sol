@@ -17,6 +17,28 @@ final class StubLibraryItemRepository extends LibraryItemRepository {
 		return $this->records[ $id ] ?? null;
 	}
 
+	public function find_by_library_and_key( string $library_key, string $item_key ): ?array {
+		foreach ( $this->records as $rec ) {
+			if ( $rec['library_key'] === $library_key && $rec['item_key'] === $item_key ) {
+				return $rec;
+			}
+		}
+		return null;
+	}
+
+	public function soft_delete_all_in_library( string $library_key ): int {
+		$count = 0;
+		foreach ( $this->records as $id => $rec ) {
+			if ( $rec['library_key'] === $library_key && ! empty( $rec['is_active'] ) ) {
+				$this->records[ $id ]['is_active']    = false;
+				$this->records[ $id ]['updated_at']   = '2026-04-29 12:00:00';
+				$this->records[ $id ]['version_hash'] = sha1( '2026-04-29 12:00:00' . $id );
+				$count++;
+			}
+		}
+		return $count;
+	}
+
 	public function key_exists_in_library( string $library_key, string $item_key, ?int $exclude_id = null ): bool {
 		foreach ( $this->records as $rec ) {
 			if ( $rec['library_key'] === $library_key
