@@ -4171,6 +4171,39 @@
 	border: 1px solid #c3c4c7;
 }
 
+/* Inline price-override controls inside the option editor. */
+.configkit-cb__price-field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.configkit-cb__override-indicator {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 11px;
+	color: #8a5a00;
+}
+
+.configkit-cb__override-label {
+	background: #fff5e6;
+	padding: 1px 6px;
+	border-radius: 999px;
+	border: 1px solid #f0c97a;
+}
+
+.configkit-cb__override-reset {
+	color: #2271b1;
+}
+
+.configkit-cb__override-set {
+	font-size: 11px;
+	color: #2271b1;
+	text-align: left;
+	padding: 0;
+}
+
 /* Phase 4.3 — Product Builder auto-managed badge in admin lists. */
 .configkit-auto-managed-badge {
 	display: inline-flex;

@@ -629,6 +629,102 @@
 		);
 	}
 
+	// =========================================================
+	// Phase 4.3b half B — inline override controls inside the
+	// option editor.
+	//
+	// Shared sections render the price field with three companions:
+	//   1. The numberInput itself (always present so save_options can
+	//      still pick it up if the section is later detached).
+	//   2. An "Override" inline button that opens a tiny prompt for a
+	//      one-off price override → POST /write-override.
+	//   3. When an override already exists, an "Overridden: 4500"
+	//      indicator + ↺ Reset button → POST /reset-override.
+	// On a Local section the field renders unchanged.
+	// =========================================================
+
+	function renderPriceFieldWithOverride( section, opt ) {
+		const wrap  = el( 'div', { class: 'configkit-cb__price-field' } );
+		const input = numberInput( opt.price, 'price' );
+		wrap.appendChild( input );
+
+		const isShared = section.source === 'shared' || section.source === 'overridden';
+		if ( ! isShared ) return wrap;
+
+		const overridden = opt.overridden_price !== null && opt.overridden_price !== undefined;
+		if ( overridden ) {
+			wrap.appendChild( el( 'div', { class: 'configkit-cb__override-indicator' },
+				el( 'span', { class: 'configkit-cb__override-label' }, '✏️ Overridden: ' + opt.overridden_price ),
+				el( 'button', {
+					type: 'button',
+					class: 'button-link configkit-cb__override-reset',
+					title: 'Reset to preset value',
+					onClick: () => confirmAndResetOverride( section, opt ),
+				}, '↺ Reset' )
+			) );
+		} else {
+			wrap.appendChild( el( 'button', {
+				type: 'button',
+				class: 'button-link configkit-cb__override-set',
+				onClick: () => promptAndWriteOverride( section, opt ),
+			}, '✏️ Override price' ) );
+		}
+		return wrap;
+	}
+
+	function priceOverridePath( section, opt ) {
+		const pos = section.type_position !== undefined ? section.type_position : 0;
+		return 'price_overrides.' + section.type + '.' + pos + '.' + ( opt.item_key || opt.sku || 'unknown' ) + '.price';
+	}
+
+	async function promptAndWriteOverride( section, opt ) {
+		const presetPrice = opt.price !== '' && opt.price !== null && opt.price !== undefined ? String( opt.price ) : '0';
+		const next = window.prompt(
+			'Set an override price for "' + ( opt.label || opt.sku || 'option' ) + '". Preset value: ' + presetPrice + ' kr.',
+			presetPrice
+		);
+		if ( next === null ) return;
+		const num = Number( next );
+		if ( ! Number.isFinite( num ) || num < 0 ) {
+			showMessage( 'error', 'Override price must be a non-negative number.' );
+			return;
+		}
+		const path = priceOverridePath( section, opt );
+		try {
+			await window.ConfigKit.request( '/product-builder/' + productId + '/write-override', {
+				method: 'POST',
+				body: { path, value: { price: num } },
+			} );
+			showMessage( 'success', 'Override saved.' );
+			if ( state.modal ) await loadOptions( state.modal.sectionId );
+			await loadSections();
+			loadDiagnostics();
+			render();
+		} catch ( err ) {
+			showMessage( 'error', explainError( err ) );
+		}
+	}
+
+	async function confirmAndResetOverride( section, opt ) {
+		const presetPrice = opt.price !== '' && opt.price !== null && opt.price !== undefined ? String( opt.price ) : '(unset)';
+		const current     = opt.overridden_price !== null && opt.overridden_price !== undefined ? String( opt.overridden_price ) : '(unset)';
+		if ( ! window.confirm( 'Revert to preset value?\nCurrent: ' + current + '\nPreset: ' + presetPrice ) ) return;
+		const path = priceOverridePath( section, opt );
+		try {
+			await window.ConfigKit.request( '/product-builder/' + productId + '/reset-override', {
+				method: 'POST',
+				body: { override_path: path },
+			} );
+			showMessage( 'success', 'Override reset.' );
+			if ( state.modal ) await loadOptions( state.modal.sectionId );
+			await loadSections();
+			loadDiagnostics();
+			render();
+		} catch ( err ) {
+			showMessage( 'error', explainError( err ) );
+		}
+	}
+
 	function sourceModalTitle( kind ) {
 		switch ( kind ) {
 			case 'save':           return 'Save current setup as preset';
@@ -1032,6 +1128,7 @@
 	function optionRecordToDraft( o ) {
 		const attrs = ( o && o.attributes && typeof o.attributes === 'object' ) ? o.attributes : {};
 		return {
+			item_key:       o.item_key || '',
 			label:          o.label || '',
 			sku:            o.sku || '',
 			image_url:      o.image_url || '',
@@ -1041,6 +1138,10 @@
 			price_group:    o.price_group_key || '',
 			price:          ( o.price === null || o.price === undefined ) ? '' : String( o.price ),
 			active:         o.is_active !== false,
+			// Phase 4.3b half B — override indicators surfaced by the
+			// resolver / read_section_options.
+			overridden_price:      ( o.overridden_price === undefined || o.overridden_price === null ) ? null : Number( o.overridden_price ),
+			is_hidden_by_override: !! o.is_hidden_by_override,
 			// Motor-specific. Survive a round-trip through the
 			// option editor so a non-motor section's save doesn't
 			// drop these fields silently.
@@ -1174,7 +1275,7 @@
 		grid.appendChild( labelled( 'Collection',   textInput( opt.collection, 'collection' ) ) );
 		grid.appendChild( labelled( 'Color family', textInput( opt.color_family, 'color_family' ) ) );
 		grid.appendChild( labelled( 'Price group',  textInput( opt.price_group, 'price_group' ) ) );
-		grid.appendChild( labelled( 'Price (kr)',   numberInput( opt.price, 'price' ) ) );
+		grid.appendChild( labelled( 'Price (kr)', renderPriceFieldWithOverride( section, opt ) ) );
 		card.appendChild( grid );
 
 		// Hidden image_url field so readOptionDraftsFromDOM picks it up.
