@@ -3857,6 +3857,64 @@
 	font-weight: 600;
 }
 
+/* Phase 4.4b — product search picker. */
+.configkit-cb__product-picker {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.configkit-cb__product-picker-selected {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 10px;
+	background: #eef5fb;
+	border: 1px solid #b3d2e6;
+	border-radius: 4px;
+}
+
+.configkit-cb__product-picker-row {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	font-size: 13px;
+}
+
+.configkit-cb__product-picker-meta {
+	font-size: 11px;
+	color: #50575e;
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.configkit-cb__product-picker-list {
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	max-height: 220px;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+}
+
+.configkit-cb__product-picker-result {
+	text-align: left;
+	padding: 8px 10px;
+	border-bottom: 1px solid #f0f0f1;
+	background: #fff;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.configkit-cb__product-picker-result:last-child {
+	border-bottom: 0;
+}
+
+.configkit-cb__product-picker-result:hover {
+	background: #f6f9fc;
+}
+
 .configkit-cb__option-input {
 	width: 100%;
 	padding: 4px 6px;

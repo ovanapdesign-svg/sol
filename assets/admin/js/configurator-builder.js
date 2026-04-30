@@ -500,16 +500,13 @@
 
 	function buildCopyFromProductBody( body, footer, m ) {
 		m.payload = m.payload || { source_product_id: 0, lookup_table_choice: 'inherit' };
+		m.search  = m.search  || { q: '', results: null, selected: null, busy: false };
 		body.appendChild( el( 'p', { class: 'description' },
 			'Copy another product\'s configurator into this one. The target becomes independent — future changes to the source do not propagate.'
 		) );
-		body.appendChild( labelledField( 'Source product ID', el( 'input', {
-			type: 'number',
-			class: 'regular-text',
-			min: '1',
-			value: m.payload.source_product_id || '',
-			onInput: ( ev ) => { m.payload.source_product_id = parseInt( ev.target.value || '0', 10 ); },
-		} ) ) );
+		body.appendChild( renderProductSearchPicker( m, ( selection ) => {
+			m.payload.source_product_id = selection ? selection.id : 0;
+		} ) );
 		const lookupRow = el( 'div', { class: 'configkit-cb__source-lookup' } );
 		[
 			[ 'inherit', 'Inherit (share source\'s table)' ],
@@ -543,7 +540,104 @@
 			class: 'button button-primary',
 			disabled: m.busy || ! m.payload.source_product_id,
 			onClick: submitCopyFromProduct,
-		}, m.busy ? 'Copying…' : 'Copy' ) );
+		}, m.busy ? 'Copying…' : 'Copy from selected product' ) );
+	}
+
+	// =========================================================
+	// Phase 4.4b — product search picker for the copy / link
+	// modals. Owner types into a search box; we hit the existing
+	// /woo-products endpoint with debounce, list matches as
+	// clickable rows (Title — SKU — #ID), and surface the selected
+	// row above the search so the owner can clear or change it.
+	// =========================================================
+
+	let _productSearchTimer = null;
+
+	function renderProductSearchPicker( m, onSelectionChange ) {
+		const wrap = el( 'div', { class: 'configkit-cb__product-picker' } );
+		const search = m.search;
+
+		// Selected row card.
+		if ( search.selected ) {
+			const sel = search.selected;
+			wrap.appendChild( el( 'div', { class: 'configkit-cb__product-picker-selected' },
+				el( 'div', { class: 'configkit-cb__product-picker-row' },
+					el( 'strong', null, sel.name || ( '#' + sel.id ) ),
+					el( 'span', { class: 'configkit-cb__product-picker-meta' },
+						sel.sku ? sel.sku + ' · #' + sel.id : '#' + sel.id
+					)
+				),
+				el( 'button', {
+					type: 'button',
+					class: 'button-link',
+					onClick: () => {
+						m.search.selected = null;
+						onSelectionChange( null );
+						render();
+					},
+				}, 'Clear' )
+			) );
+		}
+
+		// Search input.
+		wrap.appendChild( labelledField( 'Search products by title or SKU', el( 'input', {
+			type: 'search',
+			class: 'regular-text',
+			placeholder: 'e.g. Markise VIKA or DICK-U171',
+			value: search.q,
+			onInput: ( ev ) => {
+				search.q = ev.target.value;
+				if ( _productSearchTimer ) clearTimeout( _productSearchTimer );
+				_productSearchTimer = setTimeout( () => runProductSearch( m ), 280 );
+			},
+		} ) ) );
+
+		// Results list.
+		if ( search.busy ) {
+			wrap.appendChild( el( 'p', { class: 'description' }, 'Searching…' ) );
+		} else if ( Array.isArray( search.results ) ) {
+			if ( search.results.length === 0 ) {
+				wrap.appendChild( el( 'p', { class: 'description' },
+					search.q ? 'No products match that search.' : 'Type at least one character to search.'
+				) );
+			} else {
+				const list = el( 'div', { class: 'configkit-cb__product-picker-list' } );
+				search.results.forEach( ( row ) => {
+					list.appendChild( el( 'button', {
+						type: 'button',
+						class: 'button-link configkit-cb__product-picker-result',
+						onClick: () => {
+							m.search.selected = row;
+							onSelectionChange( row );
+							render();
+						},
+					},
+						el( 'strong', null, row.name || ( '#' + row.id ) ),
+						el( 'span', { class: 'configkit-cb__product-picker-meta' },
+							( row.sku ? row.sku + ' · ' : '' ) + '#' + row.id
+						)
+					) );
+				} );
+				wrap.appendChild( list );
+			}
+		}
+		return wrap;
+	}
+
+	async function runProductSearch( m ) {
+		const q = ( m.search.q || '' ).trim();
+		m.search.busy = true;
+		render();
+		try {
+			const data = await window.ConfigKit.request( '/woo-products?q=' + encodeURIComponent( q ) + '&per_page=20' );
+			m.search.results = ( data && data.items ) || [];
+		} catch ( err ) {
+			m.search.results = [];
+			showMessage( 'error', explainError( err ) );
+		} finally {
+			m.search.busy = false;
+			render();
+		}
 	}
 
 	async function submitCopyFromProduct() {
