@@ -32,6 +32,15 @@ final class DashboardPage extends AbstractPage {
 		return \__( 'Dashboard', 'configkit' );
 	}
 
+	/**
+	 * Dashboard is the root — single segment, no link out.
+	 *
+	 * @return list<array{label:string, href?:string|null}>
+	 */
+	protected function breadcrumb_segments(): array {
+		return [ [ 'label' => 'ConfigKit' ] ];
+	}
+
 	public function render(): void {
 		$this->ensure_capability();
 		$this->open_wrap( \__( 'ConfigKit Dashboard', 'configkit' ) );

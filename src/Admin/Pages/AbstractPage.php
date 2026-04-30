@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace ConfigKit\Admin\Pages;
 
+use ConfigKit\Admin\Breadcrumb;
+
 abstract class AbstractPage {
 
 	abstract public function slug(): string;
@@ -30,11 +32,29 @@ abstract class AbstractPage {
 
 	protected function open_wrap( string $heading ): void {
 		echo '<div class="wrap configkit-admin">';
+		echo $this->render_breadcrumb();
 		echo '<h1 class="wp-heading-inline">' . \esc_html( $heading ) . '</h1>';
 		echo '<hr class="wp-header-end">';
 	}
 
 	protected function close_wrap(): void {
 		echo '</div>';
+	}
+
+	/**
+	 * Pages override this to declare their breadcrumb trail. Default
+	 * is "ConfigKit › <menu_title>" which suits every top-level page.
+	 *
+	 * @return list<array{label:string, href?:string|null}>
+	 */
+	protected function breadcrumb_segments(): array {
+		return [
+			[ 'label' => 'ConfigKit', 'href' => Breadcrumb::configkit_root_href() ],
+			[ 'label' => $this->menu_title() ],
+		];
+	}
+
+	protected function render_breadcrumb(): string {
+		return Breadcrumb::render( $this->breadcrumb_segments() );
 	}
 }

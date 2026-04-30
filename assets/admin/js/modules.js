@@ -367,6 +367,7 @@
 	function render() {
 		root.dataset.loading = state.view === 'loading' ? 'true' : 'false';
 		root.replaceChildren();
+		updateSubBreadcrumb();
 
 		if ( state.view === 'loading' ) {
 			root.appendChild( el( 'p', { class: 'configkit-app__loading' }, 'Loading…' ) );
@@ -386,6 +387,23 @@
 		if ( state.view === 'form' ) {
 			root.appendChild( renderForm() );
 		}
+	}
+
+	function updateSubBreadcrumb() {
+		if ( ! window.ConfigKit || ! window.ConfigKit.subBreadcrumb ) return;
+		if ( state.view === 'list' || state.view === 'loading' ) {
+			window.ConfigKit.subBreadcrumb( null );
+			return;
+		}
+		const segs = [ { label: 'Modules', onClick: () => { setUrl( { action: null, id: null } ); loadList(); } } ];
+		if ( state.view === 'presets' ) {
+			segs.push( { label: 'New module' } );
+		} else if ( state.view === 'form' ) {
+			const rec = state.editing;
+			if ( rec && rec.id > 0 ) segs.push( { label: 'Edit "' + ( rec.name || rec.module_key ) + '"' } );
+			else segs.push( { label: 'New module' } );
+		}
+		window.ConfigKit.subBreadcrumb( segs );
 	}
 
 	function renderPresetPicker() {

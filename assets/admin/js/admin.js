@@ -286,6 +286,67 @@
 		return ul;
 	}
 
+	/**
+	 * Render an extra breadcrumb tail under the server-rendered nav.
+	 * Used by JS form views to communicate "Edit X" / "New Y" without
+	 * round-tripping the server.
+	 *
+	 *   ConfigKit.subBreadcrumb([
+	 *     { label: 'Libraries', onClick: backToList },
+	 *     { label: 'Dickson Orchestra' },
+	 *     { label: 'New item' },
+	 *   ]);
+	 *
+	 * Replaces any prior sub-breadcrumb on the same page.
+	 */
+	function subBreadcrumb( segments ) {
+		const existing = document.querySelector( '.configkit-subbreadcrumb' );
+		if ( existing && existing.parentNode ) existing.parentNode.removeChild( existing );
+		if ( ! segments || segments.length === 0 ) return;
+		const nav = document.createElement( 'nav' );
+		nav.className = 'configkit-breadcrumb configkit-subbreadcrumb';
+		nav.setAttribute( 'aria-label', 'Sub-breadcrumb' );
+		const last = segments.length - 1;
+		segments.forEach( ( seg, i ) => {
+			if ( i > 0 ) {
+				const sep = document.createElement( 'span' );
+				sep.className = 'configkit-breadcrumb__sep';
+				sep.setAttribute( 'aria-hidden', 'true' );
+				sep.textContent = '›';
+				nav.appendChild( sep );
+			}
+			const isLast = i === last;
+			if ( isLast || ( ! seg.href && ! seg.onClick ) ) {
+				const span = document.createElement( 'span' );
+				span.className = 'configkit-breadcrumb__current';
+				span.setAttribute( 'aria-current', 'page' );
+				span.textContent = seg.label;
+				nav.appendChild( span );
+			} else {
+				const a = document.createElement( 'a' );
+				a.className = 'configkit-breadcrumb__link';
+				a.href = seg.href || '#';
+				a.textContent = seg.label;
+				if ( seg.onClick ) {
+					a.addEventListener( 'click', ( ev ) => {
+						ev.preventDefault();
+						seg.onClick();
+					} );
+				}
+				nav.appendChild( a );
+			}
+		} );
+		// Insert just after the server-rendered breadcrumb, or at the
+		// top of the .wrap if there isn't one.
+		const serverNav = document.querySelector( '.wrap.configkit-admin > .configkit-breadcrumb' );
+		if ( serverNav && serverNav.parentNode ) {
+			serverNav.parentNode.insertBefore( nav, serverNav.nextSibling );
+		} else {
+			const wrap = document.querySelector( '.wrap.configkit-admin' );
+			if ( wrap ) wrap.insertBefore( nav, wrap.firstChild );
+		}
+	}
+
 	window.ConfigKit = window.ConfigKit || {};
 	window.ConfigKit.request = request;
 	window.ConfigKit.describeError = describeError;
@@ -294,4 +355,5 @@
 	window.ConfigKit.emptyState = emptyState;
 	window.ConfigKit.softKeyWarnings = softKeyWarnings;
 	window.ConfigKit.renderSoftWarnings = renderSoftWarnings;
+	window.ConfigKit.subBreadcrumb = subBreadcrumb;
 } )();

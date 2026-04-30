@@ -431,6 +431,7 @@
 	function render() {
 		root.dataset.loading = state.view === 'loading' ? 'true' : 'false';
 		root.replaceChildren();
+		updateSubBreadcrumb();
 
 		if ( state.view === 'loading' ) {
 			root.appendChild( el( 'p', { class: 'configkit-app__loading' }, 'Loading…' ) );
@@ -440,6 +441,32 @@
 		else if ( state.view === 'library_form' ) root.appendChild( renderLibraryForm() );
 		else if ( state.view === 'library_detail' ) root.appendChild( renderLibraryDetail() );
 		else if ( state.view === 'item_form' ) root.appendChild( renderItemForm() );
+	}
+
+	function updateSubBreadcrumb() {
+		if ( ! window.ConfigKit || ! window.ConfigKit.subBreadcrumb ) return;
+		if ( state.view === 'list' || state.view === 'loading' ) {
+			window.ConfigKit.subBreadcrumb( null );
+			return;
+		}
+		const segs = [ { label: 'Libraries', onClick: () => { setUrl( { view: null, id: null, item_id: null, action: null } ); loadList(); } } ];
+		const lib = state.library || state.editingLibrary;
+		if ( state.view === 'library_form' ) {
+			const rec = state.editingLibrary;
+			segs.push( { label: rec && rec.id > 0 ? 'Edit "' + ( rec.name || rec.library_key ) + '"' : 'New library' } );
+		} else if ( state.view === 'library_detail' ) {
+			segs.push( { label: lib && lib.name ? '"' + lib.name + '"' : 'Open' } );
+		} else if ( state.view === 'item_form' ) {
+			if ( lib && lib.name ) {
+				segs.push( {
+					label: '"' + lib.name + '"',
+					onClick: () => { state.view = 'library_detail'; render(); },
+				} );
+			}
+			const it = state.editingItem;
+			segs.push( { label: it && it.id > 0 ? 'Edit "' + ( it.label || it.item_key ) + '"' : 'New item' } );
+		}
+		window.ConfigKit.subBreadcrumb( segs );
 	}
 
 	function messageBanner( m ) {

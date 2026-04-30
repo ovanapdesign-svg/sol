@@ -376,6 +376,7 @@
 	function render() {
 		root.dataset.loading = state.view === 'loading' ? 'true' : 'false';
 		root.replaceChildren();
+		updateSubBreadcrumb();
 		if ( state.view === 'loading' ) {
 			root.appendChild( el( 'p', { class: 'configkit-app__loading' }, 'Loading…' ) );
 			return;
@@ -384,6 +385,34 @@
 		else if ( state.view === 'table_form' ) root.appendChild( renderTableForm() );
 		else if ( state.view === 'table_detail' ) root.appendChild( renderTableDetail() );
 		else if ( state.view === 'cell_form' ) root.appendChild( renderCellForm() );
+	}
+
+	function updateSubBreadcrumb() {
+		if ( ! window.ConfigKit || ! window.ConfigKit.subBreadcrumb ) return;
+		if ( state.view === 'list' || state.view === 'loading' ) {
+			window.ConfigKit.subBreadcrumb( null );
+			return;
+		}
+		const segs = [ { label: 'Lookup Tables', onClick: () => { setUrl( { view: null, id: null, cell_id: null, action: null } ); loadList(); } } ];
+		const tableName = state.table && state.table.name
+			? state.table.name
+			: ( state.editingTable && state.editingTable.name );
+		if ( state.view === 'table_form' ) {
+			const rec = state.editingTable;
+			segs.push( { label: rec && rec.id > 0 ? 'Edit "' + ( rec.name || rec.lookup_table_key ) + '"' : 'New lookup table' } );
+		} else if ( state.view === 'table_detail' ) {
+			segs.push( { label: tableName ? '"' + tableName + '"' : 'Open' } );
+		} else if ( state.view === 'cell_form' ) {
+			if ( tableName ) {
+				segs.push( {
+					label: '"' + tableName + '"',
+					onClick: () => { state.view = 'table_detail'; render(); },
+				} );
+			}
+			const cell = state.editingCell;
+			segs.push( { label: cell && cell.id > 0 ? 'Edit cell #' + cell.id : 'New cell' } );
+		}
+		window.ConfigKit.subBreadcrumb( segs );
 	}
 
 	function messageBanner( m ) {

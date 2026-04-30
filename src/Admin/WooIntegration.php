@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace ConfigKit\Admin;
 
+use ConfigKit\Admin\Breadcrumb;
+
 /**
  * Registers the ConfigKit tab inside WooCommerce's product data meta
  * box. The panel is an HTML shell — product-binding.js hydrates it
@@ -32,9 +34,27 @@ final class WooIntegration {
 	public function render_panel(): void {
 		global $post;
 		$product_id = $post instanceof \WP_Post ? (int) $post->ID : 0;
+		$post_title = $post instanceof \WP_Post && (string) $post->post_title !== '' ? (string) $post->post_title : '';
 
 		echo '<div id="configkit_product_data" class="panel woocommerce_options_panel hidden">';
-		echo '<div class="configkit-product-tab" data-product-id="' . \esc_attr( (string) $product_id ) . '">';
+		echo '<div class="configkit-product-tab configkit-admin" data-product-id="' . \esc_attr( (string) $product_id ) . '">';
+
+		echo Breadcrumb::render( [
+			[
+				'label' => 'WooCommerce',
+				'href'  => function_exists( 'admin_url' )
+					? \admin_url( 'edit.php?post_type=product' )
+					: 'edit.php?post_type=product',
+			],
+			[
+				'label' => 'Products',
+				'href'  => function_exists( 'admin_url' )
+					? \admin_url( 'edit.php?post_type=product' )
+					: 'edit.php?post_type=product',
+			],
+			[ 'label' => $post_title !== '' ? 'Edit "' . $post_title . '"' : 'Edit product' ],
+			[ 'label' => 'ConfigKit' ],
+		] );
 
 		echo '<div class="options_group">';
 		echo '<p class="form-field">';

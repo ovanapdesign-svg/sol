@@ -849,6 +849,7 @@
 	function render() {
 		root.dataset.loading = state.view === 'loading' ? 'true' : 'false';
 		root.replaceChildren();
+		updateSubBreadcrumb();
 		if ( state.view === 'loading' ) {
 			root.appendChild( el( 'p', { class: 'configkit-app__loading' }, 'Loading…' ) );
 			return;
@@ -857,6 +858,32 @@
 		else if ( state.view === 'form' ) root.appendChild( renderForm() );
 		else if ( state.view === 'detail' ) root.appendChild( renderDetail() );
 		else if ( state.view === 'step_form' ) root.appendChild( renderStepForm() );
+	}
+
+	function updateSubBreadcrumb() {
+		if ( ! window.ConfigKit || ! window.ConfigKit.subBreadcrumb ) return;
+		if ( state.view === 'list' || state.view === 'loading' ) {
+			window.ConfigKit.subBreadcrumb( null );
+			return;
+		}
+		const segs = [ { label: 'Templates', onClick: () => { setUrl( { view: null, id: null, action: null, step_id: null, drawer: null } ); loadList(); } } ];
+		const tmpl = state.template || state.editing;
+		if ( state.view === 'form' ) {
+			const rec = state.editing;
+			segs.push( { label: rec && rec.id > 0 ? 'Edit "' + ( rec.name || rec.template_key ) + '"' : 'New template' } );
+		} else if ( state.view === 'detail' ) {
+			segs.push( { label: tmpl && tmpl.name ? '"' + tmpl.name + '"' : 'Open' } );
+		} else if ( state.view === 'step_form' ) {
+			if ( tmpl && tmpl.name ) {
+				segs.push( {
+					label: '"' + tmpl.name + '"',
+					onClick: () => { state.view = 'detail'; render(); },
+				} );
+			}
+			const step = state.editingStep;
+			segs.push( { label: step && step.id > 0 ? 'Edit step "' + ( step.label || step.step_key ) + '"' : 'New step' } );
+		}
+		window.ConfigKit.subBreadcrumb( segs );
 	}
 
 	function messageBanner( m ) {

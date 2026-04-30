@@ -1207,3 +1207,57 @@
 	font-size: 12px;
 	line-height: 1.4;
 }
+
+/* ============================================================
+   Phase 3.6 — Owner workflow clarity
+   ============================================================ */
+
+/* ---- Breadcrumb (server-rendered + JS sub-breadcrumb) ---- */
+
+.configkit-breadcrumb {
+	font-size: 13px;
+	margin: 4px 0 12px;
+	color: #50575e;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px;
+}
+
+.configkit-breadcrumb__link {
+	color: #2271b1;
+	text-decoration: none;
+}
+
+.configkit-breadcrumb__link:hover,
+.configkit-breadcrumb__link:focus {
+	text-decoration: underline;
+}
+
+.configkit-breadcrumb__sep {
+	color: #c3c4c7;
+	margin: 0 2px;
+	font-weight: 400;
+}
+
+.configkit-breadcrumb__current {
+	color: #1d2327;
+	font-weight: 500;
+}
+
+.configkit-subbreadcrumb {
+	margin-top: -4px;
+	padding-top: 0;
+}
+
+@media ( max-width: 768px ) {
+	.configkit-breadcrumb {
+		font-size: 12px;
+	}
+}
+
+/* Inside the Woo product tab the breadcrumb sits inside a panel
+   that already has its own padding — tighten the top margin. */
+.configkit-product-tab .configkit-breadcrumb {
+	margin: 0 0 10px;
+}

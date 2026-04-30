@@ -216,12 +216,27 @@
 	function render() {
 		root.dataset.loading = state.view === 'loading' ? 'true' : 'false';
 		root.replaceChildren();
+		updateSubBreadcrumb();
 		if ( state.view === 'loading' ) {
 			root.appendChild( el( 'p', { class: 'configkit-app__loading' }, 'Loading…' ) );
 			return;
 		}
 		if ( state.view === 'list' ) root.appendChild( renderList() );
 		else if ( state.view === 'form' ) root.appendChild( renderForm() );
+	}
+
+	function updateSubBreadcrumb() {
+		if ( ! window.ConfigKit || ! window.ConfigKit.subBreadcrumb ) return;
+		if ( state.view !== 'form' ) {
+			window.ConfigKit.subBreadcrumb( null );
+			return;
+		}
+		const rec = state.editing;
+		const tail = rec && rec.id > 0 ? 'Edit "' + ( rec.name || rec.family_key ) + '"' : 'New family';
+		window.ConfigKit.subBreadcrumb( [
+			{ label: 'Families', onClick: () => { setUrl( { action: null, id: null } ); loadList(); } },
+			{ label: tail },
+		] );
 	}
 
 	function messageBanner( m ) {
