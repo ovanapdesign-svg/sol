@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace ConfigKit\Admin\Pages;
 
 use ConfigKit\Admin\Breadcrumb;
+use ConfigKit\Admin\PageHeader;
 
 /**
  * Modules admin page.
@@ -47,11 +48,17 @@ final class ModulesPage extends AbstractPage {
 
 	public function render(): void {
 		$this->ensure_capability();
-		$this->open_wrap( \__( 'Modules', 'configkit' ) );
-
-		echo '<p class="description">'
-			. \esc_html__( 'A module declares a kind of option group. Libraries are concrete instances of a module.', 'configkit' )
-			. '</p>';
+		$this->open_wrap_with_header( [
+			'title'     => 'Modules',
+			'subtitle'  => 'Define types of options you sell',
+			'intro'     => 'A module is the TYPE of option you sell — for example Textiles, Motors, Colors, Accessories. Modules define what attributes items can have.',
+			'intro_id'  => 'modules',
+			'primary'   => [
+				'label' => '+ Create module',
+				'href'  => \admin_url( 'admin.php?page=configkit-modules&action=new' ),
+			],
+			'secondary' => [ 'label' => '← Back to dashboard', 'href' => PageHeader::dashboard_href() ],
+		] );
 
 		echo '<div id="configkit-modules-app" class="configkit-app" data-loading="true">';
 		echo '<noscript><p>'

@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace ConfigKit\Admin\Pages;
 
+use ConfigKit\Admin\PageHeader;
+
 /**
  * ConfigKit → Products: read-only-with-jumps overview per
  * PRODUCT_BINDING_SPEC.md §2.2. All editing happens on the WooCommerce
@@ -28,14 +30,18 @@ final class ProductsPage extends AbstractPage {
 
 	public function render(): void {
 		$this->ensure_capability();
-		$this->open_wrap( \__( 'Products', 'configkit' ) );
-
-		echo '<p class="description">'
-			. \esc_html__(
-				'Overview of WooCommerce products and their ConfigKit status. Click "Edit binding" to jump to the product\'s ConfigKit tab.',
-				'configkit'
-			)
-			. '</p>';
+		$this->open_wrap_with_header( [
+			'title'     => 'Products',
+			'subtitle'  => 'WooCommerce products and their ConfigKit setup',
+			'intro'     => "Overview of all WooCommerce products and their ConfigKit setup status. Click 'Edit binding' to configure a specific product (opens in WooCommerce).",
+			'intro_id'  => 'products',
+			'primary'   => [
+				'label'    => 'Open Products in WooCommerce',
+				'href'     => \admin_url( 'edit.php?post_type=product' ),
+				'external' => true,
+			],
+			'secondary' => [ 'label' => '← Back to dashboard', 'href' => PageHeader::dashboard_href() ],
+		] );
 
 		echo '<div id="configkit-products-app" class="configkit-app" data-loading="true">';
 		echo '<noscript><p>' . \esc_html__( 'JavaScript is required.', 'configkit' ) . '</p></noscript>';

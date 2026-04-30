@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace ConfigKit\Admin\Pages;
 
+use ConfigKit\Admin\PageHeader;
+
 final class TemplatesPage extends AbstractPage {
 
 	public function slug(): string {
@@ -23,11 +25,17 @@ final class TemplatesPage extends AbstractPage {
 
 	public function render(): void {
 		$this->ensure_capability();
-		$this->open_wrap( \__( 'Templates', 'configkit' ) );
-
-		echo '<p class="description">'
-			. \esc_html__( 'Templates define the configurator for a product family. Phase 3 B1 ships list + metadata management; the steps / fields / rules editor lands in B2–B5.', 'configkit' )
-			. '</p>';
+		$this->open_wrap_with_header( [
+			'title'     => 'Templates',
+			'subtitle'  => 'Define the customer configuration experience',
+			'intro'     => 'A template controls what the customer sees on the product page — the configuration steps, the fields they can pick, and the rules that guide them.',
+			'intro_id'  => 'templates',
+			'primary'   => [
+				'label' => '+ Create template',
+				'href'  => \admin_url( 'admin.php?page=configkit-templates&action=new' ),
+			],
+			'secondary' => [ 'label' => '← Back to dashboard', 'href' => PageHeader::dashboard_href() ],
+		] );
 
 		echo '<div id="configkit-templates-app" class="configkit-app" data-loading="true">';
 		echo '<noscript><p>'

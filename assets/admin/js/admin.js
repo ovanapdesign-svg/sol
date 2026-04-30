@@ -347,6 +347,46 @@
 		}
 	}
 
+	/**
+	 * Wire up the .configkit-intro boxes: hide them when dismissed, and
+	 * remember per-page dismissals in localStorage. Strictly UI memory
+	 * — never used for business data.
+	 */
+	function initIntroBoxes() {
+		const boxes = document.querySelectorAll( '.configkit-intro' );
+		if ( boxes.length === 0 ) return;
+		const KEY = 'configkit:intro:dismissed';
+		let dismissed = {};
+		try {
+			const raw = window.localStorage.getItem( KEY );
+			if ( raw ) dismissed = JSON.parse( raw ) || {};
+		} catch ( e ) { dismissed = {}; }
+
+		boxes.forEach( ( box ) => {
+			const id = box.getAttribute( 'data-intro-id' ) || '';
+			if ( id && dismissed[ id ] ) {
+				box.hidden = true;
+				return;
+			}
+			const btn = box.querySelector( '.configkit-intro__dismiss' );
+			if ( ! btn ) return;
+			btn.addEventListener( 'click', () => {
+				box.hidden = true;
+				if ( ! id ) return;
+				dismissed[ id ] = Date.now();
+				try {
+					window.localStorage.setItem( KEY, JSON.stringify( dismissed ) );
+				} catch ( e ) { /* localStorage may be disabled — silently no-op */ }
+			} );
+		} );
+	}
+
+	if ( document.readyState === 'loading' ) {
+		document.addEventListener( 'DOMContentLoaded', initIntroBoxes );
+	} else {
+		initIntroBoxes();
+	}
+
 	window.ConfigKit = window.ConfigKit || {};
 	window.ConfigKit.request = request;
 	window.ConfigKit.describeError = describeError;

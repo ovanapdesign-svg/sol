@@ -1333,3 +1333,117 @@
 		font-size: 18px;
 	}
 }
+
+/* ---- Page header + action bar ---- */
+
+.configkit-pageheader {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	gap: 16px;
+	margin: 4px 0 8px;
+	flex-wrap: wrap;
+}
+
+.configkit-pageheader__titles {
+	flex: 1 1 auto;
+	min-width: 200px;
+}
+
+.configkit-pageheader__h1 {
+	font-size: 23px;
+	margin: 0 0 4px !important;
+	padding: 0 !important;
+}
+
+.configkit-pageheader__subtitle {
+	margin: 0;
+	color: #50575e;
+	font-size: 14px;
+}
+
+.configkit-pageheader__actions {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex-wrap: wrap;
+	flex-shrink: 0;
+}
+
+.configkit-pageheader__primary {
+	white-space: nowrap;
+}
+
+.configkit-pageheader__secondary {
+	color: #2271b1;
+	text-decoration: none;
+	font-size: 13px;
+}
+
+.configkit-pageheader__secondary:hover,
+.configkit-pageheader__secondary:focus {
+	text-decoration: underline;
+}
+
+@media ( max-width: 768px ) {
+	.configkit-pageheader {
+		flex-direction: column;
+	}
+	.configkit-pageheader__actions {
+		width: 100%;
+		justify-content: space-between;
+	}
+	.configkit-pageheader__primary {
+		flex: 1;
+		text-align: center;
+	}
+}
+
+/* ---- Intro box ("What is this?") ---- */
+
+.configkit-intro {
+	display: flex;
+	gap: 12px;
+	align-items: flex-start;
+	background: #f6f7f7;
+	border: 1px solid #e0e0e0;
+	border-radius: 4px;
+	padding: 10px 14px;
+	margin: 12px 0 16px;
+	font-size: 13px;
+	line-height: 1.5;
+	color: #2c3338;
+}
+
+.configkit-intro[ hidden ] {
+	display: none !important;
+}
+
+.configkit-intro__icon {
+	color: #2271b1;
+	font-size: 16px;
+	line-height: 1;
+	margin-top: 2px;
+	flex-shrink: 0;
+}
+
+.configkit-intro__body {
+	margin: 0;
+	flex: 1 1 auto;
+}
+
+.configkit-intro__dismiss {
+	background: transparent;
+	border: 0;
+	color: #2271b1;
+	font-size: 12px;
+	cursor: pointer;
+	white-space: nowrap;
+	padding: 2px 4px;
+	flex-shrink: 0;
+}
+
+.configkit-intro__dismiss:hover,
+.configkit-intro__dismiss:focus {
+	text-decoration: underline;
+}

@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace ConfigKit\Admin\Pages;
 
+use ConfigKit\Admin\PageHeader;
+
 /**
  * Libraries admin page.
  *
@@ -33,11 +35,17 @@ final class LibrariesPage extends AbstractPage {
 
 	public function render(): void {
 		$this->ensure_capability();
-		$this->open_wrap( \__( 'Libraries', 'configkit' ) );
-
-		echo '<p class="description">'
-			. \esc_html__( 'A library is a concrete dataset belonging to a module — for example, the Dickson Orchestra textile collection.', 'configkit' )
-			. '</p>';
+		$this->open_wrap_with_header( [
+			'title'     => 'Libraries',
+			'subtitle'  => 'Catalogs of items grouped by module',
+			'intro'     => "A library is the actual catalog of items in a module. For example, the 'Dickson Orchestra' library belongs to the Textiles module and contains fabric items.",
+			'intro_id'  => 'libraries',
+			'primary'   => [
+				'label' => '+ Create library',
+				'href'  => \admin_url( 'admin.php?page=configkit-libraries&action=new' ),
+			],
+			'secondary' => [ 'label' => '← Back to dashboard', 'href' => PageHeader::dashboard_href() ],
+		] );
 
 		echo '<div id="configkit-libraries-app" class="configkit-app" data-loading="true">';
 		echo '<noscript><p>'

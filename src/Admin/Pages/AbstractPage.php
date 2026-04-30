@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace ConfigKit\Admin\Pages;
 
 use ConfigKit\Admin\Breadcrumb;
+use ConfigKit\Admin\PageHeader;
 
 abstract class AbstractPage {
 
@@ -56,5 +57,17 @@ abstract class AbstractPage {
 
 	protected function render_breadcrumb(): string {
 		return Breadcrumb::render( $this->breadcrumb_segments() );
+	}
+
+	/**
+	 * Open a page with the new H1 + subtitle + action bar + intro
+	 * structure. Replaces open_wrap() for list pages.
+	 *
+	 * @param array<string,mixed> $opts See PageHeader::render.
+	 */
+	protected function open_wrap_with_header( array $opts ): void {
+		echo '<div class="wrap configkit-admin">';
+		echo $this->render_breadcrumb();
+		echo PageHeader::render( $opts );
 	}
 }

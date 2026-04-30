@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace ConfigKit\Admin\Pages;
 
+use ConfigKit\Admin\PageHeader;
+
 final class LookupTablesPage extends AbstractPage {
 
 	public function slug(): string {
@@ -23,11 +25,17 @@ final class LookupTablesPage extends AbstractPage {
 
 	public function render(): void {
 		$this->ensure_capability();
-		$this->open_wrap( \__( 'Lookup Tables', 'configkit' ) );
-
-		echo '<p class="description">'
-			. \esc_html__( 'Width × height (× price group) → price grids. Phase 3 supports manual cell entry; Excel import lands in Phase 4.', 'configkit' )
-			. '</p>';
+		$this->open_wrap_with_header( [
+			'title'     => 'Lookup Tables',
+			'subtitle'  => 'Size-based pricing grids',
+			'intro'     => 'A lookup table stores size-based prices. Each cell is a width × height combination with a price. Excel import comes in Phase 4.',
+			'intro_id'  => 'lookup-tables',
+			'primary'   => [
+				'label' => '+ Create lookup table',
+				'href'  => \admin_url( 'admin.php?page=configkit-lookup-tables&action=new' ),
+			],
+			'secondary' => [ 'label' => '← Back to dashboard', 'href' => PageHeader::dashboard_href() ],
+		] );
 
 		echo '<div id="configkit-lookup-tables-app" class="configkit-app" data-loading="true">';
 		echo '<noscript><p>'
