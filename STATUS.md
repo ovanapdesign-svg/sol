@@ -225,8 +225,8 @@ priority.
 | User-friendly REST error display                      | complete | `ConfigKit.describeError()` in admin.js maps 404 / 401-403 / 409 / 400-422 / 5xx to natural-language messages. Each banner has a "Show technical details" collapsible with the raw message + code + status. |
 
 **Engine purity preserved.** `grep -rE "wp_\|get_option\|WP_Query\|\\$wpdb" src/Engines/`
-returns zero matches. Phase 2 + 3 + 3.5 + 3.6 PHPUnit tests green
-(365 / 940).
+returns zero matches. Phase 2 + 3 + 3.5 + 3.6 + 4 PHPUnit tests green
+(393 / 1010).
 
 **Phase 3 status.** Seven of seven in-scope entities are landed
 (Modules, Libraries, Lookup Tables, Families, Templates, Products,
@@ -272,7 +272,20 @@ no REST contract changes, engines untouched.
 | Diagnostics owner-readable titles + suggested fixes   | complete | ProductDiagnosticsService gains TITLES + SUGGESTED_FIXES maps for all 11 product checks; SystemDiagnosticsService gains SUGGESTED_FIXES for all 8 system checks. Each check / issue now emits `title` (owner-readable label), `suggested_fix` (concrete next action, null when passed), and `fix_link` (alias of fix_url so JS can use either name). diagnostics.js + product-binding.js render the suggested fix as a blue-tinted inline panel beneath the message. |
 | Product tab setup progress checklist + locked sections | complete | The Woo product ConfigKit tab opens with a 5-step checklist (Enable → Select template → Select lookup table → Run diagnostics → Save binding) with green-check / yellow-clock / gray-circle states. Each step click smooth-scrolls to its anchor. Sections 3 / 4 / 6 (defaults / allowed sources / visibility) and 8 (preview) get visually disabled (`opacity: 0.55; pointer-events: none`) until their prerequisites are met (template_key set; section 8 unlocks only when diagnostic status = "ready"). Pricing (5) + Diagnostics (7) remain always available. |
 
-(Nothing started.)
+---
+
+## Phase 4 — Excel Import + Diagnostics + Product Readiness Board
+
+| Item                                                     | Status   | Notes                                                                  |
+|----------------------------------------------------------|----------|------------------------------------------------------------------------|
+| Excel import wizard for lookup-table cells               | complete | PhpSpreadsheet ^2.0 added via composer (vendor/ stays gitignored). New `src/Import/` package: FormatDetector (Format A grid / Format B long, ambiguous → unknown per `IMPORT_WIZARD_SPEC.md §5.2`), Parser (multi-sheet price groups + "Price group: X" separator rows + string-typed numeric cells in long format), Validator (numeric / >0 / ≥0 price / snake_case key / sane bounds + cross-row duplicate detection where last row wins per spec §8.2), Runner (8-state machine: received → parsing → parsed → validated → committing → applied / failed / cancelled, transactional commit with ROLLBACK on throw, idempotent insert/update via LookupCellRepository::find_by_coordinates, replace-all wipe via delete_all_in_table). New REST controller `ImportsController` with 5 routes under `configkit/v1/imports/*`; capability `configkit_manage_lookup_tables`. Multipart upload validated server-side: 10 MB cap, .xlsx-only, MIME allow-list, files moved to `wp-content/uploads/configkit-imports/` (mode 0700 + .htaccess `Require all denied`, randomized filenames). Wizard UI at ConfigKit → Imports renders 4-step flow (pick destination → drag-drop upload → preview with green/yellow/red counts + width/height/price/group stats + insert/update/skip tally + expandable per-row table → result with "Import another file"). Replace-all mode requires window.confirm before commit. Recent-imports list below the wizard. 28 new PHPUnit tests (Parser ×10, Validator ×10, Runner ×8) cover format detection, multi-sheet groups, separator rows, idempotent re-import, replace-all wiping unrelated cells, mixed red+green files only inserting green rows, parse-failure path. |
+| Library items import                                     | pending  | Out of scope for this Phase 4 chunk per the chunk brief — Phase 4 dalis 2.                                          |
+| Diagnostics catalogue expansion (warnings + info)        | pending  |                                                                        |
+| Product Readiness Board                                  | pending  |                                                                        |
+
+**Engine purity preserved.** `grep -rE "wp_\|get_option\|WP_Query\|\\$wpdb" src/Engines/`
+returns zero matches. Phase 2 + 3 + 3.5 + 3.6 + 4 PHPUnit tests
+green (393 / 1010).
 
 ---
 
@@ -324,9 +337,21 @@ know what to do next, and a 5-step setup-progress checklist
 on the Woo product tab with disabled (locked) sections until
 prerequisites are met.
 
-Engines remain pure; 365 PHPUnit tests / 940 assertions green.
-Awaiting Phase 4 direction (Excel import wizard or frontend
-customer UI).
+**Phase 4 Excel import wizard** for lookup-table cells
+(`docs/configkit/specs/IMPORT_WIZARD_SPEC.md` DRAFT v1, implicit
+approval): PhpSpreadsheet ^2.0 dependency, Format A grid +
+Format B long parser with multi-sheet / separator-row price-group
+support, Validator with cross-row last-wins duplicate detection,
+Runner with the 8-state batch machine + transactional commit +
+idempotent insert/update + replace-all wipe. ConfigKit → Imports
+admin page hosts a 4-step wizard (pick destination → drag-drop
+upload → preview with green/yellow/red counts and per-row table →
+result). 5 REST endpoints under `configkit/v1/imports/*`. Library
+items import is the next chunk (Phase 4 dalis 2). Engines stay
+pure; suite now 393 / 1010 green.
+
+Awaiting next direction (frontend customer UI or library items
+import).
 
 ---
 
