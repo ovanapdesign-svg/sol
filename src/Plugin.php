@@ -85,6 +85,7 @@ use ConfigKit\Service\ProductBindingService;
 use ConfigKit\Service\ProductDiagnosticsService;
 use ConfigKit\Service\RuleService;
 use ConfigKit\Service\StepService;
+use ConfigKit\Service\QuickImportService;
 use ConfigKit\Service\SystemDiagnosticsService;
 use ConfigKit\Service\TemplateService;
 use ConfigKit\Service\TestDefaultPriceService;
@@ -333,12 +334,24 @@ final class Plugin {
 			new LibraryItemParser(),
 			new LibraryItemValidator( $library_repo, $module_repo, $item_repo, new WooSkuResolverImpl() )
 		);
-		$router->add( new ImportsController( new ImportService(
+		$quick_import = new QuickImportService(
+			new LookupTableService( $lookup_repo, $cell_repo ),
+			new LibraryService( $library_repo, $module_repo ),
+			$module_repo,
+			$lookup_repo,
+			$library_repo,
 			$import_runner,
-			$import_batches,
-			$import_rows,
 			$library_item_runner
-		) ) );
+		);
+		$router->add( new ImportsController(
+			new ImportService(
+				$import_runner,
+				$import_batches,
+				$import_rows,
+				$library_item_runner
+			),
+			$quick_import
+		) );
 
 		$router->add( new RenderDataController(
 			$binding_repo,

@@ -5,6 +5,21 @@
 	const root = document.getElementById( 'configkit-imports-app' );
 	if ( ! root ) return;
 
+	// Phase 4 dalis 4 — Quick import (Excel-first wizard) state.
+	const quick = {
+		step: 'idle',       // 'idle' | 'detecting' | 'confirm' | 'creating' | 'done' | 'error'
+		message: null,
+		detected: null,     // /imports/quick/detect response
+		fileName: null,
+		// Confirm-step inputs (prefilled from detect response).
+		name: '',
+		technicalKey: '',
+		moduleKey: '',
+		mode: 'insert_update',
+		userEditedKey: false,
+		result: null,       // /imports/quick/create response
+	};
+
 	// State machine for the wizard.
 	const state = {
 		step: 1,            // 1 = pick / 2 = upload / 3 = preview / 4 = result
@@ -266,6 +281,12 @@
 		// history below.
 		var historyTop = ! state.contextual && state.step === 1 && ! state.batch;
 
+		// Phase 4 dalis 4 — Quick import lives at the top whenever the
+		// owner hasn't started a manual wizard run.
+		if ( historyTop ) {
+			root.appendChild( renderQuickImport() );
+		}
+
 		if ( historyTop ) {
 			root.appendChild( renderRecentBatches() );
 			if ( state.message ) root.appendChild( messageBanner( state.message ) );
@@ -280,6 +301,337 @@
 			else if ( state.step === 4 ) root.appendChild( renderStep4() );
 			root.appendChild( renderRecentBatches() );
 		}
+	}
+
+	// =========================================================
+	// Quick import (Excel-first) — Phase 4 dalis 4
+	// =========================================================
+
+	async function quickUploadAndDetect( file ) {
+		if ( ! file ) return;
+		if ( ! /\.xlsx$/i.test( file.name ) ) {
+			quick.step = 'error';
+			quick.message = { kind: 'error', text: 'Only .xlsx files are supported.' };
+			render();
+			return;
+		}
+		if ( file.size > 10 * 1024 * 1024 ) {
+			quick.step = 'error';
+			quick.message = { kind: 'error', text: 'File exceeds the 10 MB limit.' };
+			render();
+			return;
+		}
+		quick.step = 'detecting';
+		quick.message = null;
+		quick.detected = null;
+		quick.fileName = file.name;
+		render();
+
+		const form = new FormData();
+		form.append( 'file', file );
+		try {
+			const url = window.CONFIGKIT.restUrl + '/imports/quick/detect';
+			const res = await fetch( url, {
+				method: 'POST',
+				credentials: 'same-origin',
+				headers: { 'X-WP-Nonce': window.CONFIGKIT.nonce },
+				body: form,
+			} );
+			const payload = await res.json().catch( () => null );
+			if ( ! res.ok ) {
+				const msg = ( payload && payload.message ) || res.statusText;
+				quick.step = 'error';
+				quick.message = { kind: 'error', text: msg };
+				render();
+				return;
+			}
+			quick.detected     = payload;
+			quick.name         = payload.suggested_name || '';
+			quick.technicalKey = payload.suggested_key  || '';
+			quick.moduleKey    = ( payload.available_modules && payload.available_modules.length > 0 )
+				? payload.available_modules[0].module_key
+				: '';
+			quick.userEditedKey = false;
+			quick.step = 'confirm';
+			render();
+		} catch ( err ) {
+			quick.step = 'error';
+			quick.message = { kind: 'error', text: ( err && err.message ) || 'Upload failed.' };
+			render();
+		}
+	}
+
+	async function quickConfirmAndCreate() {
+		if ( ! quick.detected || quick.step === 'creating' ) return;
+		if ( ! quick.name.trim() || ! quick.technicalKey.trim() ) {
+			quick.message = { kind: 'error', text: 'Name and Technical key are both required.' };
+			render();
+			return;
+		}
+		if ( quick.detected.target_type === 'library' && ! quick.moduleKey ) {
+			quick.message = { kind: 'error', text: 'Pick a module for the new library.' };
+			render();
+			return;
+		}
+		if ( quick.mode === 'replace_all' ) {
+			const okGo = window.confirm(
+				'Replace-all mode will wipe existing rows in the target before inserting. Proceed?'
+			);
+			if ( ! okGo ) return;
+		}
+
+		quick.step = 'creating';
+		quick.message = null;
+		render();
+
+		try {
+			const res = await ConfigKit.request( '/imports/quick/create', {
+				method: 'POST',
+				body: {
+					file_token:    quick.detected.file_token,
+					target_type:   quick.detected.target_type,
+					name:          quick.name,
+					technical_key: quick.technicalKey,
+					module_key:    quick.moduleKey,
+					mode:          quick.mode,
+					filename:      quick.detected.original_name || quick.fileName,
+				},
+			} );
+			quick.result = res;
+			quick.step = 'done';
+			render();
+			loadList().then( render );
+		} catch ( err ) {
+			quick.step = 'confirm';
+			quick.message = { kind: 'error', text: ( err && err.message ) || 'Quick import failed.' };
+			render();
+		}
+	}
+
+	function quickReset() {
+		quick.step = 'idle';
+		quick.message = null;
+		quick.detected = null;
+		quick.fileName = null;
+		quick.name = '';
+		quick.technicalKey = '';
+		quick.moduleKey = '';
+		quick.mode = 'insert_update';
+		quick.userEditedKey = false;
+		quick.result = null;
+		render();
+	}
+
+	function renderQuickImport() {
+		const wrap = el( 'section', { class: 'configkit-quick-import' } );
+		wrap.appendChild( el( 'h2', { class: 'configkit-quick-import__title' }, 'Quick import from Excel' ) );
+		wrap.appendChild( el(
+			'p',
+			{ class: 'description' },
+			'Drop an .xlsx and ConfigKit creates the lookup table or library for you. '
+			+ 'For advanced options, use the wizard below.'
+		) );
+
+		if ( quick.message ) wrap.appendChild( messageBanner( quick.message ) );
+
+		if ( quick.step === 'idle' || quick.step === 'detecting' || quick.step === 'error' ) {
+			const drop = el( 'div', { class: 'configkit-dropzone configkit-dropzone--quick', tabindex: '0' } );
+			drop.appendChild( el( 'p', null, quick.step === 'detecting' ? 'Reading file…' : 'Drop a .xlsx here, or click to choose.' ) );
+			drop.appendChild( el( 'p', { class: 'description' }, 'Max 10 MB. ConfigKit will detect the format and propose a target.' ) );
+
+			const fileInput = el( 'input', {
+				type: 'file',
+				accept: '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+				class: 'configkit-dropzone__input',
+				onChange: ( ev ) => {
+					if ( ev.target.files && ev.target.files[0] ) quickUploadAndDetect( ev.target.files[0] );
+				},
+			} );
+			drop.appendChild( fileInput );
+			drop.addEventListener( 'click', () => fileInput.click() );
+			drop.addEventListener( 'dragover', ( ev ) => {
+				ev.preventDefault();
+				drop.classList.add( 'configkit-dropzone--hover' );
+			} );
+			drop.addEventListener( 'dragleave', () => drop.classList.remove( 'configkit-dropzone--hover' ) );
+			drop.addEventListener( 'drop', ( ev ) => {
+				ev.preventDefault();
+				drop.classList.remove( 'configkit-dropzone--hover' );
+				if ( ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0] ) {
+					quickUploadAndDetect( ev.dataTransfer.files[0] );
+				}
+			} );
+			wrap.appendChild( drop );
+			return wrap;
+		}
+
+		if ( quick.step === 'confirm' || quick.step === 'creating' ) {
+			wrap.appendChild( renderQuickConfirm() );
+			return wrap;
+		}
+
+		if ( quick.step === 'done' ) {
+			wrap.appendChild( renderQuickResult() );
+			return wrap;
+		}
+		return wrap;
+	}
+
+	function renderQuickConfirm() {
+		const d = quick.detected || {};
+		const formatLabel = d.format === 'A' ? 'Grid (Format A)'
+			: d.format === 'B' ? 'Long (Format B)'
+			: d.format === 'C' ? 'Library items (Format C)'
+			: d.format;
+		const targetLabel = d.target_type === 'library' ? 'New library' : 'New lookup table';
+
+		const wrap = el( 'div', { class: 'configkit-quick-import__confirm' } );
+		wrap.appendChild( el( 'p', null,
+			el( 'strong', null, targetLabel ),
+			' · ',
+			el( 'em', null, formatLabel ),
+			' · ',
+			'File: ' + ( quick.fileName || 'upload' )
+		) );
+
+		// Name input — auto-keys the technical key on each change.
+		const nameField = el( 'div', { class: 'configkit-field' } );
+		nameField.appendChild( el( 'label', { for: 'quick_name' }, 'Name' ) );
+		nameField.appendChild( el( 'input', {
+			id: 'quick_name',
+			type: 'text',
+			class: 'regular-text',
+			value: quick.name,
+			onInput: ( ev ) => {
+				quick.name = ev.target.value;
+				if ( ! quick.userEditedKey ) {
+					quick.technicalKey = ( window.ConfigKit && window.ConfigKit.slugify )
+						? window.ConfigKit.slugify( quick.name, {
+							fallbackPrefix: d.target_type === 'library' ? 'library' : 'table',
+						} )
+						: quick.name.toLowerCase().replace( /[^a-z0-9]+/g, '_' ).replace( /^_+|_+$/g, '' );
+					const tech = document.getElementById( 'quick_tech_key' );
+					if ( tech && tech.value !== quick.technicalKey ) tech.value = quick.technicalKey;
+				}
+			},
+		} ) );
+		wrap.appendChild( nameField );
+
+		// Module dropdown for libraries.
+		if ( d.target_type === 'library' ) {
+			const modField = el( 'div', { class: 'configkit-field' } );
+			modField.appendChild( el( 'label', { for: 'quick_module' }, 'Module' ) );
+			const sel = el( 'select', {
+				id: 'quick_module',
+				onChange: ( ev ) => { quick.moduleKey = ev.target.value; },
+			} );
+			sel.appendChild( el( 'option', { value: '' }, '— Select a module —' ) );
+			( d.available_modules || [] ).forEach( ( m ) => {
+				const o = el( 'option', { value: m.module_key }, m.name + ' (' + m.module_key + ')' );
+				if ( m.module_key === quick.moduleKey ) o.selected = true;
+				sel.appendChild( o );
+			} );
+			modField.appendChild( sel );
+			if ( ( d.available_modules || [] ).length === 0 ) {
+				modField.appendChild( el( 'p', { class: 'description' },
+					'No active modules — create one in ConfigKit → Settings → Modules first.'
+				) );
+			}
+			wrap.appendChild( modField );
+		}
+
+		// Collapsed Technical key (mirrors the entity-form treatment).
+		const advanced = el( 'details', { class: 'configkit-quick-import__advanced' } );
+		advanced.appendChild( el( 'summary', null, 'Technical key (auto-generated)' ) );
+		const techField = el( 'div', { class: 'configkit-field' } );
+		techField.appendChild( el( 'label', { for: 'quick_tech_key' }, 'Technical key' ) );
+		techField.appendChild( el( 'input', {
+			id: 'quick_tech_key',
+			type: 'text',
+			class: 'regular-text code',
+			value: quick.technicalKey,
+			onInput: ( ev ) => {
+				quick.technicalKey = ev.target.value;
+				quick.userEditedKey = true;
+			},
+		} ) );
+		techField.appendChild( el( 'p', { class: 'description' },
+			'Auto-filled from Name. Edit only if you need a specific key — locked once the entity is saved.'
+		) );
+		advanced.appendChild( techField );
+		wrap.appendChild( advanced );
+
+		// Sample summary.
+		if ( d.sample ) {
+			const ul = el( 'ul', { class: 'configkit-quick-import__sample' } );
+			if ( typeof d.sample.rows_total === 'number' ) {
+				ul.appendChild( el( 'li', null, d.sample.rows_total + ' rows detected' ) );
+			}
+			if ( Array.isArray( d.sample.columns ) && d.sample.columns.length > 0 ) {
+				ul.appendChild( el( 'li', null, 'Columns: ' + d.sample.columns.join( ', ' ) ) );
+			}
+			if ( Array.isArray( d.sample.libraries ) && d.sample.libraries.length > 0 ) {
+				ul.appendChild( el( 'li', null, 'library_key in file: ' + d.sample.libraries.join( ', ' ) ) );
+			}
+			if ( Array.isArray( d.sample.sheet_titles ) && d.sample.sheet_titles.length > 0 ) {
+				ul.appendChild( el( 'li', null, 'Sheets: ' + d.sample.sheet_titles.join( ', ' ) ) );
+			}
+			wrap.appendChild( ul );
+		}
+
+		// Mode picker.
+		wrap.appendChild( radio(
+			'quick_mode',
+			[
+				{ value: 'insert_update', label: 'Insert / update (default)' },
+				{ value: 'replace_all',   label: 'Replace all (wipe existing first)' },
+			],
+			quick.mode,
+			( v ) => { quick.mode = v; render(); }
+		) );
+
+		const isCreating = quick.step === 'creating';
+		wrap.appendChild( el(
+			'div',
+			{ class: 'configkit-form__footer' },
+			el( 'button', {
+				type: 'button',
+				class: 'button button-primary',
+				disabled: isCreating,
+				onClick: quickConfirmAndCreate,
+			}, isCreating ? 'Creating + importing…' : 'Create and import' ),
+			el( 'button', { type: 'button', class: 'button', onClick: quickReset }, 'Cancel' )
+		) );
+		return wrap;
+	}
+
+	function renderQuickResult() {
+		const r = quick.result || {};
+		const wrap = el( 'div', { class: 'configkit-quick-import__result' } );
+		const summary = r.summary || {};
+		const t = r.target || {};
+		wrap.appendChild( el(
+			'p',
+			null,
+			'Created ',
+			el( 'strong', null, t.name || quick.name ),
+			' and imported ',
+			( summary.inserted || 0 ) + ' rows',
+			summary.updated ? ', ' + summary.updated + ' updated' : '',
+			summary.skipped ? ', ' + summary.skipped + ' skipped' : '',
+			'.'
+		) );
+		const link = r.target_type === 'library'
+			? ( window.location.pathname || '' ) + '?page=configkit-libraries' + ( t.id ? '&id=' + t.id : '' )
+			: ( window.location.pathname || '' ) + '?page=configkit-lookup-tables' + ( t.id ? '&id=' + t.id : '' );
+		const linkLabel = r.target_type === 'library' ? 'Open library' : 'Open lookup table';
+		wrap.appendChild( el(
+			'div',
+			{ class: 'configkit-form__footer' },
+			el( 'a', { href: link, class: 'button button-primary' }, linkLabel ),
+			el( 'button', { type: 'button', class: 'button', onClick: quickReset }, 'Import another file' )
+		) );
+		return wrap;
 	}
 
 	function messageBanner( m ) {

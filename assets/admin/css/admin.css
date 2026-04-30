@@ -2522,3 +2522,63 @@
 	font-size: 12px;
 	color: #b32d2e;
 }
+
+/* ================================================================
+ * Phase 4 dalis 4 — Quick import (Excel-first wizard).
+ * ================================================================ */
+
+.configkit-quick-import {
+	background: #f0f6fc;
+	border: 1px solid #c6dbf0;
+	border-radius: 4px;
+	padding: 16px 20px;
+	margin: 0 0 24px 0;
+}
+
+.configkit-quick-import__title {
+	margin: 0 0 4px 0;
+	font-size: 18px;
+	color: #1d2327;
+}
+
+.configkit-quick-import .description {
+	margin: 0 0 12px 0;
+}
+
+.configkit-dropzone--quick {
+	background: #fff;
+}
+
+.configkit-quick-import__confirm {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.configkit-quick-import__advanced {
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	padding: 8px 12px;
+}
+
+.configkit-quick-import__advanced summary {
+	cursor: pointer;
+	color: #1d2327;
+	font-weight: 500;
+}
+
+.configkit-quick-import__sample {
+	background: #fff;
+	border-left: 3px solid #c6dbf0;
+	margin: 0;
+	padding: 8px 12px 8px 28px;
+	font-size: 13px;
+}
+
+.configkit-quick-import__result {
+	background: #fff;
+	border: 1px solid #c6dbf0;
+	border-radius: 4px;
+	padding: 12px 16px;
+}

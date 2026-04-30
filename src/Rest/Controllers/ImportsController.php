@@ -6,6 +6,7 @@ namespace ConfigKit\Rest\Controllers;
 use ConfigKit\Import\UploadPaths;
 use ConfigKit\Rest\AbstractController;
 use ConfigKit\Service\ImportService;
+use ConfigKit\Service\QuickImportService;
 
 /**
  * REST surface for the import wizard.
@@ -35,7 +36,10 @@ final class ImportsController extends AbstractController {
 		'application/zip',
 	];
 
-	public function __construct( private ImportService $service ) {}
+	public function __construct(
+		private ImportService $service,
+		private ?QuickImportService $quick = null,
+	) {}
 
 	public function register_routes(): void {
 		\register_rest_route( self::NAMESPACE, '/imports', [
@@ -85,6 +89,22 @@ final class ImportsController extends AbstractController {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ $this, 'cancel' ],
+				'permission_callback' => $this->require_either_cap(),
+			],
+		] );
+
+		// Phase 4 dalis 4 — Quick import (Excel-first wizard).
+		\register_rest_route( self::NAMESPACE, '/imports/quick/detect', [
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'quick_detect' ],
+				'permission_callback' => $this->require_either_cap(),
+			],
+		] );
+		\register_rest_route( self::NAMESPACE, '/imports/quick/create', [
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'quick_create' ],
 				'permission_callback' => $this->require_either_cap(),
 			],
 		] );
@@ -231,6 +251,113 @@ final class ImportsController extends AbstractController {
 			return $this->error( 'cancel_failed', (string) ( $result['error'] ?? 'Cancel failed.' ), [ 'batch' => $result['batch'] ?? null ], 400 );
 		}
 		return $this->ok( [ 'record' => $this->service->get( $batch_id ) ] );
+	}
+
+	/**
+	 * Phase 4 dalis 4 — Quick import: file upload + detect.
+	 */
+	public function quick_detect( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		if ( $this->quick === null ) {
+			return $this->error( 'quick_import_unavailable', 'Quick-import service is not wired in this environment.', [], 500 );
+		}
+		[ $stored_path, $original_name, $err ] = $this->intake_upload( $request );
+		if ( $err !== null ) return $err;
+
+		$result = $this->quick->detect( $stored_path, $original_name );
+		if ( ! ( $result['ok'] ?? false ) ) {
+			return $this->error( 'detect_failed', (string) ( $result['error'] ?? 'Could not detect format.' ), [], 400 );
+		}
+
+		// File token = basename of the stored upload. quick_create reads
+		// the file from UploadPaths::ensure() / token. Owner-supplied
+		// filename is sanitised by store_upload(); the basename is safe.
+		$result['file_token']     = basename( $stored_path );
+		$result['original_name']  = $original_name;
+		return $this->ok( $result );
+	}
+
+	/**
+	 * Phase 4 dalis 4 — Quick import: confirm + create entity + commit.
+	 */
+	public function quick_create( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		if ( $this->quick === null ) {
+			return $this->error( 'quick_import_unavailable', 'Quick-import service is not wired in this environment.', [], 500 );
+		}
+		$body = $request->get_json_params();
+		if ( ! is_array( $body ) ) $body = $request->get_body_params();
+		if ( ! is_array( $body ) ) $body = [];
+
+		$file_token = (string) ( $body['file_token'] ?? '' );
+		if ( $file_token === '' || preg_match( '/[\\/]/', $file_token ) ) {
+			return $this->error( 'invalid_token', 'file_token is required and must not contain path separators.', [], 400 );
+		}
+
+		$dir = UploadPaths::ensure();
+		$file_path = $dir !== null ? $dir . '/' . $file_token : sys_get_temp_dir() . '/' . $file_token;
+		if ( ! is_file( $file_path ) ) {
+			return $this->error( 'token_not_found', 'Uploaded file expired — re-upload to start over.', [], 404 );
+		}
+
+		$target_type = (string) ( $body['target_type'] ?? '' );
+		if ( ! in_array( $target_type, [ 'lookup_table', 'library' ], true ) ) {
+			return $this->error( 'invalid_target_type', 'target_type must be lookup_table or library.', [], 400 );
+		}
+
+		// Per-type capability gate (matches the standard wizard's logic).
+		$needs_cap = $target_type === 'library' ? self::CAP_LIBRARY_ITEMS : self::CAP_LOOKUP_CELLS;
+		if ( ! \current_user_can( $needs_cap ) ) {
+			return $this->error( 'forbidden', 'You do not have permission to create this entity type.', [], 403 );
+		}
+
+		$confirmed = [
+			'target_type'   => $target_type,
+			'name'          => (string) ( $body['name'] ?? '' ),
+			'technical_key' => (string) ( $body['technical_key'] ?? '' ),
+			'mode'          => (string) ( $body['mode'] ?? 'insert_update' ),
+			'module_key'    => (string) ( $body['module_key'] ?? '' ),
+			'filename'      => (string) ( $body['filename'] ?? basename( $file_path ) ),
+		];
+
+		$result = $this->quick->create_and_import( $file_path, $confirmed );
+		if ( ! ( $result['ok'] ?? false ) ) {
+			return $this->error(
+				'quick_create_failed',
+				(string) ( $result['error'] ?? 'Quick import failed.' ),
+				[ 'errors' => $result['errors'] ?? [], 'batch_id' => $result['batch_id'] ?? null ],
+				400
+			);
+		}
+		return $this->ok( $result, 201 );
+	}
+
+	/**
+	 * Shared upload-intake logic for create() + quick_detect().
+	 *
+	 * @return array{0:string,1:string,2:?\WP_Error}
+	 */
+	private function intake_upload( \WP_REST_Request $request ): array {
+		$files = $request->get_file_params();
+		$file  = is_array( $files ) && isset( $files['file'] ) ? $files['file'] : null;
+		if ( ! is_array( $file ) || ( $file['error'] ?? UPLOAD_ERR_NO_FILE ) !== UPLOAD_ERR_OK ) {
+			return [ '', '', $this->error( 'no_file', 'Upload a single .xlsx file in the "file" form field.', [], 400 ) ];
+		}
+		$size = (int) ( $file['size'] ?? 0 );
+		if ( $size <= 0 || $size > self::MAX_BYTES ) {
+			return [ '', '', $this->error( 'file_too_big', 'File exceeds the 10 MB limit.', [], 400 ) ];
+		}
+		$tmp_name = (string) $file['tmp_name'];
+		if ( ! is_uploaded_file( $tmp_name ) && ! is_file( $tmp_name ) ) {
+			return [ '', '', $this->error( 'no_file', 'Uploaded file is missing.', [], 400 ) ];
+		}
+		$ext = strtolower( pathinfo( (string) ( $file['name'] ?? '' ), PATHINFO_EXTENSION ) );
+		if ( $ext !== 'xlsx' ) {
+			return [ '', '', $this->error( 'bad_extension', 'Only .xlsx files are accepted.', [], 400 ) ];
+		}
+		$stored = $this->store_upload( $tmp_name, (string) $file['name'] );
+		if ( $stored === null ) {
+			return [ '', '', $this->error( 'store_failed', 'Could not store the uploaded file.', [], 500 ) ];
+		}
+		return [ $stored, (string) $file['name'], null ];
 	}
 
 	/**
