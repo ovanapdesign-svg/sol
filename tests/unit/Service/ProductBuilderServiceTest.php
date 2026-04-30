@@ -410,7 +410,10 @@ final class ProductBuilderServiceTest extends TestCase {
 
 	public function test_get_full_snapshot_returns_empty_blocks_for_unconfigured_product(): void {
 		$snap = $this->service->get_full_snapshot( 9999 );
-		$this->assertSame( [], $snap['state'] );
+		// state carries the synthetic `enabled` flag even when no
+		// other meta is set, so it's not strictly empty — but every
+		// other field should be empty / not-ready.
+		$this->assertFalse( $snap['state']['enabled'] );
 		$this->assertSame( [], $snap['pricing_rows'] );
 		$this->assertSame( [], $snap['fabrics'] );
 		$this->assertSame( [], $snap['motors'] );

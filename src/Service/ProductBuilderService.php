@@ -915,8 +915,18 @@ final class ProductBuilderService {
 	 * @return array<string,mixed>
 	 */
 	public function get_full_snapshot( int $product_id ): array {
+		// Phase 4.3 dalis 2 — surface the binding-side `enabled` flag
+		// alongside the orchestrator state so the UI can flip the
+		// status pill to "Live" without a second round-trip.
+		$pb_state = $this->state->get( $product_id );
+		$enabled  = false;
+		if ( function_exists( 'get_post_meta' ) ) {
+			$enabled = (bool) (int) \get_post_meta( $product_id, '_configkit_enabled', true );
+		}
+		$pb_state['enabled'] = $enabled;
+
 		return [
-			'state'           => $this->state->get( $product_id ),
+			'state'           => $pb_state,
 			'pricing_rows'    => $this->read_pricing_rows( $product_id ),
 			'fabrics'         => $this->read_fabrics( $product_id ),
 			'profile_colors'  => $this->read_profile_colors( $product_id ),

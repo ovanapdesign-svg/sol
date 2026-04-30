@@ -1563,6 +1563,56 @@
 	}
 
 	// =========================================================
+	// Block 10 — Ready-to-sell checklist + enable
+	// =========================================================
+
+	function renderBlockChecklist() {
+		const block = blockShell( 'checklist', '10. Ready to sell', 'When every required block is green, you can enable the configurator for customers.' );
+		const cl = ( state.snapshot && state.snapshot.checklist ) || { ready: false, checklist: [] };
+		const list = el( 'ul', { class: 'configkit-pb__checklist' } );
+		( cl.checklist || [] ).forEach( ( row ) => {
+			const li = el( 'li', { class: 'configkit-pb__check-row' + ( row.done ? ' is-done' : '' ) + ( ! row.done && row.required ? ' is-blocking' : '' ) } );
+			li.appendChild( el( 'span', { class: 'configkit-pb__check-icon', 'aria-hidden': 'true' }, row.done ? '✓' : '✗' ) );
+			li.appendChild( el( 'span', { class: 'configkit-pb__check-label' }, row.label ) );
+			if ( ! row.required ) li.appendChild( el( 'span', { class: 'configkit-pb__check-optional' }, 'optional' ) );
+			list.appendChild( li );
+		} );
+		block.appendChild( list );
+
+		const enabled = !! ( state.snapshot && state.snapshot.state && state.snapshot.state.enabled );
+		const btnLabel = enabled ? 'Configurator is live' : ( cl.ready ? 'Enable configurator' : 'Complete the items above first' );
+		const btn = el( 'button', {
+			type: 'button',
+			class: 'button button-primary configkit-pb__enable' + ( enabled ? ' is-live' : '' ),
+			disabled: ! cl.ready || enabled || state.busy,
+			onClick: enableConfigurator,
+		}, state.busy ? 'Working…' : btnLabel );
+		block.appendChild( el( 'div', { class: 'configkit-pb__enable-row' }, btn ) );
+		return block;
+	}
+
+	async function enableConfigurator() {
+		try {
+			const result = await pbRequest( '/enable', { method: 'POST', body: {} } );
+			showMessage( 'success', ( result && result.message ) || 'Configurator enabled.' );
+			// Make the local snapshot reflect the new enabled flag
+			// without waiting for a full reload — the storefront has
+			// the meta now, but the snapshot endpoint reads from
+			// product builder state which doesn't track _configkit_enabled.
+			if ( state.snapshot && state.snapshot.state ) state.snapshot.state.enabled = true;
+			await loadSnapshot();
+			render();
+		} catch ( err ) {
+			// Backend returns the failing checklist when not ready —
+			// the message itself is friendly ("Some blocks still need
+			// attention.") so just surface it.
+			showMessage( 'error', explainError( err ) );
+			await loadSnapshot();
+			render();
+		}
+	}
+
+	// =========================================================
 	// Image picker — wp.media bridge
 	// =========================================================
 
@@ -1624,6 +1674,8 @@
 		if ( recipe.blocks.indexOf( 'profile_colors' ) >= 0 ) root.appendChild( renderBlockProfileColors() );
 		if ( recipe.blocks.indexOf( 'controls' )       >= 0 ) root.appendChild( renderBlockControls() );
 		if ( recipe.blocks.indexOf( 'accessories' )    >= 0 ) root.appendChild( renderBlockAccessories() );
+
+		root.appendChild( renderBlockChecklist() );
 	}
 
 	function currentRecipe() {
