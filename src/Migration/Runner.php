@@ -95,9 +95,49 @@ final class Runner {
 	private function apply( Migration $migration ): array {
 		$key   = $migration->key();
 		$start = microtime( true );
+		// Reset wpdb's last_error so we can tell if `up()` left a fresh
+		// SQL error behind. dbDelta() suppresses thrown errors by
+		// design, but it does write to last_error before swallowing —
+		// catching that is the second layer of the BUG 1 defence.
+		if ( property_exists( $this->wpdb, 'last_error' ) ) {
+			$this->wpdb->last_error = '';
+		}
 		try {
 			$migration->up( $this->wpdb );
 			$duration_ms = (int) round( ( microtime( true ) - $start ) * 1000.0 );
+
+			$last_error = property_exists( $this->wpdb, 'last_error' ) ? (string) $this->wpdb->last_error : '';
+			if ( $last_error !== '' ) {
+				$this->log( $key, 'failed', $duration_ms, 'wpdb error during up(): ' . $last_error );
+				return [
+					'key'         => $key,
+					'status'      => 'failed',
+					'duration_ms' => $duration_ms,
+					'error'       => $last_error,
+				];
+			}
+
+			// Phase 4 dalis 4 BUG 1 — defend against the silent-failure
+			// case where `dbDelta()` swallows a CREATE TABLE syntax
+			// error (e.g. unquoted reserved word) and returns without
+			// creating the table. Migrations that create tables MAY
+			// implement an optional `expected_tables(\wpdb): list<string>`
+			// method so the runner can verify post-up() and refuse to
+			// mark the migration as applied when the tables are
+			// missing. Older migrations without the method skip the
+			// check — same behaviour as before.
+			$missing = $this->verify_expected_tables( $migration );
+			if ( $missing !== [] ) {
+				$msg = 'Migration up() returned but expected table(s) missing: ' . implode( ', ', $missing );
+				$this->log( $key, 'failed', $duration_ms, $msg );
+				return [
+					'key'         => $key,
+					'status'      => 'failed',
+					'duration_ms' => $duration_ms,
+					'error'       => $msg,
+				];
+			}
+
 			$this->log( $key, 'applied', $duration_ms, null );
 			return [ 'key' => $key, 'status' => 'applied', 'duration_ms' => $duration_ms ];
 		} catch ( Throwable $e ) {
@@ -110,6 +150,27 @@ final class Runner {
 				'error'       => $e->getMessage(),
 			];
 		}
+	}
+
+	/**
+	 * @return list<string>
+	 */
+	private function verify_expected_tables( Migration $migration ): array {
+		if ( ! method_exists( $migration, 'expected_tables' ) ) {
+			return [];
+		}
+		$expected = $migration->expected_tables( $this->wpdb );
+		if ( ! is_array( $expected ) ) {
+			return [];
+		}
+		$missing = [];
+		foreach ( $expected as $table ) {
+			if ( ! is_string( $table ) || $table === '' ) continue;
+			if ( ! $this->table_exists( $table ) ) {
+				$missing[] = $table;
+			}
+		}
+		return $missing;
 	}
 
 	private function log( string $key, string $status, int $duration_ms, ?string $notes ): void {

@@ -9,12 +9,22 @@ namespace ConfigKit\Tests\Unit\Migration;
  * Pretends the wp_configkit_migrations table exists and stores INSERTs in
  * a public array so tests can assert on logged migrations.
  */
-final class InMemoryWpdb extends \wpdb {
+class InMemoryWpdb extends \wpdb {
 
 	public bool $migrations_table_exists = true;
 
+	/** @var array<string,bool> table_name → exists. Used by tests
+	 *  that exercise the post-dbDelta verification path. The
+	 *  default empty array means SHOW TABLES echoes back any name
+	 *  passed in (legacy behaviour); declaring a key flips that to
+	 *  the explicit value.
+	 */
+	public array $table_existence = [];
+
 	/** @var list<array<string,mixed>> */
 	public array $logged = [];
+
+	public string $last_error = '';
 
 	public function __construct() {
 		// Skip parent constructor — we do not connect to a database.
@@ -40,13 +50,19 @@ final class InMemoryWpdb extends \wpdb {
 
 	public function get_var( string $query ): mixed {
 		if ( str_contains( $query, 'SHOW TABLES LIKE' ) ) {
-			if ( ! $this->migrations_table_exists ) {
+			if ( ! preg_match( "/'([^']+)'/", $query, $m ) ) {
 				return null;
 			}
-			if ( preg_match( "/'([^']+)'/", $query, $m ) ) {
-				return $m[1];
+			$table = $m[1];
+
+			// Per-table override beats the global migrations flag.
+			if ( array_key_exists( $table, $this->table_existence ) ) {
+				return $this->table_existence[ $table ] ? $table : null;
 			}
-			return null;
+			if ( str_ends_with( $table, 'configkit_migrations' ) && ! $this->migrations_table_exists ) {
+				return null;
+			}
+			return $table;
 		}
 		return null;
 	}
