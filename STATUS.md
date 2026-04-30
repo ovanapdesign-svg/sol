@@ -225,8 +225,8 @@ priority.
 | User-friendly REST error display                      | complete | `ConfigKit.describeError()` in admin.js maps 404 / 401-403 / 409 / 400-422 / 5xx to natural-language messages. Each banner has a "Show technical details" collapsible with the raw message + code + status. |
 
 **Engine purity preserved.** `grep -rE "wp_\|get_option\|WP_Query\|\\$wpdb" src/Engines/`
-returns zero matches. Phase 2 + 3 + 3.5 PHPUnit tests green
-(364 / 926).
+returns zero matches. Phase 2 + 3 + 3.5 + 3.6 PHPUnit tests green
+(365 / 940).
 
 **Phase 3 status.** Seven of seven in-scope entities are landed
 (Modules, Libraries, Lookup Tables, Families, Templates, Products,
@@ -258,7 +258,19 @@ untouched.
 
 ---
 
-## Phase 4 — Excel Import + Diagnostics + Product Readiness Board
+## Phase 3.6 — Owner workflow clarity
+
+Shopify-style guidance pass on top of Phase 3.5 polish. No schema,
+no REST contract changes, engines untouched.
+
+| Item                                                  | Status   | Notes                                                                  |
+|-------------------------------------------------------|----------|------------------------------------------------------------------------|
+| Breadcrumbs on every admin surface                    | complete | `src/Admin/Breadcrumb.php` + AbstractPage::breadcrumb_segments() default to `ConfigKit › <menu_title>`; ModulesPage adds Settings, DashboardPage shows the root only. WooIntegration emits `WooCommerce › Products › Edit "<title>" › ConfigKit` at the top of the product-data tab. JS-side `ConfigKit.subBreadcrumb()` injects a tail under the server breadcrumb so form views announce "Modules › Edit X" without round-tripping the server. Wired across modules / libraries / lookup-tables / families / templates render functions. |
+| Dashboard smart "Next step" guidance                  | complete | DashboardPage gains a SystemDiagnosticsService dependency and computes a 7-state machine from the existing CountsService snapshot + critical-issue count: modules-empty / libraries-empty / lookups-empty / templates-empty / products-empty / issues-present / ready. Big gradient hero card with primary CTA leads the page; the existing six counters move below as a smaller "Overview" block. Red gradient when issues are present, green when ready. |
+| Owner-friendly visible labels                         | complete | DB columns / REST fields / JS state keys all unchanged — only HTML labels change. Modules: 12 capability checkboxes get sentence-style labels ("Item has a unique code (SKU)"); Capabilities → "What items in this module can store"; Allowed field kinds → "Where this module can be used". `*_key` inputs all renamed to "Technical key" with explanatory helper text. Lookup table match_mode dropdown values are friendly: exact → "Exact match (must equal)", round_up → "Round up to next size (recommended)", nearest → "Closest size". List table column "*_key" headers (and matching mobile data-label attrs) all renamed to "Technical key". |
+| Page intro boxes + page action bars                   | complete | `src/Admin/PageHeader.php` + AbstractPage::open_wrap_with_header() render a consistent H1 + subtitle + primary CTA + "← Back to dashboard" secondary link, followed by a muted ⓘ-prefixed intro box explaining the page in 1–2 sentences. Wired across Modules / Libraries / Lookup Tables / Templates / Families / Diagnostics / Products. Intro boxes carry a "Got it, hide this" link wired through admin.js → localStorage keyed by data-intro-id (UI memory only, never business data). |
+| Diagnostics owner-readable titles + suggested fixes   | complete | ProductDiagnosticsService gains TITLES + SUGGESTED_FIXES maps for all 11 product checks; SystemDiagnosticsService gains SUGGESTED_FIXES for all 8 system checks. Each check / issue now emits `title` (owner-readable label), `suggested_fix` (concrete next action, null when passed), and `fix_link` (alias of fix_url so JS can use either name). diagnostics.js + product-binding.js render the suggested fix as a blue-tinted inline panel beneath the message. |
+| Product tab setup progress checklist + locked sections | complete | The Woo product ConfigKit tab opens with a 5-step checklist (Enable → Select template → Select lookup table → Run diagnostics → Save binding) with green-check / yellow-clock / gray-circle states. Each step click smooth-scrolls to its anchor. Sections 3 / 4 / 6 (defaults / allowed sources / visibility) and 8 (preview) get visually disabled (`opacity: 0.55; pointer-events: none`) until their prerequisites are met (template_key set; section 8 unlocks only when diagnostic status = "ready"). Pricing (5) + Diagnostics (7) remain always available. |
 
 (Nothing started.)
 
@@ -300,7 +312,19 @@ that push owners to the next sensible action, conditional Discount %
 in Product binding, and soft (non-blocking) warnings on generic /
 placeholder keys.
 
-Engines remain pure; 364 PHPUnit tests / 926 assertions green.
+**Phase 3.6 owner workflow clarity landed on top of 3.5:**
+breadcrumbs on every admin surface (server + JS sub-trail),
+a 7-state "Next step" dashboard guidance card (modules-empty →
+ready), owner-friendly visible labels (12 capability sentences,
+"Technical key" everywhere, friendly match_mode dropdowns),
+PageHeader component (H1 + subtitle + primary CTA + Back-to-
+dashboard) + dismissible muted intro boxes per page,
+diagnostics with `title` + `suggested_fix` + `fix_link` so owners
+know what to do next, and a 5-step setup-progress checklist
+on the Woo product tab with disabled (locked) sections until
+prerequisites are met.
+
+Engines remain pure; 365 PHPUnit tests / 940 assertions green.
 Awaiting Phase 4 direction (Excel import wizard or frontend
 customer UI).
 
