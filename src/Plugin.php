@@ -22,6 +22,8 @@ use ConfigKit\Admin\Pages\TemplatesPage;
 use ConfigKit\Admin\WooIntegration;
 use ConfigKit\Capabilities\Registrar;
 use ConfigKit\CLI\Command;
+use ConfigKit\Frontend\ProductRenderer;
+use ConfigKit\Frontend\RenderDataController;
 use ConfigKit\Migration\Runner;
 use ConfigKit\Repository\CountsService;
 use ConfigKit\Repository\FamilyRepository;
@@ -95,9 +97,20 @@ final class Plugin {
 			\add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_admin_assets' ] );
 			\add_action( 'admin_init', [ $this, 'register_admin_init' ] );
 			( new WooIntegration() )->register();
+		} else {
+			$this->build_product_renderer()->register();
 		}
 
 		$this->build_rest_router()->init();
+	}
+
+	private function build_product_renderer(): ProductRenderer {
+		global $wpdb;
+		return new ProductRenderer(
+			new ProductBindingRepository( $wpdb ),
+			\plugin_dir_url( $this->plugin_file ),
+			\defined( 'CONFIGKIT_VERSION' ) ? \CONFIGKIT_VERSION : '0.0.0'
+		);
 	}
 
 	public function on_activation(): void {
@@ -273,6 +286,20 @@ final class Plugin {
 			$import_validator
 		);
 		$router->add( new ImportsController( new ImportService( $import_runner, $import_batches, $import_rows ) ) );
+
+		$router->add( new RenderDataController(
+			$binding_repo,
+			$template_repo,
+			$step_repo,
+			$field_repo,
+			$field_option_repo,
+			$rule_repo,
+			$library_repo,
+			$item_repo,
+			$lookup_repo,
+			$cell_repo,
+			$module_repo
+		) );
 		return $router;
 	}
 
