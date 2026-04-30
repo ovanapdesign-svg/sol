@@ -3,10 +3,14 @@ declare(strict_types=1);
 
 namespace ConfigKit\Service;
 
+use ConfigKit\Admin\ModuleTypePresets;
 use ConfigKit\Admin\ProductTypeRecipes;
 use ConfigKit\Repository\FamilyRepository;
+use ConfigKit\Repository\LibraryItemRepository;
+use ConfigKit\Repository\LibraryRepository;
 use ConfigKit\Repository\LookupCellRepository;
 use ConfigKit\Repository\LookupTableRepository;
+use ConfigKit\Repository\ModuleRepository;
 use ConfigKit\Repository\TemplateRepository;
 
 /**
@@ -52,6 +56,12 @@ final class ProductBuilderService {
 		private ?LookupTableRepository $lookup_table_repo = null,
 		private ?LookupCellService $lookup_cells = null,
 		private ?LookupCellRepository $lookup_cell_repo = null,
+		private ?ModuleService $modules = null,
+		private ?ModuleRepository $module_repo = null,
+		private ?LibraryService $libraries = null,
+		private ?LibraryRepository $library_repo = null,
+		private ?LibraryItemService $items = null,
+		private ?LibraryItemRepository $item_repo = null,
 	) {}
 
 	/**
@@ -245,6 +255,241 @@ final class ProductBuilderService {
 			'message' => sprintf( '%d pricing row(s) saved.', count( $cells_input ) ),
 			'state'   => $state,
 		];
+	}
+
+	/**
+	 * Save the per-product fabric list. Behind the scenes:
+	 *
+	 *   1. Ensure the shared "Textiles" module exists (uses the
+	 *      ModuleTypePresets defaults so capabilities + attribute
+	 *      schema match what the rest of the admin assumes).
+	 *   2. Mint "product_{id}_fabrics" library under that module on
+	 *      first save; reuse on subsequent saves.
+	 *   3. Replace all items in that library with the supplied fabric
+	 *      list (by soft-deleting prior items and inserting the new
+	 *      ones — the runner equivalent of replace_all mode).
+	 *
+	 * Each fabric input row may carry:
+	 *   name (required) → label
+	 *   code            → sku
+	 *   collection      → library + per-item attribute
+	 *   color_family    → top-level color_family column
+	 *   image_url, main_image_url
+	 *   price_group     → price_group_key
+	 *   extra_price     → price (added vs. lookup base, or stand-alone)
+	 *   active          → is_active
+	 *
+	 * @param list<array<string,mixed>> $fabrics
+	 * @return array{ok:bool, message?:string, state?:array<string,mixed>, errors?:list<array<string,mixed>>}
+	 */
+	public function save_fabrics( int $product_id, array $fabrics ): array {
+		$context = $this->ensure_role_library( $product_id, 'fabric', [
+			'module_id'         => 'textiles',
+			'library_role'      => 'product_fabrics',
+			'library_label_fmt' => 'Fabrics for product #%d',
+			'state_key'         => 'fabric_library_key',
+		] );
+		if ( ! $context['ok'] ) return $context;
+
+		$lib = $context['library'];
+
+		// Wipe existing items so the library matches the UI.
+		if ( $this->item_repo !== null && $lib !== null ) {
+			$this->item_repo->soft_delete_all_in_library( (string) $lib['library_key'] );
+		}
+
+		$module   = $this->module_repo !== null ? $this->module_repo->find_by_key( (string) $lib['module_key'] ) : null;
+		$inserted = 0;
+		$errors   = [];
+		foreach ( $fabrics as $i => $fabric ) {
+			$payload = $this->fabric_to_item_payload( $fabric, $module ?? [] );
+			if ( empty( $payload['label'] ) ) {
+				$errors[] = [ 'field' => 'name', 'code' => 'required', 'message' => sprintf( 'Fabric #%d needs a name.', $i + 1 ) ];
+				continue;
+			}
+			$payload['item_key'] = $this->mint_item_key( (string) $lib['library_key'], $payload['label'], $payload['sku'] ?? null );
+			$result = $this->items->create( (int) $lib['id'], $payload );
+			if ( ! ( $result['ok'] ?? false ) ) {
+				$errors[] = [
+					'field'   => 'fabric',
+					'code'    => 'create_failed',
+					'message' => sprintf( 'Fabric #%d (%s) could not be saved: %s', $i + 1, (string) $payload['label'], (string) ( $result['errors'][0]['message'] ?? 'unknown' ) ),
+				];
+				continue;
+			}
+			$inserted++;
+		}
+
+		if ( count( $errors ) > 0 ) {
+			return [ 'ok' => false, 'message' => sprintf( '%d fabric(s) failed.', count( $errors ) ), 'errors' => $errors ];
+		}
+
+		$state = $this->state->patch( $product_id, [ 'fabric_library_key' => (string) $lib['library_key'] ] );
+		return [
+			'ok'      => true,
+			'message' => sprintf( '%d fabric(s) saved.', $inserted ),
+			'state'   => $state,
+		];
+	}
+
+	/**
+	 * Read the saved fabric items so the JS can rehydrate the editor.
+	 *
+	 * @return list<array<string,mixed>>
+	 */
+	public function read_fabrics( int $product_id ): array {
+		return $this->read_role_library_items( $product_id, 'fabric_library_key' );
+	}
+
+	/**
+	 * @return list<array<string,mixed>>
+	 */
+	private function read_role_library_items( int $product_id, string $state_key ): array {
+		if ( $this->item_repo === null ) return [];
+		$lib_key = $this->state->get_string( $product_id, $state_key );
+		if ( $lib_key === null ) return [];
+		return $this->item_repo->list_in_library( $lib_key, 1, 500 )['items'] ?? [];
+	}
+
+	/**
+	 * Ensure (module, library) exist for a given role and return the
+	 * library record. Used by every block that owns a library
+	 * (fabrics / colors / motors / stangs / controls / accessories).
+	 *
+	 * @param array{module_id:string, library_role:string, library_label_fmt:string, state_key:string} $cfg
+	 * @return array{ok:bool, message?:string, library?:array<string,mixed>, errors?:list<array<string,mixed>>}
+	 */
+	private function ensure_role_library( int $product_id, string $role, array $cfg ): array {
+		if ( $this->modules === null || $this->module_repo === null
+			|| $this->libraries === null || $this->library_repo === null
+			|| $this->items === null
+		) {
+			return [ 'ok' => false, 'message' => 'This block is not wired in this environment.' ];
+		}
+		if ( $this->state->product_type( $product_id ) === null ) {
+			return [
+				'ok'      => false,
+				'message' => 'Pick a product type before adding ' . $role . ' options.',
+				'errors'  => [ [ 'field' => 'product_type', 'code' => 'required', 'message' => 'Product type required.' ] ],
+			];
+		}
+
+		// 1. Module — apply the matching ModuleTypePresets defaults so
+		//    every product's textiles/colors/motors module looks the
+		//    same and the rest of the admin works.
+		$preset = ModuleTypePresets::find( $cfg['module_id'] );
+		if ( $preset === null ) {
+			return [ 'ok' => false, 'message' => 'No preset for module ' . $cfg['module_id'] . '.' ];
+		}
+		$module_key = (string) $preset['id'];
+		if ( $this->module_repo->find_by_key( $module_key ) === null ) {
+			$payload = ModuleTypePresets::apply_to_payload( [
+				'module_key'  => $module_key,
+				'name'        => (string) $preset['label'],
+				'module_type' => $module_key,
+				'is_active'   => true,
+			] );
+			$created = $this->modules->create( $payload );
+			if ( ! ( $created['ok'] ?? false ) ) {
+				return [ 'ok' => false, 'message' => 'Could not create the ' . $preset['label'] . ' module.', 'errors' => $created['errors'] ?? [] ];
+			}
+			$this->registry->mark( AutoManagedRegistry::TYPE_MODULE, $module_key, $product_id, $cfg['module_id'] );
+		}
+
+		// 2. Library — one per (product, role).
+		$existing_key = $this->state->get_string( $product_id, $cfg['state_key'] );
+		$library_key  = $existing_key ?? sprintf( 'product_%d_%s', $product_id, $role . 's' );
+
+		$library = $this->library_repo->find_by_key( $library_key );
+		if ( $library === null ) {
+			$created = $this->libraries->create( [
+				'library_key' => $library_key,
+				'name'        => sprintf( (string) $cfg['library_label_fmt'], $product_id ),
+				'module_key'  => $module_key,
+				'is_active'   => true,
+			] );
+			if ( ! ( $created['ok'] ?? false ) ) {
+				return [ 'ok' => false, 'message' => 'Could not create the library.', 'errors' => $created['errors'] ?? [] ];
+			}
+			$library = $this->library_repo->find_by_key( $library_key );
+			if ( $library === null ) {
+				return [ 'ok' => false, 'message' => 'Library missing after creation.' ];
+			}
+			$this->registry->mark( AutoManagedRegistry::TYPE_LIBRARY, $library_key, $product_id, $cfg['library_role'] );
+		}
+
+		return [ 'ok' => true, 'library' => $library ];
+	}
+
+	/**
+	 * @param array<string,mixed> $fabric
+	 * @param array<string,mixed> $module  used to gate fields the module
+	 *                                     doesn't advertise.
+	 * @return array<string,mixed>
+	 */
+	private function fabric_to_item_payload( array $fabric, array $module ): array {
+		// Only carry attributes the module actually declares; the
+		// library-item validator rejects unknown attribute keys.
+		$schema    = is_array( $module['attribute_schema'] ?? null ) ? $module['attribute_schema'] : [];
+		$declared  = array_keys( $schema );
+		$candidate = [];
+		if ( ! empty( $fabric['collection'] ) )   $candidate['collection']  = (string) $fabric['collection'];
+		if ( ! empty( $fabric['fabric_code'] ) )  $candidate['fabric_code'] = (string) $fabric['fabric_code'];
+		if ( ! empty( $fabric['material'] ) )     $candidate['material']    = (string) $fabric['material'];
+		if ( ! empty( $fabric['transparency'] ) ) $candidate['transparency']= (string) $fabric['transparency'];
+
+		$attrs = [];
+		foreach ( $candidate as $k => $v ) {
+			if ( in_array( $k, $declared, true ) ) $attrs[ $k ] = $v;
+		}
+
+		$payload = [
+			'label'           => isset( $fabric['name'] ) ? trim( (string) $fabric['name'] ) : '',
+			'sku'             => isset( $fabric['code'] ) && $fabric['code'] !== '' ? (string) $fabric['code'] : null,
+			'price_group_key' => isset( $fabric['price_group'] ) ? (string) $fabric['price_group'] : '',
+			'is_active'       => array_key_exists( 'active', $fabric ) ? (bool) $fabric['active'] : true,
+			'attributes'      => $attrs,
+			'price_source'    => 'configkit',
+			'item_type'       => 'simple_option',
+		];
+
+		// Only ship capability-gated fields when the module actually
+		// supports them. The library-item validator rejects any
+		// non-empty value that violates a module flag.
+		if ( ! empty( $module['supports_image'] ) && ! empty( $fabric['image_url'] ) ) {
+			$payload['image_url'] = (string) $fabric['image_url'];
+		}
+		if ( ! empty( $module['supports_main_image'] ) && ! empty( $fabric['main_image_url'] ) ) {
+			$payload['main_image_url'] = (string) $fabric['main_image_url'];
+		}
+		if ( ! empty( $module['supports_color_family'] ) && ! empty( $fabric['color_family'] ) ) {
+			$payload['color_family'] = (string) $fabric['color_family'];
+		}
+		if ( ! empty( $module['supports_price'] ) && isset( $fabric['extra_price'] )
+			&& $fabric['extra_price'] !== '' && $fabric['extra_price'] !== null
+			&& (float) $fabric['extra_price'] > 0
+		) {
+			$payload['price'] = (float) $fabric['extra_price'];
+		}
+		return $payload;
+	}
+
+	/**
+	 * Generate a snake_case item_key unique within the given library.
+	 * Prefers `code` (typically a SKU) when present, falls back to a
+	 * slugified label, suffixes with a counter on collision.
+	 */
+	private function mint_item_key( string $library_key, string $label, ?string $code ): string {
+		$base = $code !== null && $code !== '' ? $code : $label;
+		$slug = strtolower( $base );
+		$slug = preg_replace( '/[^a-z0-9]+/', '_', $slug ) ?? '';
+		$slug = trim( $slug, '_' );
+		if ( $slug === '' ) $slug = 'item';
+		if ( $this->item_repo === null ) return $slug;
+		if ( ! $this->item_repo->key_exists_in_library( $library_key, $slug ) ) return $slug;
+		$i = 2;
+		while ( $this->item_repo->key_exists_in_library( $library_key, $slug . '_' . $i ) ) $i++;
+		return $slug . '_' . $i;
 	}
 
 	/**

@@ -61,6 +61,19 @@ final class ProductBuilderController extends AbstractController {
 				'permission_callback' => $this->require_cap( self::CAP ),
 			],
 		] );
+
+		\register_rest_route( self::NAMESPACE, '/product-builder/(?P<product_id>\d+)/fabrics', [
+			[
+				'methods'             => 'GET',
+				'callback'            => [ $this, 'read_fabrics' ],
+				'permission_callback' => $this->require_cap( self::CAP ),
+			],
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'save_fabrics' ],
+				'permission_callback' => $this->require_cap( self::CAP ),
+			],
+		] );
 	}
 
 	public function list_recipes( \WP_REST_Request $request ): \WP_REST_Response {
@@ -98,6 +111,31 @@ final class ProductBuilderController extends AbstractController {
 			'product_id' => $product_id,
 			'rows'       => $this->service->read_pricing_rows( $product_id ),
 		] );
+	}
+
+	public function read_fabrics( \WP_REST_Request $request ): \WP_REST_Response {
+		$product_id = (int) $request['product_id'];
+		return $this->ok( [
+			'product_id' => $product_id,
+			'items'      => $this->service->read_fabrics( $product_id ),
+		] );
+	}
+
+	public function save_fabrics( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$product_id = (int) $request['product_id'];
+		$body       = $this->payload( $request );
+		$fabrics    = is_array( $body['fabrics'] ?? null ) ? $body['fabrics'] : [];
+
+		$result = $this->service->save_fabrics( $product_id, $fabrics );
+		if ( ! ( $result['ok'] ?? false ) ) {
+			return $this->error(
+				'product_builder_failed',
+				(string) ( $result['message'] ?? 'Could not save fabrics.' ),
+				[ 'errors' => $result['errors'] ?? [] ],
+				400
+			);
+		}
+		return $this->ok( $result );
 	}
 
 	public function save_pricing( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {

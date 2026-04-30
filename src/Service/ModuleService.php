@@ -197,34 +197,25 @@ final class ModuleService {
 	 * @return array<string,string>|null
 	 */
 	private function parse_schema( mixed $value ): ?array {
-		if ( $value === null || $value === '' ) {
-			return [];
-		}
+		if ( $value === null || $value === '' ) return [];
 		if ( is_array( $value ) ) {
+			// Phase 4.2c — accept both legacy `{key:type-string}` and
+			// rich `{key:{label,type,...}}` shapes. AttributeSchemaService
+			// handles the per-entry validation downstream; this helper
+			// just ensures keys are strings and entries are scalars or
+			// arrays.
 			$out = [];
 			foreach ( $value as $k => $v ) {
-				if ( is_string( $k ) && is_string( $v ) ) {
-					$out[ $k ] = $v;
-				} else {
-					return null;
-				}
+				if ( ! is_string( $k ) ) return null;
+				if ( ! is_string( $v ) && ! is_array( $v ) ) return null;
+				$out[ $k ] = $v;
 			}
 			return $out;
 		}
 		if ( is_string( $value ) ) {
 			$decoded = json_decode( $value, true );
-			if ( ! is_array( $decoded ) ) {
-				return null;
-			}
-			$out = [];
-			foreach ( $decoded as $k => $v ) {
-				if ( is_string( $k ) && is_string( $v ) ) {
-					$out[ $k ] = $v;
-				} else {
-					return null;
-				}
-			}
-			return $out;
+			if ( ! is_array( $decoded ) ) return null;
+			return $this->parse_schema( $decoded );
 		}
 		return null;
 	}

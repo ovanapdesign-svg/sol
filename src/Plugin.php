@@ -395,7 +395,13 @@ final class Plugin {
 			new LookupTableService( $lookup_repo, $cell_repo ),
 			$lookup_repo,
 			new LookupCellService( $cell_repo, $lookup_repo ),
-			$cell_repo
+			$cell_repo,
+			new ModuleService( $module_repo ),
+			$module_repo,
+			new LibraryService( $library_repo, $module_repo ),
+			$library_repo,
+			new LibraryItemService( $item_repo, $library_repo, $module_repo ),
+			$item_repo
 		) ) );
 		return $router;
 	}
