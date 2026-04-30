@@ -9,10 +9,40 @@ use PHPUnit\Framework\TestCase;
 
 final class ModuleTypePresetsTest extends TestCase {
 
-	public function test_all_returns_five_presets(): void {
+	public function test_all_returns_six_presets(): void {
 		$presets = ModuleTypePresets::all();
 		$ids = array_map( static fn( $p ): string => (string) $p['id'], $presets );
-		$this->assertSame( [ 'textiles', 'colors', 'motors', 'accessories', 'custom' ], $ids );
+		$this->assertSame( [ 'textiles', 'colors', 'motors', 'controls', 'accessories', 'custom' ], $ids );
+	}
+
+	public function test_textiles_preset_seeds_attribute_schema_for_phase_4_2c(): void {
+		// Phase 4.2c — presets ship attribute_schema defaults so the
+		// owner doesn't have to type fabric_code / material / etc. by
+		// hand. The schema must still be editable post-apply.
+		$preset = ModuleTypePresets::find( 'textiles' );
+		$this->assertNotNull( $preset );
+		$this->assertArrayHasKey( 'attribute_schema', $preset );
+		$keys = array_keys( $preset['attribute_schema'] );
+		$this->assertContains( 'fabric_code', $keys );
+		$this->assertContains( 'transparency', $keys );
+	}
+
+	public function test_apply_to_payload_seeds_attribute_schema_when_owner_has_none(): void {
+		$payload = [ 'module_key' => 'tx', 'name' => 'TX', 'module_type' => 'textiles' ];
+		$out     = ModuleTypePresets::apply_to_payload( $payload );
+		$this->assertArrayHasKey( 'attribute_schema', $out );
+		$this->assertArrayHasKey( 'fabric_code', $out['attribute_schema'] );
+	}
+
+	public function test_apply_to_payload_owner_attribute_schema_wins(): void {
+		$payload = [
+			'module_key'       => 'tx',
+			'name'             => 'TX',
+			'module_type'      => 'textiles',
+			'attribute_schema' => [ 'only_one' => [ 'label' => 'Only one', 'type' => 'text' ] ],
+		];
+		$out = ModuleTypePresets::apply_to_payload( $payload );
+		$this->assertSame( [ 'only_one' ], array_keys( $out['attribute_schema'] ) );
 	}
 
 	public function test_textiles_seeds_eight_capabilities_and_input_kind(): void {

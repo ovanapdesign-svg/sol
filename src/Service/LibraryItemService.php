@@ -276,13 +276,12 @@ final class LibraryItemService {
 			}
 		}
 
-		// Attribute schema validation
+		// Attribute schema validation. Phase 4.2c — schema may be the
+		// rich shape `{key:{type,...}}` or legacy `{key:type-string}`.
 		$schema = is_array( $module['attribute_schema'] ?? null ) ? $module['attribute_schema'] : [];
 		$attrs  = is_array( $input['attributes'] ?? null ) ? $input['attributes'] : [];
 		foreach ( $attrs as $attr_key => $attr_value ) {
-			if ( ! is_string( $attr_key ) ) {
-				continue;
-			}
+			if ( ! is_string( $attr_key ) ) continue;
 			if ( ! array_key_exists( $attr_key, $schema ) ) {
 				$errors[] = [
 					'field'   => 'attributes',
@@ -291,13 +290,24 @@ final class LibraryItemService {
 				];
 				continue;
 			}
-			$expected_type = (string) $schema[ $attr_key ];
+			$entry         = $schema[ $attr_key ];
+			$expected_type = is_array( $entry ) ? (string) ( $entry['type'] ?? 'text' ) : (string) $entry;
 			if ( ! $this->matches_type( $attr_value, $expected_type ) ) {
 				$errors[] = [
 					'field'   => 'attributes',
 					'code'    => 'attribute_type_mismatch',
 					'message' => sprintf( 'Attribute "%s" must be %s.', $attr_key, $expected_type ),
 				];
+				continue;
+			}
+			if ( $expected_type === 'enum' && is_array( $entry ) && is_array( $entry['options'] ?? null ) ) {
+				if ( ! in_array( $attr_value, $entry['options'], true ) ) {
+					$errors[] = [
+						'field'   => 'attributes',
+						'code'    => 'attribute_value_not_allowed',
+						'message' => sprintf( 'Attribute "%s" must be one of: %s.', $attr_key, implode( ', ', $entry['options'] ) ),
+					];
+				}
 			}
 		}
 
@@ -424,12 +434,18 @@ final class LibraryItemService {
 	}
 
 	private function matches_type( mixed $value, string $type ): bool {
-		switch ( $type ) {
+		switch ( strtolower( $type ) ) {
+			case 'text':
 			case 'string':
+			case 'enum':
 				return is_string( $value );
+			case 'number':
 			case 'integer':
-				return is_int( $value );
+			case 'float':
+			case 'decimal':
+				return is_int( $value ) || is_float( $value );
 			case 'boolean':
+			case 'bool':
 				return is_bool( $value );
 			default:
 				return false;

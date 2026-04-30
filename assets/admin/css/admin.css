@@ -2582,3 +2582,77 @@
 	border-radius: 4px;
 	padding: 12px 16px;
 }
+
+/* ================================================================
+ * Phase 4.2c — Custom attributes editor on the Module form.
+ * ================================================================ */
+
+.configkit-attr-editor__body {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.configkit-attr-editor__empty {
+	color: #50575e;
+	font-style: italic;
+	margin: 0;
+}
+
+.configkit-attr-editor__row {
+	display: grid;
+	grid-template-columns: 1.5fr 1fr 110px 2fr auto auto;
+	gap: 10px;
+	align-items: end;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	padding: 10px;
+}
+
+.configkit-attr-editor__row label {
+	display: block;
+	font-size: 12px;
+	color: #50575e;
+	margin-bottom: 4px;
+}
+
+.configkit-attr-editor__row input[type="text"],
+.configkit-attr-editor__row select {
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.configkit-attr-editor__required {
+	white-space: nowrap;
+	font-size: 13px;
+	color: #1d2327;
+}
+
+.configkit-attr-editor__remove {
+	border: 0;
+	background: transparent;
+	color: #646970;
+	cursor: pointer;
+	font-size: 16px;
+	padding: 6px 8px;
+	border-radius: 3px;
+}
+
+.configkit-attr-editor__remove:hover,
+.configkit-attr-editor__remove:focus {
+	color: #d63638;
+	background: #f6f7f7;
+	outline: none;
+}
+
+.configkit-attr-editor__add {
+	align-self: flex-start;
+}
+
+@media ( max-width: 960px ) {
+
+	.configkit-attr-editor__row {
+		grid-template-columns: 1fr;
+	}
+}

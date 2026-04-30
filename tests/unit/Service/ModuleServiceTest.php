@@ -172,12 +172,16 @@ final class ModuleServiceTest extends TestCase {
 	}
 
 	public function test_create_attribute_schema_invalid_type_value_is_rejected(): void {
+		// Phase 4.2c — schema validation now lives in
+		// AttributeSchemaService and accepts text/number/boolean/enum
+		// (with legacy aliases like string→text). A truly unknown
+		// type still rejects.
 		$result = $this->service->create( $this->valid_input( [
-			'attribute_schema' => [ 'fabric_code' => 'decimal' ],
+			'attribute_schema' => [ 'fabric_code' => 'spaceship' ],
 		] ) );
 		$this->assertFalse( $result['ok'] );
 		$codes = array_column( $result['errors'], 'code' );
-		$this->assertContains( 'invalid_attribute_type', $codes );
+		$this->assertContains( 'invalid_type', $codes );
 	}
 
 	public function test_create_attribute_schema_invalid_key_is_rejected(): void {
@@ -199,11 +203,17 @@ final class ModuleServiceTest extends TestCase {
 	}
 
 	public function test_create_accepts_attribute_schema_as_json_string(): void {
+		// Phase 4.2c — legacy `{key: type-string}` shape is normalised
+		// to the rich `{key: {label, type, required, sort_order}}`
+		// shape on the way through ModuleService::sanitize.
 		$result = $this->service->create( $this->valid_input( [
 			'attribute_schema' => '{"fabric_code":"string","blackout":"boolean"}',
 		] ) );
-		$this->assertTrue( $result['ok'] );
-		$this->assertSame( 'string', $result['record']['attribute_schema']['fabric_code'] );
+		$this->assertTrue( $result['ok'], 'errors=' . json_encode( $result['errors'] ?? [] ) );
+		$schema = $result['record']['attribute_schema'];
+		$this->assertSame( 'text',    $schema['fabric_code']['type'] );
+		$this->assertSame( 'boolean', $schema['blackout']['type'] );
+		$this->assertSame( 'Fabric code', $schema['fabric_code']['label'] );
 	}
 
 	public function test_create_default_capability_flags_default_to_false(): void {

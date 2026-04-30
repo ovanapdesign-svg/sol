@@ -14,11 +14,13 @@ use ConfigKit\Validation\KeyValidator;
  */
 final class ModuleService {
 
-	private const VALID_FIELD_KINDS    = [ 'input', 'display', 'computed', 'addon', 'lookup' ];
-	private const VALID_ATTRIBUTE_TYPES = [ 'string', 'integer', 'boolean' ];
-	private const ATTR_KEY_PATTERN     = '/^[a-z][a-z0-9_]{0,63}$/';
+	private const VALID_FIELD_KINDS = [ 'input', 'display', 'computed', 'addon', 'lookup' ];
 
-	public function __construct( private ModuleRepository $repo ) {}
+	private AttributeSchemaService $schema_service;
+
+	public function __construct( private ModuleRepository $repo, ?AttributeSchemaService $schema_service = null ) {
+		$this->schema_service = $schema_service ?? new AttributeSchemaService();
+	}
 
 	/**
 	 * @return array{items:list<array<string,mixed>>,total:int,page:int,per_page:int,total_pages:int}
@@ -142,6 +144,9 @@ final class ModuleService {
 			}
 		}
 
+		// Phase 4.2c — schema accepts both the legacy `{key:type-string}`
+		// shape and the new rich shape `{key:{label,type,options,
+		// required,sort_order}}` via AttributeSchemaService.
 		$schema = $this->parse_schema( $input['attribute_schema'] ?? null );
 		if ( $schema === null ) {
 			$errors[] = [
@@ -149,26 +154,8 @@ final class ModuleService {
 				'code'    => 'invalid_json',
 				'message' => 'attribute_schema must be a JSON object or null.',
 			];
-		} elseif ( is_array( $schema ) ) {
-			foreach ( $schema as $attr_key => $type ) {
-				if ( ! is_string( $attr_key ) || ! preg_match( self::ATTR_KEY_PATTERN, $attr_key ) ) {
-					$errors[] = [
-						'field'   => 'attribute_schema',
-						'code'    => 'invalid_key',
-						'message' => sprintf( 'Invalid attribute key: %s', is_string( $attr_key ) ? $attr_key : '(non-string)' ),
-					];
-				}
-				if ( ! is_string( $type ) || ! in_array( $type, self::VALID_ATTRIBUTE_TYPES, true ) ) {
-					$errors[] = [
-						'field'   => 'attribute_schema',
-						'code'    => 'invalid_attribute_type',
-						'message' => sprintf(
-							'Attribute "%s" type must be one of: string, integer, boolean.',
-							is_string( $attr_key ) ? $attr_key : '(non-string)'
-						),
-					];
-				}
-			}
+		} else {
+			$errors = array_merge( $errors, $this->schema_service->validate( $schema ) );
 		}
 
 		return $errors;
@@ -189,7 +176,7 @@ final class ModuleService {
 				(array) ( $input['allowed_field_kinds'] ?? [] ),
 				static fn( $k ): bool => is_string( $k ) && in_array( $k, self::VALID_FIELD_KINDS, true )
 			) ),
-			'attribute_schema'    => $this->parse_schema( $input['attribute_schema'] ?? null ) ?? [],
+			'attribute_schema'    => $this->schema_service->sanitize( $this->parse_schema( $input['attribute_schema'] ?? null ) ?? [] ),
 			'is_active'           => array_key_exists( 'is_active', $input ) ? (bool) $input['is_active'] : true,
 			'sort_order'          => (int) ( $input['sort_order'] ?? 0 ),
 		];

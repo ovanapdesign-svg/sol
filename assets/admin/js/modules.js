@@ -678,6 +678,12 @@
 			),
 		], { collapsible: true, collapsed: ! isNew } ) );
 
+		// Phase 4.2c — Custom attributes editor. Replaces the old
+		// "raw JSON" advanced view: each attribute is a row with a
+		// human label, snake_case key (auto-filled), type dropdown,
+		// optional enum options, and a required toggle.
+		wrap.appendChild( renderAttributeSchemaEditor( rec ) );
+
 		// Status
 		wrap.appendChild( fieldset( 'Status', [
 			checkboxField( 'Active', 'is_active', !! rec.is_active, ( v ) => {
@@ -706,6 +712,10 @@
 		wrap.appendChild( advancedToggle );
 
 		if ( state.showAdvanced ) {
+			// Phase 4.2c — raw JSON editor kept as a power-user
+			// fallback. The structured Custom attributes editor above
+			// is the primary surface; this just lets advanced users
+			// paste / inspect the schema.
 			let schemaText = '';
 			try {
 				schemaText = JSON.stringify( rec.attribute_schema || {}, null, 2 );
@@ -713,11 +723,11 @@
 				schemaText = '{}';
 			}
 			const schemaErrors = state.fieldErrors.attribute_schema || [];
-			wrap.appendChild( fieldset( 'Attribute schema', [
+			wrap.appendChild( fieldset( 'Attribute schema (JSON view)', [
 				el(
 					'p',
 					{ class: 'description' },
-					'JSON object mapping snake_case attribute keys to one of: string, integer, boolean. Library items will get form fields generated from this schema.'
+					'Read-only JSON view of the schema you edited above. Pasting JSON here replaces the schema.'
 				),
 				el( 'textarea', {
 					class: 'configkit-json',
@@ -773,6 +783,259 @@
 		wrap.appendChild( footer );
 
 		return wrap;
+	}
+
+	/**
+	 * Phase 4.2c — Custom attributes editor.
+	 *
+	 * The schema is stored as `{ key: { label, type, options?,
+	 * required, sort_order } }`. The editor surfaces it as a list of
+	 * rows so owners can add/remove/edit without touching JSON. Auto-
+	 * keys label → snake_case key via the shared ConfigKit.slugify.
+	 */
+	function renderAttributeSchemaEditor( rec ) {
+		// Normalise the underlying object so legacy {key: 'string'}
+		// shapes still render once on entry.
+		normaliseSchemaInPlace( rec );
+
+		const schema = rec.attribute_schema || {};
+		const entries = Object.keys( schema ).map( ( k ) => Object.assign( { key: k }, schema[ k ] ) );
+		entries.sort( ( a, b ) => ( a.sort_order || 0 ) - ( b.sort_order || 0 ) );
+
+		const body = el( 'div', { class: 'configkit-attr-editor__body' } );
+		body.appendChild( el(
+			'p',
+			{ class: 'description' },
+			'Custom attributes are extra fields you want every item in this module to have, beyond the standard capabilities.'
+		) );
+
+		if ( entries.length === 0 ) {
+			body.appendChild( el( 'p', { class: 'configkit-attr-editor__empty' }, 'No custom attributes yet.' ) );
+		}
+
+		entries.forEach( ( attr, idx ) => {
+			body.appendChild( renderAttributeRow( rec, attr, idx, entries.length ) );
+		} );
+
+		body.appendChild( el(
+			'button',
+			{
+				type: 'button',
+				class: 'button button-secondary configkit-attr-editor__add',
+				onClick: () => {
+					const next = Object.assign( {}, schema );
+					const newKey = uniqueAttrKey( next, 'attribute' );
+					next[ newKey ] = {
+						label: 'New attribute',
+						type:  'text',
+						required: false,
+						sort_order: ( entries.length + 1 ) * 10,
+					};
+					rec.attribute_schema = next;
+					state.dirty = true;
+					render();
+				},
+			},
+			'+ Add attribute'
+		) );
+
+		return fieldset(
+			'Custom attributes',
+			[ body ],
+			{ collapsible: true, collapsed: entries.length === 0 }
+		);
+	}
+
+	function renderAttributeRow( rec, attr, index, totalCount ) {
+		const schema = rec.attribute_schema || {};
+		const row = el( 'div', { class: 'configkit-attr-editor__row' } );
+
+		// Label input (auto-keys the technical key).
+		const labelField = el( 'div', { class: 'configkit-attr-editor__label' } );
+		labelField.appendChild( el( 'label', null, 'Label' ) );
+		labelField.appendChild( el( 'input', {
+			type: 'text',
+			class: 'regular-text',
+			value: attr.label || '',
+			onInput: ( ev ) => {
+				attr.label = ev.target.value;
+				schema[ attr.key ] = Object.assign( {}, schema[ attr.key ], { label: attr.label } );
+				if ( ! attr.userEditedKey ) {
+					const newKey = ( window.ConfigKit && window.ConfigKit.slugify )
+						? window.ConfigKit.slugify( attr.label, { fallbackPrefix: 'attribute' } )
+						: ( attr.label || '' ).toLowerCase().replace( /[^a-z0-9]+/g, '_' ).replace( /^_+|_+$/g, '' );
+					if ( newKey !== '' && newKey !== attr.key && ! schema[ newKey ] ) {
+						const tmp = schema[ attr.key ];
+						delete schema[ attr.key ];
+						attr.key = newKey;
+						schema[ newKey ] = tmp;
+						const techInput = document.getElementById( 'cf_attr_key_' + index );
+						if ( techInput && techInput.value !== newKey ) techInput.value = newKey;
+					}
+				}
+				state.dirty = true;
+			},
+		} ) );
+
+		// Key input.
+		const keyField = el( 'div', { class: 'configkit-attr-editor__key' } );
+		keyField.appendChild( el( 'label', null, 'Key' ) );
+		keyField.appendChild( el( 'input', {
+			id: 'cf_attr_key_' + index,
+			type: 'text',
+			class: 'regular-text code',
+			value: attr.key,
+			onInput: ( ev ) => {
+				const newKey = ev.target.value;
+				if ( newKey !== '' && newKey !== attr.key && ! schema[ newKey ] ) {
+					const tmp = schema[ attr.key ];
+					delete schema[ attr.key ];
+					schema[ newKey ] = tmp;
+					attr.key = newKey;
+				} else {
+					attr.key = newKey;
+				}
+				attr.userEditedKey = true;
+				state.dirty = true;
+			},
+		} ) );
+
+		// Type dropdown.
+		const typeField = el( 'div', { class: 'configkit-attr-editor__type' } );
+		typeField.appendChild( el( 'label', null, 'Type' ) );
+		const typeSelect = el( 'select', {
+			onChange: ( ev ) => {
+				attr.type = ev.target.value;
+				schema[ attr.key ] = Object.assign( {}, schema[ attr.key ], { type: attr.type } );
+				if ( attr.type !== 'enum' ) {
+					delete schema[ attr.key ].options;
+					delete attr.options;
+				}
+				state.dirty = true;
+				render();
+			},
+		} );
+		[ 'text', 'number', 'boolean', 'enum' ].forEach( ( t ) => {
+			const o = el( 'option', { value: t }, capitalize( t ) );
+			if ( t === ( attr.type || 'text' ) ) o.selected = true;
+			typeSelect.appendChild( o );
+		} );
+		typeField.appendChild( typeSelect );
+
+		// Options input (visible only when type=enum).
+		const optsField = el( 'div', { class: 'configkit-attr-editor__options' } );
+		if ( ( attr.type || 'text' ) === 'enum' ) {
+			optsField.appendChild( el( 'label', null, 'Options (comma-separated)' ) );
+			optsField.appendChild( el( 'input', {
+				type: 'text',
+				class: 'regular-text',
+				value: ( attr.options || [] ).join( ', ' ),
+				onInput: ( ev ) => {
+					const list = ev.target.value.split( ',' ).map( ( s ) => s.trim() ).filter( ( s ) => s !== '' );
+					attr.options = list;
+					schema[ attr.key ] = Object.assign( {}, schema[ attr.key ], { options: list } );
+					state.dirty = true;
+				},
+			} ) );
+		}
+
+		// Required + remove.
+		const reqLabel = el( 'label', { class: 'configkit-attr-editor__required' },
+			el( 'input', {
+				type: 'checkbox',
+				checked: !! attr.required,
+				onChange: ( ev ) => {
+					attr.required = ev.target.checked;
+					schema[ attr.key ] = Object.assign( {}, schema[ attr.key ], { required: attr.required } );
+					state.dirty = true;
+				},
+			} ),
+			' Required'
+		);
+		const removeBtn = el( 'button', {
+			type: 'button',
+			class: 'configkit-attr-editor__remove',
+			'aria-label': 'Remove attribute',
+			title: 'Remove attribute',
+			onClick: () => {
+				const next = Object.assign( {}, schema );
+				delete next[ attr.key ];
+				rec.attribute_schema = next;
+				state.dirty = true;
+				render();
+			},
+		}, '✕' );
+
+		row.appendChild( labelField );
+		row.appendChild( keyField );
+		row.appendChild( typeField );
+		if ( ( attr.type || 'text' ) === 'enum' ) row.appendChild( optsField );
+		row.appendChild( reqLabel );
+		row.appendChild( removeBtn );
+		return row;
+	}
+
+	function normaliseSchemaInPlace( rec ) {
+		const raw = rec.attribute_schema;
+		if ( ! raw || typeof raw !== 'object' ) {
+			rec.attribute_schema = {};
+			return;
+		}
+		const out = {};
+		let order = 10;
+		Object.keys( raw ).forEach( ( key ) => {
+			const entry = raw[ key ];
+			if ( typeof entry === 'string' ) {
+				out[ key ] = {
+					label: humanize( key ),
+					type:  legacyType( entry ),
+					required: false,
+					sort_order: order,
+				};
+				order += 10;
+				return;
+			}
+			if ( entry && typeof entry === 'object' ) {
+				out[ key ] = {
+					label: entry.label || humanize( key ),
+					type:  legacyType( entry.type || 'text' ),
+					options: Array.isArray( entry.options ) ? entry.options.slice() : undefined,
+					required: !! entry.required,
+					sort_order: typeof entry.sort_order === 'number' ? entry.sort_order : order,
+				};
+				if ( ! out[ key ].options ) delete out[ key ].options;
+				order += 10;
+			}
+		} );
+		rec.attribute_schema = out;
+	}
+
+	function legacyType( raw ) {
+		const t = String( raw || 'text' ).toLowerCase();
+		if ( t === 'string' || t === 'str' ) return 'text';
+		if ( t === 'integer' || t === 'int' || t === 'float' || t === 'decimal' ) return 'number';
+		if ( t === 'bool' ) return 'boolean';
+		if ( [ 'text', 'number', 'boolean', 'enum' ].indexOf( t ) >= 0 ) return t;
+		return 'text';
+	}
+
+	function humanize( key ) {
+		const out = String( key ).replace( /[_\-]+/g, ' ' ).trim();
+		return out === '' ? key : out.charAt( 0 ).toUpperCase() + out.slice( 1 );
+	}
+
+	function capitalize( s ) {
+		return s ? s.charAt( 0 ).toUpperCase() + s.slice( 1 ) : s;
+	}
+
+	function uniqueAttrKey( schema, base ) {
+		const slug = ( window.ConfigKit && window.ConfigKit.slugify )
+			? window.ConfigKit.slugify( base, { fallbackPrefix: 'attribute' } )
+			: 'attribute';
+		if ( ! schema[ slug ] ) return slug;
+		let i = 2;
+		while ( schema[ slug + '_' + i ] ) i++;
+		return slug + '_' + i;
 	}
 
 	function fieldset( legend, children, opts ) {

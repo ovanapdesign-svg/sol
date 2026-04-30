@@ -20,13 +20,15 @@ final class ModuleTypePresets {
 	public const TYPE_TEXTILES    = 'textiles';
 	public const TYPE_COLORS      = 'colors';
 	public const TYPE_MOTORS      = 'motors';
+	public const TYPE_CONTROLS    = 'controls';
 	public const TYPE_ACCESSORIES = 'accessories';
 	public const TYPE_CUSTOM      = 'custom';
 
 	/**
 	 * @return list<array{
 	 *   id:string, label:string, icon:string, description:string,
-	 *   capabilities:array<string,bool>, allowed_field_kinds:list<string>
+	 *   capabilities:array<string,bool>, allowed_field_kinds:list<string>,
+	 *   attribute_schema:array<string,array<string,mixed>>
 	 * }>
 	 */
 	public static function all(): array {
@@ -50,6 +52,14 @@ final class ModuleTypePresets {
 					]
 				),
 				'allowed_field_kinds' => [ 'input' ],
+				'attribute_schema'    => [
+					'fabric_code'     => [ 'label' => 'Fabric code',     'type' => 'text',    'sort_order' => 10 ],
+					'material'        => [ 'label' => 'Material',        'type' => 'text',    'sort_order' => 20 ],
+					'transparency'    => [ 'label' => 'Transparency',    'type' => 'enum',    'options' => [ 'high', 'medium', 'low', 'opaque' ], 'sort_order' => 30 ],
+					'blackout'        => [ 'label' => 'Blackout',        'type' => 'boolean', 'sort_order' => 40 ],
+					'flame_retardant' => [ 'label' => 'Flame retardant', 'type' => 'boolean', 'sort_order' => 50 ],
+					'eco_label'       => [ 'label' => 'Eco label',       'type' => 'text',    'sort_order' => 60 ],
+				],
 			],
 			[
 				'id'           => self::TYPE_COLORS,
@@ -65,6 +75,10 @@ final class ModuleTypePresets {
 					]
 				),
 				'allowed_field_kinds' => [ 'input' ],
+				'attribute_schema'    => [
+					'pantone_code' => [ 'label' => 'Pantone code', 'type' => 'text', 'sort_order' => 10 ],
+					'hex_code'     => [ 'label' => 'Hex code',     'type' => 'text', 'sort_order' => 20 ],
+				],
 			],
 			[
 				'id'           => self::TYPE_MOTORS,
@@ -82,6 +96,32 @@ final class ModuleTypePresets {
 					]
 				),
 				'allowed_field_kinds' => [ 'addon', 'input' ],
+				'attribute_schema'    => [
+					'protocol'      => [ 'label' => 'Radio protocol', 'type' => 'enum', 'options' => [ 'IO', 'RTS', 'Zigbee', 'WiFi' ], 'sort_order' => 10 ],
+					'power_supply'  => [ 'label' => 'Power supply',   'type' => 'enum', 'options' => [ 'mains', 'battery', 'solar' ], 'sort_order' => 20 ],
+					'torque_nm'     => [ 'label' => 'Torque (Nm)',    'type' => 'number', 'sort_order' => 30 ],
+				],
+			],
+			[
+				'id'           => self::TYPE_CONTROLS,
+				'label'        => 'Controls',
+				'icon'         => '🎛',
+				'description'  => 'Remote controls and switches with compatibility tags and Woo link.',
+				'capabilities' => array_merge(
+					self::all_caps_default_false(),
+					[
+						'supports_sku'              => true,
+						'supports_image'            => true,
+						'supports_price'            => true,
+						'supports_compatibility'    => true,
+						'supports_woo_product_link' => true,
+					]
+				),
+				'allowed_field_kinds' => [ 'input', 'addon' ],
+				'attribute_schema'    => [
+					'channels' => [ 'label' => 'Channels', 'type' => 'number', 'sort_order' => 10 ],
+					'protocol' => [ 'label' => 'Radio protocol', 'type' => 'enum', 'options' => [ 'IO', 'RTS', 'Zigbee', 'WiFi' ], 'sort_order' => 20 ],
+				],
 			],
 			[
 				'id'           => self::TYPE_ACCESSORIES,
@@ -99,6 +139,7 @@ final class ModuleTypePresets {
 					]
 				),
 				'allowed_field_kinds' => [ 'addon' ],
+				'attribute_schema'    => [],
 			],
 			[
 				'id'                  => self::TYPE_CUSTOM,
@@ -107,6 +148,7 @@ final class ModuleTypePresets {
 				'description'         => 'Build a module with custom capabilities — pick everything yourself.',
 				'capabilities'        => self::all_caps_default_false(),
 				'allowed_field_kinds' => [],
+				'attribute_schema'    => [],
 			],
 		];
 	}
@@ -166,6 +208,15 @@ final class ModuleTypePresets {
 			|| count( $payload['allowed_field_kinds'] ) === 0
 		) {
 			$payload['allowed_field_kinds'] = $preset['allowed_field_kinds'];
+		}
+		// Phase 4.2c — preset also seeds the attribute schema. Owner
+		// can edit / remove entries before saving; we only seed when
+		// the caller didn't ship a schema of their own.
+		if ( ! array_key_exists( 'attribute_schema', $payload )
+			|| ! is_array( $payload['attribute_schema'] )
+			|| count( $payload['attribute_schema'] ) === 0
+		) {
+			$payload['attribute_schema'] = $preset['attribute_schema'] ?? [];
 		}
 		return $payload;
 	}
