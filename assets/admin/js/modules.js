@@ -30,6 +30,73 @@
 		[ 'lookup',   'Dimensions used by lookup tables (width / height / depth).' ],
 	];
 
+	// Mirrors src/Admin/ModuleTypePresets.php. The server applies the
+	// same preset on POST when `module_type` is present, so this list
+	// is purely a UI affordance for the Create flow.
+	const MODULE_TYPE_PRESETS = [
+		{
+			id: 'textiles',
+			label: 'Textiles',
+			icon: '🧵',
+			description: 'Fabric collections with brand, collection, color family, filter tags, and price groups.',
+			capabilities: {
+				supports_sku: true,
+				supports_image: true,
+				supports_price_group: true,
+				supports_brand: true,
+				supports_collection: true,
+				supports_color_family: true,
+				supports_filters: true,
+				supports_compatibility: true,
+			},
+			allowed_field_kinds: [ 'input' ],
+		},
+		{
+			id: 'colors',
+			label: 'Colors',
+			icon: '🎨',
+			description: 'Color palettes with images and color family grouping.',
+			capabilities: { supports_sku: true, supports_image: true, supports_color_family: true },
+			allowed_field_kinds: [ 'input' ],
+		},
+		{
+			id: 'motors',
+			label: 'Motors',
+			icon: '⚙',
+			description: 'Motor products with price, compatibility, and a linked Woo product.',
+			capabilities: {
+				supports_sku: true,
+				supports_price: true,
+				supports_sale_price: true,
+				supports_woo_product_link: true,
+				supports_compatibility: true,
+			},
+			allowed_field_kinds: [ 'addon', 'input' ],
+		},
+		{
+			id: 'accessories',
+			label: 'Accessories',
+			icon: '🔧',
+			description: 'Add-on products with price and Woo link.',
+			capabilities: {
+				supports_sku: true,
+				supports_price: true,
+				supports_sale_price: true,
+				supports_image: true,
+				supports_woo_product_link: true,
+			},
+			allowed_field_kinds: [ 'addon' ],
+		},
+		{
+			id: 'custom',
+			label: 'Custom',
+			icon: '✨',
+			description: 'Build a module with custom capabilities — pick everything yourself.',
+			capabilities: {},
+			allowed_field_kinds: [],
+		},
+	];
+
 	const state = {
 		view: 'loading', // 'list' | 'form' | 'loading'
 		list: { items: [], total: 0, page: 1, per_page: 50, total_pages: 0 },
@@ -121,11 +188,28 @@
 	}
 
 	function showNewForm() {
-		state.view = 'form';
-		state.editing = blankRecord();
+		// Step 1 — show the preset picker. Step 2 (`pickPreset`) seeds
+		// the form with the chosen preset's capabilities + field kinds.
+		state.view = 'presets';
+		state.editing = null;
+		state.pickedPresetId = null;
 		state.dirty = false;
 		clearMessages();
 		setUrl( { action: 'new', id: null } );
+		render();
+	}
+
+	function pickPreset( presetId ) {
+		const preset = MODULE_TYPE_PRESETS.find( ( p ) => p.id === presetId );
+		const rec = blankRecord();
+		if ( preset ) {
+			Object.keys( preset.capabilities ).forEach( ( k ) => { rec[ k ] = !! preset.capabilities[ k ]; } );
+			rec.allowed_field_kinds = ( preset.allowed_field_kinds || [] ).slice();
+		}
+		state.editing = rec;
+		state.pickedPresetId = presetId;
+		state.view = 'form';
+		state.dirty = false;
 		render();
 	}
 
@@ -294,9 +378,56 @@
 			return;
 		}
 
+		if ( state.view === 'presets' ) {
+			root.appendChild( renderPresetPicker() );
+			return;
+		}
+
 		if ( state.view === 'form' ) {
 			root.appendChild( renderForm() );
 		}
+	}
+
+	function renderPresetPicker() {
+		const wrap = el( 'div', { class: 'configkit-form' } );
+		wrap.appendChild( el( 'h2', null, 'New module — pick a starting point' ) );
+		wrap.appendChild( el(
+			'p',
+			{ class: 'description' },
+			'Choose the closest match. You can adjust every capability before saving.'
+		) );
+
+		const grid = el( 'div', { class: 'configkit-preset-grid' } );
+		MODULE_TYPE_PRESETS.forEach( ( preset ) => {
+			const enabledCaps = Object.keys( preset.capabilities ).filter( ( k ) => preset.capabilities[ k ] );
+			const card = el(
+				'button',
+				{
+					type: 'button',
+					class: 'configkit-preset-card',
+					onClick: () => pickPreset( preset.id ),
+				},
+				el( 'span', { class: 'configkit-preset-card__icon' }, preset.icon ),
+				el( 'span', { class: 'configkit-preset-card__title' }, preset.label ),
+				el( 'span', { class: 'configkit-preset-card__desc' }, preset.description ),
+				enabledCaps.length > 0
+					? el( 'span', { class: 'configkit-preset-card__caps' }, enabledCaps.length + ' capabilities preselected' )
+					: el( 'span', { class: 'configkit-preset-card__caps' }, 'Pick everything yourself' )
+			);
+			grid.appendChild( card );
+		} );
+		wrap.appendChild( grid );
+
+		wrap.appendChild( el(
+			'div',
+			{ class: 'configkit-form__footer' },
+			el( 'button', {
+				type: 'button',
+				class: 'button',
+				onClick: () => { setUrl( { action: null, id: null } ); loadList(); },
+			}, 'Cancel' )
+		) );
+		return wrap;
 	}
 
 	function renderList() {

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace ConfigKit\Rest\Controllers;
 
+use ConfigKit\Admin\ModuleTypePresets;
 use ConfigKit\Rest\AbstractController;
 use ConfigKit\Service\ModuleService;
 
@@ -85,6 +86,7 @@ final class ModulesController extends AbstractController {
 
 	public function create( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$payload = $this->payload( $request );
+		$payload = ModuleTypePresets::apply_to_payload( $payload );
 		$result  = $this->service->create( $payload );
 		if ( ! ( $result['ok'] ?? false ) ) {
 			return $this->error(
