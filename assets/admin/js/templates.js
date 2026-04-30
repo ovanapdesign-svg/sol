@@ -81,6 +81,10 @@
 		message: null,
 		fieldErrors: {},
 		busy: false,
+		// Phase 4.2c — caches for the field source picker so we can
+		// filter libraries by their module's allowed_field_kinds.
+		librariesCache: null,
+		modulesCache: null,
 	};
 
 	const RULE_OPERATORS = [
@@ -346,13 +350,51 @@
 		try {
 			const data = await ConfigKit.request( '/templates/' + state.viewing.id + '/fields/' + fieldId );
 			state.editingField = data.record;
-			await refreshFieldOptions();
+			await Promise.all( [ refreshFieldOptions(), ensureLibrarySources() ] );
 			setUrl( { field_id: fieldId, field_action: null } );
 			render();
 		} catch ( err ) {
 			showError( err );
 			render();
 		}
+	}
+
+	/**
+	 * Phase 4.2c — load active libraries + modules so the source
+	 * picker can filter by allowed_field_kinds. Cached for the
+	 * lifetime of the page; the wizard reuses what's already loaded.
+	 */
+	async function ensureLibrarySources() {
+		if ( state.librariesCache !== null && state.modulesCache !== null ) return;
+		try {
+			const [ libs, mods ] = await Promise.all( [
+				ConfigKit.request( '/libraries?per_page=500' ),
+				ConfigKit.request( '/modules?per_page=200' ),
+			] );
+			state.librariesCache = ( libs.items || [] ).filter( ( l ) => l.is_active );
+			state.modulesCache   = ( mods.items || [] ).filter( ( m ) => m.is_active );
+		} catch ( err ) {
+			state.librariesCache = state.librariesCache || [];
+			state.modulesCache   = state.modulesCache   || [];
+		}
+	}
+
+	/**
+	 * Filter the cached library list to those whose module's
+	 * allowed_field_kinds includes the field's kind. Returns the
+	 * full library record so the picker can show name + key.
+	 */
+	function librariesForFieldKind( fieldKind ) {
+		const libs = state.librariesCache || [];
+		const mods = state.modulesCache   || [];
+		const modByKey = {};
+		mods.forEach( ( m ) => { modByKey[ m.module_key ] = m; } );
+		return libs.filter( ( lib ) => {
+			const mod = modByKey[ lib.module_key ];
+			if ( ! mod ) return false;
+			const kinds = Array.isArray( mod.allowed_field_kinds ) ? mod.allowed_field_kinds : [];
+			return kinds.indexOf( fieldKind ) >= 0;
+		} );
 	}
 
 	async function reorderField( fieldId, direction ) {
@@ -1358,18 +1400,57 @@
 
 		// Source
 		if ( f.value_source === 'library' ) {
-			const libs = ( f.source_config && f.source_config.libraries ) || [];
-			wrap.appendChild( fieldset( 'Source · libraries', [
-				el( 'p', { class: 'description' }, 'Comma-separated library_keys.' ),
-				textField( 'library_keys', 'libraries_csv', libs.join( ',' ), ( v ) => {
-					f.source_config = Object.assign( {}, f.source_config, {
-						type: 'library',
-						libraries: v.split( ',' ).map( ( s ) => s.trim() ).filter( Boolean ),
-					} );
-					state.dirty = true;
-				} ),
-				fieldErrors( 'source_config' ),
-			] ) );
+			const selectedKeys = ( f.source_config && f.source_config.libraries ) || [];
+			const fieldKind = String( f.field_kind || 'input' );
+			const eligible  = librariesForFieldKind( fieldKind );
+
+			const children = [
+				el(
+					'p',
+					{ class: 'description' },
+					'Pick libraries to use for this ',
+					el( 'strong', null, fieldKind ),
+					' field. Only libraries whose module accepts ',
+					el( 'code', null, fieldKind ),
+					' are listed.'
+				),
+			];
+
+			if ( eligible.length === 0 ) {
+				children.push( el(
+					'p',
+					{ class: 'description configkit-form__intro' },
+					'No libraries match this field kind. Edit a module under Settings → Modules and tick "',
+					fieldKind,
+					'" in "Where this module can be used".'
+				) );
+			} else {
+				const list = el( 'div', { class: 'configkit-source-list' } );
+				eligible.forEach( ( lib ) => {
+					const checked = selectedKeys.indexOf( lib.library_key ) >= 0;
+					const row = el( 'label', { class: 'configkit-source-list__row' + ( checked ? ' is-checked' : '' ) } );
+					row.appendChild( el( 'input', {
+						type: 'checkbox',
+						checked,
+						onChange: ( ev ) => {
+							const cur = ( f.source_config && f.source_config.libraries ) || [];
+							const next = ev.target.checked
+								? ( cur.indexOf( lib.library_key ) < 0 ? cur.concat( [ lib.library_key ] ) : cur )
+								: cur.filter( ( k ) => k !== lib.library_key );
+							f.source_config = Object.assign( {}, f.source_config, { type: 'library', libraries: next } );
+							state.dirty = true;
+							render();
+						},
+					} ) );
+					row.appendChild( el( 'span', { class: 'configkit-source-list__name' }, lib.name ) );
+					row.appendChild( el( 'code', { class: 'configkit-source-list__key' }, lib.library_key ) );
+					list.appendChild( row );
+				} );
+				children.push( list );
+			}
+
+			children.push( fieldErrors( 'source_config' ) );
+			wrap.appendChild( fieldset( 'Source · libraries', children ) );
 		} else if ( f.value_source === 'woo_category' ) {
 			wrap.appendChild( fieldset( 'Source · Woo category', [
 				textField( 'category_slug', 'category_slug', ( f.source_config && f.source_config.category_slug ) || '', ( v ) => {

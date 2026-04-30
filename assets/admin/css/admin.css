@@ -2672,3 +2672,47 @@
 	margin: 0 0 12px 0;
 	color: #50575e;
 }
+
+/* Phase 4.2c — template-field source picker (allowed-kind-filtered). */
+
+.configkit-source-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	max-height: 280px;
+	overflow-y: auto;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	background: #fff;
+	padding: 6px;
+}
+
+.configkit-source-list__row {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	gap: 8px;
+	align-items: center;
+	padding: 4px 8px;
+	border-radius: 3px;
+}
+
+.configkit-source-list__row.is-checked {
+	background: #f0f6fc;
+}
+
+.configkit-source-list__row:hover {
+	background: #f6f7f7;
+}
+
+.configkit-source-list__row.is-checked:hover {
+	background: #e7f1fb;
+}
+
+.configkit-source-list__name {
+	color: #1d2327;
+}
+
+.configkit-source-list__key {
+	color: #646970;
+	font-size: 12px;
+}
