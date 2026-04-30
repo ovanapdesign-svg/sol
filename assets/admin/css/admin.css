@@ -2905,6 +2905,212 @@
 	display: none;
 }
 
+/* Tabs (Manual / Excel) inside a block */
+.configkit-pb__tabs {
+	display: flex;
+	gap: 4px;
+	margin-bottom: 12px;
+	border-bottom: 1px solid #dcdcde;
+}
+
+.configkit-pb__tab {
+	background: transparent;
+	border: 0;
+	border-bottom: 2px solid transparent;
+	padding: 6px 12px;
+	cursor: pointer;
+	color: #50575e;
+	font-size: 13px;
+}
+
+.configkit-pb__tab:hover, .configkit-pb__tab:focus {
+	color: #1d2327;
+	outline: none;
+}
+
+.configkit-pb__tab.is-active {
+	color: #2271b1;
+	border-bottom-color: #2271b1;
+	font-weight: 600;
+}
+
+/* Drop zone — file upload */
+.configkit-pb__drop {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	padding: 24px;
+	border: 2px dashed #c3c4c7;
+	border-radius: 6px;
+	background: #f6f7f7;
+	cursor: pointer;
+	transition: background 0.12s, border-color 0.12s;
+	text-align: center;
+}
+
+.configkit-pb__drop:hover, .configkit-pb__drop.is-hover {
+	background: #f0f6fc;
+	border-color: #2271b1;
+}
+
+.configkit-pb__drop p {
+	margin: 0;
+	color: #1d2327;
+}
+
+.configkit-pb__drop .description {
+	color: #50575e;
+}
+
+.configkit-pb__drop-input {
+	display: none;
+}
+
+/* Pricing rows */
+.configkit-pb__pricing-table {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.configkit-pb__pricing-row {
+	display: grid;
+	grid-template-columns: repeat( 5, 1fr ) auto;
+	gap: 8px;
+	align-items: center;
+}
+
+.configkit-pb__pricing-row--head {
+	font-size: 11px;
+	text-transform: uppercase;
+	color: #646970;
+	letter-spacing: 0.4px;
+	margin-bottom: 4px;
+}
+
+.configkit-pb__row-remove {
+	border: 0;
+	background: transparent;
+	color: #646970;
+	cursor: pointer;
+	font-size: 16px;
+	padding: 6px 8px;
+	border-radius: 3px;
+}
+
+.configkit-pb__row-remove:hover, .configkit-pb__row-remove:focus {
+	color: #d63638;
+	background: #f6f7f7;
+	outline: none;
+}
+
+.configkit-pb__row-actions {
+	display: flex;
+	gap: 8px;
+	margin-top: 12px;
+}
+
+.configkit-pb__count {
+	margin: 12px 0 0 0;
+	color: #50575e;
+	font-size: 12px;
+}
+
+/* Fabric / motor / control / accessory cards */
+.configkit-pb__card-list {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.configkit-pb__card {
+	display: grid;
+	grid-template-columns: 96px 1fr auto;
+	gap: 14px;
+	align-items: start;
+	padding: 12px;
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+	background: #fff;
+}
+
+.configkit-pb__card-image {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 6px;
+}
+
+.configkit-pb__card-image img {
+	display: block;
+	width: 96px;
+	height: 96px;
+	object-fit: cover;
+	border-radius: 4px;
+	border: 1px solid #dcdcde;
+}
+
+.configkit-pb__image-placeholder {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 96px;
+	height: 96px;
+	background: #f6f7f7;
+	border: 1px dashed #c3c4c7;
+	border-radius: 4px;
+	font-size: 28px;
+	color: #c3c4c7;
+}
+
+.configkit-pb__card-fields {
+	display: grid;
+	grid-template-columns: repeat( auto-fill, minmax( 160px, 1fr ) );
+	gap: 8px 12px;
+}
+
+.configkit-pb__field {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.configkit-pb__field-label {
+	font-size: 11px;
+	color: #50575e;
+	text-transform: uppercase;
+	letter-spacing: 0.3px;
+}
+
+.configkit-pb__input {
+	box-sizing: border-box;
+	width: 100%;
+	padding: 5px 8px;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	font-size: 13px;
+}
+
+.configkit-pb__input:focus {
+	border-color: #2271b1;
+	box-shadow: 0 0 0 1px #2271b1;
+	outline: none;
+}
+
+.configkit-pb__card-meta {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 6px;
+	font-size: 13px;
+}
+
+.configkit-pb__card-remove {
+	color: #d63638 !important;
+}
+
 /* Phase 4.3 — Product Builder auto-managed badge in admin lists. */
 .configkit-auto-managed-badge {
 	display: inline-flex;

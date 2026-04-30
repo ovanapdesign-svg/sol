@@ -282,6 +282,533 @@
 	}
 
 	// =========================================================
+	// Shared helpers — tabs + drop zone
+	// =========================================================
+
+	function tabBar( blockId, tabs ) {
+		const wrap = el( 'div', { class: 'configkit-pb__tabs', role: 'tablist' } );
+		const active = state.activeTabs[ blockId ] || tabs[0].id;
+		tabs.forEach( ( t ) => {
+			wrap.appendChild( el( 'button', {
+				type:    'button',
+				class:   'configkit-pb__tab' + ( t.id === active ? ' is-active' : '' ),
+				role:    'tab',
+				'aria-selected': t.id === active ? 'true' : 'false',
+				onClick: () => {
+					state.activeTabs[ blockId ] = t.id;
+					render();
+				},
+			}, t.label ) );
+		} );
+		return wrap;
+	}
+
+	function activeTab( blockId, fallback ) {
+		return state.activeTabs[ blockId ] || fallback;
+	}
+
+	/**
+	 * Multipart upload to the existing /imports endpoint. Target
+	 * type / key come from the orchestrator's snapshot.state so
+	 * Simple Mode hands the importer the same keys the import
+	 * wizard would.
+	 */
+	async function uploadImportFile( file, importType, targetKey ) {
+		if ( ! file ) return null;
+		if ( ! /\.xlsx$/i.test( file.name ) ) {
+			showMessage( 'error', 'Only .xlsx files are supported.' );
+			return null;
+		}
+		if ( file.size > 10 * 1024 * 1024 ) {
+			showMessage( 'error', 'File exceeds the 10 MB limit.' );
+			return null;
+		}
+		state.busy = true;
+		render();
+
+		const form = new FormData();
+		form.append( 'file', file );
+		form.append( 'import_type', importType );
+		if ( importType === 'library_items' ) form.append( 'target_library_key', targetKey );
+		else                                  form.append( 'target_lookup_table_key', targetKey );
+		form.append( 'mode', 'replace_all' );
+
+		try {
+			const url = window.CONFIGKIT.restUrl + '/imports';
+			const res = await fetch( url, {
+				method: 'POST',
+				credentials: 'same-origin',
+				headers: { 'X-WP-Nonce': window.CONFIGKIT.nonce },
+				body: form,
+			} );
+			const payload = await res.json().catch( () => null );
+			if ( ! res.ok ) {
+				throw new Error( ( payload && payload.message ) || res.statusText );
+			}
+			const batchId = payload && payload.record && payload.record.id;
+			if ( batchId ) {
+				const commitRes = await window.ConfigKit.request( '/imports/' + batchId + '/commit', { method: 'POST', body: {} } );
+				const summary = commitRes && commitRes.summary;
+				if ( summary ) {
+					showMessage( 'success', summary.inserted + ' inserted, ' + summary.updated + ' updated, ' + summary.skipped + ' skipped.' );
+				} else {
+					showMessage( 'success', 'Excel imported.' );
+				}
+			}
+			await loadSnapshot();
+			render();
+		} catch ( err ) {
+			showMessage( 'error', explainError( err ) );
+		} finally {
+			state.busy = false;
+		}
+		return null;
+	}
+
+	function dropZone( opts ) {
+		const drop = el( 'div', { class: 'configkit-pb__drop', tabindex: '0' } );
+		drop.appendChild( el( 'p', null, opts.placeholder ) );
+		drop.appendChild( el( 'p', { class: 'description' }, opts.helperText || 'Max 10 MB. .xlsx only.' ) );
+		const fileInput = el( 'input', {
+			type: 'file',
+			accept: '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+			class: 'configkit-pb__drop-input',
+			onChange: ( ev ) => {
+				if ( ev.target.files && ev.target.files[0] ) opts.onPick( ev.target.files[0] );
+			},
+		} );
+		drop.appendChild( fileInput );
+		drop.addEventListener( 'click', () => fileInput.click() );
+		drop.addEventListener( 'dragover', ( ev ) => {
+			ev.preventDefault();
+			drop.classList.add( 'is-hover' );
+		} );
+		drop.addEventListener( 'dragleave', () => drop.classList.remove( 'is-hover' ) );
+		drop.addEventListener( 'drop', ( ev ) => {
+			ev.preventDefault();
+			drop.classList.remove( 'is-hover' );
+			if ( ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0] ) opts.onPick( ev.dataTransfer.files[0] );
+		} );
+		return drop;
+	}
+
+	function blockShell( id, title, helper ) {
+		const block = el( 'section', { class: 'configkit-pb__block', 'data-block-id': id } );
+		block.appendChild( el( 'header', { class: 'configkit-pb__block-header' },
+			el( 'h3', null, title ),
+			helper ? el( 'p', { class: 'description' }, helper ) : null
+		) );
+		return block;
+	}
+
+	function inputField( placeholder, defaultValue, opts ) {
+		opts = opts || {};
+		return el( 'input', {
+			type:        opts.type || 'text',
+			class:       opts.cls || 'configkit-pb__input',
+			placeholder: placeholder || '',
+			value:       defaultValue !== null && defaultValue !== undefined ? String( defaultValue ) : '',
+			step:        opts.step,
+			min:         opts.min,
+			'data-pb-field': opts.field || '',
+		} );
+	}
+
+	function readNumberFromCell( cell, field ) {
+		const node = cell.querySelector( '[data-pb-field="' + field + '"]' );
+		if ( ! node ) return null;
+		const raw = String( node.value || '' ).trim();
+		if ( raw === '' ) return null;
+		const n = Number( raw );
+		return Number.isFinite( n ) ? n : null;
+	}
+
+	function readStringFromCell( cell, field ) {
+		const node = cell.querySelector( '[data-pb-field="' + field + '"]' );
+		if ( ! node ) return '';
+		return String( node.value || '' ).trim();
+	}
+
+	function readCheckedFromCell( cell, field ) {
+		const node = cell.querySelector( '[data-pb-field="' + field + '"]' );
+		if ( ! node ) return false;
+		return !! node.checked;
+	}
+
+	// =========================================================
+	// Block 2 — Pricing rows
+	// =========================================================
+
+	function renderBlockPricing() {
+		const block = blockShell( 'pricing', '2. Pricing by dimensions', 'Customer width × height rounds up to the smallest matching cell.' );
+		block.appendChild( tabBar( 'pricing', [
+			{ id: 'manual', label: 'Manual rows' },
+			{ id: 'excel',  label: 'Import Excel' },
+		] ) );
+
+		if ( activeTab( 'pricing', 'manual' ) === 'excel' ) {
+			block.appendChild( renderPricingExcel() );
+		} else {
+			block.appendChild( renderPricingManual() );
+		}
+
+		const count = state.snapshot ? state.snapshot.pricing_rows.length : 0;
+		block.appendChild( el( 'p', { class: 'configkit-pb__count' }, count + ' row' + ( count === 1 ? '' : 's' ) + ' configured.' ) );
+		return block;
+	}
+
+	function renderPricingManual() {
+		// Rehydrate drafts from the snapshot the first time we land
+		// here, but DO NOT re-overwrite drafts the owner is editing.
+		if ( ! Array.isArray( state.drafts.pricing_rows ) ) {
+			state.drafts.pricing_rows = ( state.snapshot.pricing_rows || [] ).map( ( r ) => ( {
+				from_width:  '',
+				to_width:    r.to_width,
+				from_height: '',
+				to_height:   r.to_height,
+				price:       r.price,
+				price_group_key: r.price_group_key || '',
+			} ) );
+			if ( state.drafts.pricing_rows.length === 0 ) {
+				state.drafts.pricing_rows.push( blankPricingRow() );
+			}
+		}
+
+		const wrap = el( 'div', { class: 'configkit-pb__pricing-table' } );
+		const head = el( 'div', { class: 'configkit-pb__pricing-row configkit-pb__pricing-row--head' },
+			el( 'span', null, 'From width' ),
+			el( 'span', null, 'To width' ),
+			el( 'span', null, 'From height' ),
+			el( 'span', null, 'To height' ),
+			el( 'span', null, 'Price (kr)' ),
+			el( 'span', null, '' )
+		);
+		wrap.appendChild( head );
+
+		state.drafts.pricing_rows.forEach( ( row, i ) => {
+			wrap.appendChild( renderPricingRow( row, i ) );
+		} );
+
+		const footer = el( 'div', { class: 'configkit-pb__row-actions' },
+			el( 'button', {
+				type: 'button',
+				class: 'button',
+				onClick: () => {
+					state.drafts.pricing_rows.push( blankPricingRow() );
+					render();
+				},
+			}, '+ Add row' ),
+			el( 'button', {
+				type: 'button',
+				class: 'button button-primary',
+				disabled: state.busy,
+				onClick: savePricing,
+			}, state.busy ? 'Saving…' : 'Save pricing' )
+		);
+		wrap.appendChild( footer );
+		return wrap;
+	}
+
+	function blankPricingRow() {
+		return { from_width: '', to_width: '', from_height: '', to_height: '', price: '', price_group_key: '' };
+	}
+
+	function renderPricingRow( row, index ) {
+		const cell = el( 'div', { class: 'configkit-pb__pricing-row' } );
+		cell.appendChild( inputField( '0',    row.from_width,  { type: 'number', field: 'from_width' } ) );
+		cell.appendChild( inputField( '2400', row.to_width,    { type: 'number', field: 'to_width' } ) );
+		cell.appendChild( inputField( '0',    row.from_height, { type: 'number', field: 'from_height' } ) );
+		cell.appendChild( inputField( '2000', row.to_height,   { type: 'number', field: 'to_height' } ) );
+		cell.appendChild( inputField( '12000', row.price,      { type: 'number', step: '0.01', field: 'price' } ) );
+		cell.appendChild( el( 'button', {
+			type: 'button',
+			class: 'configkit-pb__row-remove',
+			'aria-label': 'Remove row',
+			title: 'Remove row',
+			onClick: () => {
+				// Persist current input values into the draft so we
+				// don't lose what the owner just typed.
+				readPricingDraftFromDOM();
+				state.drafts.pricing_rows.splice( index, 1 );
+				if ( state.drafts.pricing_rows.length === 0 ) {
+					state.drafts.pricing_rows.push( blankPricingRow() );
+				}
+				render();
+			},
+		}, '✕' ) );
+		return cell;
+	}
+
+	/**
+	 * Walk the rendered pricing rows and copy their current input
+	 * values into state.drafts.pricing_rows. Called before any
+	 * structural change (add/remove row) so the new render
+	 * reproduces what the owner sees on screen.
+	 */
+	function readPricingDraftFromDOM() {
+		const cells = root.querySelectorAll( '[data-block-id="pricing"] .configkit-pb__pricing-row' );
+		const out = [];
+		cells.forEach( ( cell ) => {
+			if ( cell.classList.contains( 'configkit-pb__pricing-row--head' ) ) return;
+			out.push( {
+				from_width:      readNumberFromCell( cell, 'from_width' ),
+				to_width:        readNumberFromCell( cell, 'to_width' ),
+				from_height:     readNumberFromCell( cell, 'from_height' ),
+				to_height:       readNumberFromCell( cell, 'to_height' ),
+				price:           readNumberFromCell( cell, 'price' ),
+				price_group_key: '',
+			} );
+		} );
+		state.drafts.pricing_rows = out;
+	}
+
+	async function savePricing() {
+		readPricingDraftFromDOM();
+		const rows = ( state.drafts.pricing_rows || [] ).filter( ( r ) =>
+			r.to_width !== null && r.to_height !== null && r.price !== null
+		);
+		try {
+			const result = await pbRequest( '/pricing', {
+				method: 'POST',
+				body: { rows },
+			} );
+			showMessage( 'success', ( result && result.message ) || 'Pricing saved.' );
+			state.drafts.pricing_rows = null;
+			await loadSnapshot();
+			render();
+		} catch ( err ) {
+			showMessage( 'error', explainError( err ) );
+			render();
+		}
+	}
+
+	function renderPricingExcel() {
+		const wrap = el( 'div', { class: 'configkit-pb__excel' } );
+		const lookupKey = state.snapshot.state.lookup_table_key;
+		if ( ! lookupKey ) {
+			wrap.appendChild( el(
+				'p',
+				{ class: 'description' },
+				'Save at least one manual row first — that creates the underlying lookup table the import targets.'
+			) );
+			return wrap;
+		}
+		wrap.appendChild( dropZone( {
+			placeholder: 'Drop a pricing .xlsx (Format A grid or Format B long).',
+			helperText:  'The file replaces every existing pricing row in the lookup table for this product.',
+			onPick:      ( file ) => uploadImportFile( file, 'lookup_cells', lookupKey ),
+		} ) );
+		return wrap;
+	}
+
+	// =========================================================
+	// Block 3 — Fabric options
+	// =========================================================
+
+	function renderBlockFabrics() {
+		const block = blockShell( 'fabrics', '3. Fabric options', 'Library items the customer picks from. Each fabric inherits this product\'s pricing.' );
+		block.appendChild( tabBar( 'fabrics', [
+			{ id: 'manual', label: 'Add manually' },
+			{ id: 'excel',  label: 'Import Excel' },
+		] ) );
+
+		if ( activeTab( 'fabrics', 'manual' ) === 'excel' ) {
+			block.appendChild( renderFabricsExcel() );
+		} else {
+			block.appendChild( renderFabricsManual() );
+		}
+
+		const count = state.snapshot ? state.snapshot.fabrics.length : 0;
+		block.appendChild( el( 'p', { class: 'configkit-pb__count' }, count + ' fabric' + ( count === 1 ? '' : 's' ) + ' configured.' ) );
+		return block;
+	}
+
+	function renderFabricsManual() {
+		if ( ! Array.isArray( state.drafts.fabrics ) ) {
+			state.drafts.fabrics = ( state.snapshot.fabrics || [] ).map( ( f ) => ( {
+				name:         f.label || '',
+				code:         f.sku || '',
+				collection:   ( f.attributes && f.attributes.collection ) || '',
+				color_family: f.color_family || '',
+				price_group:  f.price_group_key || '',
+				extra_price:  f.price || '',
+				image_url:    f.image_url || '',
+				active:       !! f.is_active,
+			} ) );
+			if ( state.drafts.fabrics.length === 0 ) state.drafts.fabrics.push( blankFabric() );
+		}
+
+		const list = el( 'div', { class: 'configkit-pb__card-list' } );
+		state.drafts.fabrics.forEach( ( fabric, i ) => list.appendChild( renderFabricCard( fabric, i ) ) );
+
+		const footer = el( 'div', { class: 'configkit-pb__row-actions' },
+			el( 'button', {
+				type: 'button',
+				class: 'button',
+				onClick: () => {
+					readFabricDraftFromDOM();
+					state.drafts.fabrics.push( blankFabric() );
+					render();
+				},
+			}, '+ Add fabric' ),
+			el( 'button', {
+				type: 'button',
+				class: 'button button-primary',
+				disabled: state.busy,
+				onClick: saveFabrics,
+			}, state.busy ? 'Saving…' : 'Save fabrics' )
+		);
+
+		const wrap = el( 'div' );
+		wrap.appendChild( list );
+		wrap.appendChild( footer );
+		return wrap;
+	}
+
+	function blankFabric() {
+		return { name: '', code: '', collection: '', color_family: '', price_group: '', extra_price: '', image_url: '', active: true };
+	}
+
+	function renderFabricCard( fabric, index ) {
+		const card = el( 'div', { class: 'configkit-pb__card', 'data-block-card': 'fabric' } );
+
+		const imageWrap = el( 'div', { class: 'configkit-pb__card-image' } );
+		if ( fabric.image_url ) {
+			imageWrap.appendChild( el( 'img', { src: fabric.image_url, alt: '' } ) );
+		} else {
+			imageWrap.appendChild( el( 'span', { class: 'configkit-pb__image-placeholder' }, '🖼' ) );
+		}
+		imageWrap.appendChild( el( 'button', {
+			type:    'button',
+			class:   'button button-small',
+			onClick: () => pickImageInto( fabric, 'image_url', () => render() ),
+		}, fabric.image_url ? 'Change image' : 'Set image' ) );
+		// Keep a hidden mirror of image_url so we read it back into the
+		// draft when the owner clicks Save / Add.
+		imageWrap.appendChild( el( 'input', {
+			type: 'hidden',
+			'data-pb-field': 'image_url',
+			value: fabric.image_url || '',
+		} ) );
+		card.appendChild( imageWrap );
+
+		const fields = el( 'div', { class: 'configkit-pb__card-fields' } );
+		fields.appendChild( labelled( 'Name',         inputField( 'Beige',   fabric.name,         { field: 'name' } ) ) );
+		fields.appendChild( labelled( 'Code (SKU)',   inputField( 'U171',    fabric.code,         { field: 'code', cls: 'configkit-pb__input code' } ) ) );
+		fields.appendChild( labelled( 'Collection',   inputField( 'Orchestra', fabric.collection, { field: 'collection' } ) ) );
+		fields.appendChild( labelled( 'Color family', inputField( 'beige',   fabric.color_family, { field: 'color_family' } ) ) );
+		fields.appendChild( labelled( 'Price group',  inputField( 'I',       fabric.price_group,  { field: 'price_group', cls: 'configkit-pb__input code' } ) ) );
+		fields.appendChild( labelled( 'Extra price (kr)', inputField( '0', fabric.extra_price, { type: 'number', step: '0.01', field: 'extra_price' } ) ) );
+		card.appendChild( fields );
+
+		const meta = el( 'div', { class: 'configkit-pb__card-meta' } );
+		const activeLabel = el( 'label', null,
+			el( 'input', { type: 'checkbox', 'data-pb-field': 'active', checked: !! fabric.active } ),
+			' Active'
+		);
+		meta.appendChild( activeLabel );
+		meta.appendChild( el( 'button', {
+			type: 'button',
+			class: 'button-link configkit-pb__card-remove',
+			onClick: () => {
+				readFabricDraftFromDOM();
+				state.drafts.fabrics.splice( index, 1 );
+				if ( state.drafts.fabrics.length === 0 ) state.drafts.fabrics.push( blankFabric() );
+				render();
+			},
+		}, 'Delete' ) );
+		card.appendChild( meta );
+		return card;
+	}
+
+	function labelled( label, child ) {
+		return el( 'label', { class: 'configkit-pb__field' },
+			el( 'span', { class: 'configkit-pb__field-label' }, label ),
+			child
+		);
+	}
+
+	function readFabricDraftFromDOM() {
+		const cards = root.querySelectorAll( '[data-block-card="fabric"]' );
+		const out = [];
+		cards.forEach( ( card ) => {
+			out.push( {
+				name:         readStringFromCell( card, 'name' ),
+				code:         readStringFromCell( card, 'code' ),
+				collection:   readStringFromCell( card, 'collection' ),
+				color_family: readStringFromCell( card, 'color_family' ),
+				price_group:  readStringFromCell( card, 'price_group' ),
+				extra_price:  readNumberFromCell( card, 'extra_price' ),
+				image_url:    readStringFromCell( card, 'image_url' ),
+				active:       readCheckedFromCell( card, 'active' ),
+			} );
+		} );
+		state.drafts.fabrics = out;
+	}
+
+	async function saveFabrics() {
+		readFabricDraftFromDOM();
+		const fabrics = ( state.drafts.fabrics || [] ).filter( ( f ) => ( f.name || '' ).trim() !== '' );
+		try {
+			const result = await pbRequest( '/fabrics', {
+				method: 'POST',
+				body: { fabrics },
+			} );
+			showMessage( 'success', ( result && result.message ) || 'Fabrics saved.' );
+			state.drafts.fabrics = null;
+			await loadSnapshot();
+			render();
+		} catch ( err ) {
+			showMessage( 'error', explainError( err ) );
+			render();
+		}
+	}
+
+	function renderFabricsExcel() {
+		const wrap = el( 'div', { class: 'configkit-pb__excel' } );
+		const libKey = state.snapshot.state.fabric_library_key;
+		if ( ! libKey ) {
+			wrap.appendChild( el(
+				'p',
+				{ class: 'description' },
+				'Save at least one fabric manually first — that creates the underlying library the import targets.'
+			) );
+			return wrap;
+		}
+		wrap.appendChild( el( 'p', { class: 'description' },
+			'Required headers: name, code. Optional: collection, color_family, price_group, image_url, fabric_code, material, transparency.'
+		) );
+		wrap.appendChild( dropZone( {
+			placeholder: 'Drop a fabric .xlsx — Format C with library_key, item_key, label.',
+			helperText:  'The file replaces every fabric in this product\'s library.',
+			onPick:      ( file ) => uploadImportFile( file, 'library_items', libKey ),
+		} ) );
+		return wrap;
+	}
+
+	// =========================================================
+	// Image picker — wp.media bridge
+	// =========================================================
+
+	function pickImageInto( target, key, onChange ) {
+		if ( ! window.wp || ! window.wp.media ) {
+			showMessage( 'error', 'WordPress media library is not available on this screen.' );
+			return;
+		}
+		const frame = window.wp.media( {
+			title:  'Pick image',
+			button: { text: 'Use image' },
+			multiple: false,
+		} );
+		frame.on( 'select', () => {
+			const attachment = frame.state().get( 'selection' ).first().toJSON();
+			target[ key ] = attachment.url || '';
+			if ( typeof onChange === 'function' ) onChange();
+		} );
+		frame.open();
+	}
+
+	// =========================================================
 	// Render — main loop
 	// =========================================================
 
@@ -305,13 +832,11 @@
 
 		root.appendChild( renderBlockProductType() );
 
-		// Subsequent blocks land in chunks 3-6.
 		const recipe = currentRecipe();
-		if ( recipe ) {
-			root.appendChild( el( 'p', { class: 'description configkit-pb__block-stub' },
-				'Pricing, fabrics, and the rest of the blocks land in subsequent chunks. The orchestrator backend is ready to receive them.'
-			) );
-		}
+		if ( ! recipe ) return;
+
+		if ( recipe.blocks.indexOf( 'pricing' ) >= 0 ) root.appendChild( renderBlockPricing() );
+		if ( recipe.blocks.indexOf( 'fabrics' ) >= 0 ) root.appendChild( renderBlockFabrics() );
 	}
 
 	function currentRecipe() {
