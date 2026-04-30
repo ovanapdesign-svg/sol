@@ -58,6 +58,10 @@
 		valueCache:   {},   // sectionId → list<{value, label}> for visibility dropdowns
 		diagnostics:  null, // { summary, byId, sections } — populated lazily / after each save
 		showDiagnostics: false,
+		// Phase 4.3b half B — preset / setup-source state.
+		setupSource:  { setup_source: 'start_blank', preset_id: 0, source_product_id: 0, preset: null },
+		sourceModal:  null, // { kind: 'save'|'apply'|'copy'|'link'|'detach', payload }
+		presets:      null, // [{id, name, preset_key, product_type}] — lazy
 		// drag-drop bookkeeping
 		dragId:       null,
 	};
@@ -128,6 +132,15 @@
 		try {
 			const data = await window.ConfigKit.request( '/configurator/' + productId + '/sections' );
 			state.sections = ( data && data.sections ) || [];
+			// Phase 4.3b half B — pick up setup_source metadata the
+			// resolver attaches so the source panel renders correctly
+			// without a separate round-trip on every reload.
+			state.setupSource = {
+				setup_source:      ( data && data.setup_source )      || 'start_blank',
+				preset_id:         ( data && data.preset_id )         || 0,
+				source_product_id: ( data && data.source_product_id ) || 0,
+				preset:            ( data && data.preset )            || null,
+			};
 		} catch ( err ) {
 			state.sections = [];
 			showMessage( 'error', explainError( err ) );
@@ -216,6 +229,146 @@
 		if ( ! state.message ) return null;
 		const cls = 'notice ' + ( state.message.kind === 'success' ? 'notice-success' : 'notice-error' ) + ' inline configkit-notice';
 		return el( 'div', { class: cls }, el( 'p', null, state.message.text ) );
+	}
+
+	// =========================================================
+	// Phase 4.3b half B — Configurator source panel.
+	//
+	// Sits above the section list, surfaces the current setup_source
+	// mode + the action set the owner has available in that mode,
+	// and triggers the action modals (saveAsPreset, applyPreset,
+	// copyFromProduct, linkToSetup, detachFromPreset).
+	// =========================================================
+
+	function renderSourcePanel() {
+		const ss   = state.setupSource || { setup_source: 'start_blank' };
+		const mode = ss.setup_source || 'start_blank';
+		const wrap = el( 'div', { class: 'configkit-cb__source-panel configkit-cb__source-panel--' + mode } );
+
+		const title = el( 'div', { class: 'configkit-cb__source-title' } );
+		switch ( mode ) {
+			case 'use_preset':
+				title.appendChild( el( 'span', { class: 'configkit-cb__source-icon' }, '🔗' ) );
+				title.appendChild( el( 'strong', null, 'Using preset: ' + ( ss.preset && ss.preset.name ? ss.preset.name : '#' + ss.preset_id ) ) );
+				break;
+			case 'link_to_setup':
+				title.appendChild( el( 'span', { class: 'configkit-cb__source-icon' }, '🔗' ) );
+				title.appendChild( el( 'strong', null, 'Linked to product #' + ss.source_product_id ) );
+				break;
+			case 'start_blank':
+			default:
+				title.appendChild( el( 'span', { class: 'configkit-cb__source-icon' }, '📍' ) );
+				title.appendChild( el( 'strong', null, 'This product has its own configurator (not shared)' ) );
+		}
+		wrap.appendChild( title );
+
+		const sub = sourceSubText( mode );
+		if ( sub ) wrap.appendChild( el( 'p', { class: 'description configkit-cb__source-sub' }, sub ) );
+
+		wrap.appendChild( renderSourceActions( mode ) );
+		return wrap;
+	}
+
+	function sourceSubText( mode ) {
+		switch ( mode ) {
+			case 'use_preset':
+				return 'Updates to the preset will affect this product, except where you’ve added overrides.';
+			case 'link_to_setup':
+				return 'Both products share the same configuration. Changes here affect both.';
+			case 'start_blank':
+			default:
+				return null;
+		}
+	}
+
+	function renderSourceActions( mode ) {
+		const actions = el( 'div', { class: 'configkit-cb__source-actions' } );
+		const hasSections = state.sections && state.sections.length > 0;
+
+		if ( mode === 'start_blank' ) {
+			actions.appendChild( actionButton( '💾 Save as preset', 'save', { disabled: ! hasSections } ) );
+			actions.appendChild( actionButton( '📋 Copy from product', 'copy' ) );
+			actions.appendChild( actionButton( '📐 Use preset', 'apply' ) );
+		} else if ( mode === 'use_preset' ) {
+			actions.appendChild( actionButton( '🔓 Detach from preset', 'detach' ) );
+			actions.appendChild( actionButton( '📐 Switch preset', 'apply' ) );
+			if ( state.setupSource && state.setupSource.preset_id ) {
+				actions.appendChild( actionButton( '👁 Products using this preset', 'products-using', {
+					meta: { preset_id: state.setupSource.preset_id },
+				} ) );
+			}
+		} else if ( mode === 'link_to_setup' ) {
+			actions.appendChild( actionButton( '🔓 Unlink (make local copy)', 'detach' ) );
+		}
+		return actions;
+	}
+
+	function actionButton( label, kind, opts ) {
+		opts = opts || {};
+		return el( 'button', {
+			type: 'button',
+			class: 'button configkit-cb__source-action' + ( kind === 'detach' ? ' configkit-cb__source-action--warn' : '' ),
+			disabled: !! opts.disabled,
+			onClick: () => openSourceModal( kind, opts.meta || null ),
+		}, label );
+	}
+
+	// Modal scaffolding lives here; per-action body / submit logic
+	// lands in the next chunk (action modals + form fields).
+	function openSourceModal( kind, meta ) {
+		state.sourceModal = { kind, meta: meta || null, busy: false, message: null };
+		render();
+	}
+
+	function closeSourceModal() {
+		state.sourceModal = null;
+		render();
+	}
+
+	function renderSourceModal() {
+		if ( ! state.sourceModal ) return null;
+		const overlay = el( 'div', {
+			class: 'configkit-cb__modal-overlay',
+			onClick: ( ev ) => { if ( ev.target === overlay ) closeSourceModal(); },
+		} );
+		const modal = el( 'div', { class: 'configkit-cb__modal configkit-cb__modal--source', role: 'dialog' } );
+
+		modal.appendChild( el( 'div', { class: 'configkit-cb__modal-header' },
+			el( 'div', { class: 'configkit-cb__modal-title' },
+				el( 'h3', null, sourceModalTitle( state.sourceModal.kind ) )
+			),
+			el( 'span', null, '' ),
+			el( 'button', {
+				type: 'button',
+				class: 'configkit-cb__modal-close',
+				'aria-label': 'Close',
+				onClick: closeSourceModal,
+			}, '✕' )
+		) );
+
+		modal.appendChild( el( 'div', { class: 'configkit-cb__modal-body' },
+			el( 'p', { class: 'description' },
+				'The action modal body lands in the next chunk. Confirm to proceed.'
+			)
+		) );
+
+		modal.appendChild( el( 'div', { class: 'configkit-cb__modal-footer' },
+			el( 'button', { type: 'button', class: 'button', onClick: closeSourceModal }, 'Cancel' )
+		) );
+		overlay.appendChild( modal );
+		return overlay;
+	}
+
+	function sourceModalTitle( kind ) {
+		switch ( kind ) {
+			case 'save':           return 'Save current setup as preset';
+			case 'apply':          return 'Use a preset';
+			case 'copy':           return 'Copy from another product';
+			case 'link':           return 'Link to another product';
+			case 'detach':         return 'Detach from source';
+			case 'products-using': return 'Products using this preset';
+			default:               return 'Configurator source';
+		}
 	}
 
 	// =========================================================
@@ -2085,6 +2238,7 @@
 		}
 		const banner = messageBanner();
 		if ( banner ) root.appendChild( banner );
+		root.appendChild( renderSourcePanel() );
 		root.appendChild( renderSectionList() );
 
 		const modal = renderModal();
@@ -2095,6 +2249,9 @@
 
 		const diag = renderDiagnosticsOverlay();
 		if ( diag ) root.appendChild( diag );
+
+		const source = renderSourceModal();
+		if ( source ) root.appendChild( source );
 	}
 
 	init();

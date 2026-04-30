@@ -4055,6 +4055,55 @@
 	color: #b32d2e;
 }
 
+/* Phase 4.3b half B — Configurator source panel. */
+.configkit-cb__source-panel {
+	border: 1px solid #dcdcde;
+	border-left: 4px solid #2271b1;
+	border-radius: 6px;
+	padding: 12px 14px;
+	background: #f6f9fc;
+	margin: 10px 0 14px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.configkit-cb__source-panel--use_preset    { border-left-color: #1e6f9c; background: #eef5fb; }
+.configkit-cb__source-panel--link_to_setup { border-left-color: #6c4ed1; background: #f0ecfa; }
+.configkit-cb__source-panel--start_blank   { border-left-color: #50575e; background: #f6f7f7; }
+
+.configkit-cb__source-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 14px;
+}
+
+.configkit-cb__source-icon {
+	font-size: 16px;
+}
+
+.configkit-cb__source-sub {
+	margin: 0;
+	font-size: 12px;
+	color: #50575e;
+}
+
+.configkit-cb__source-actions {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.configkit-cb__source-action--warn {
+	border-color: #f0b6b3;
+	color: #b32d2e;
+}
+
+.configkit-cb__modal--source {
+	max-width: 560px;
+}
+
 /* Phase 4.3 — Product Builder auto-managed badge in admin lists. */
 .configkit-auto-managed-badge {
 	display: inline-flex;
