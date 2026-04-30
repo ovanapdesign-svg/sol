@@ -622,3 +622,132 @@ together:
 - [ ] Cart integration picks up bundle components per
   `cart_behavior` and emits stock decrements per `stock_behavior`.
 - [ ] Order admin honours `admin_order_display`.
+
+---
+
+## 21. Per-item price override UI
+
+The §18 storage model lays down WHERE overrides live; this section
+locks HOW they appear in the Woo product ConfigKit tab. Every
+field, label, and copy decision MUST cite
+`UI_LABELS_MAPPING.md §8` and `§9.3` (the "Test default
+configuration price" preview).
+
+### 21.1 Section placement and copy
+
+Section title: **"Item price overrides for this product"**. Sits
+between §8 (Pricing overrides) and §9 (Visibility / locking) in
+the binding admin scroll order. The technical key
+`_configkit_item_price_overrides` never appears as a label.
+
+### 21.2 Editor layout
+
+The editor is a table with five columns. Owner sees three numbers
+per row (original / override / resolved) — never enums:
+
+| Column            | Label                                    | Notes                                                                                  |
+| ----------------- | ---------------------------------------- | -------------------------------------------------------------------------------------- |
+| Item              | "Item"                                   | Library item display label + small `↗` link to the item's edit screen (Phase 4.1).    |
+| Original price    | "Original price"                         | Read-only. Resolved per the library item's own `price_source`.                         |
+| Override price    | "Override price (kr)"                    | Editable numeric input. Empty → no override.                                           |
+| Resolved final    | "Customer sees"                          | Read-only. Override (if set) → otherwise Original. Updated live as owner edits.       |
+| Note              | "Reason / note (internal)"               | Optional free-text. Not shown to customers; surfaced in Diagnostics.                   |
+
+A "**+ Add price override**" button below the table launches an
+inline picker: a searchable dropdown of every library item
+reachable from the bound template's `allowed_sources` (PRODUCT_BINDING
+§6 + §19). The picker shows the item label as the primary string;
+the technical key `library_key:item_key` is a faint helper next to
+the label so the owner can disambiguate items that share a display
+label.
+
+### 21.3 Removing an override
+
+When the owner clears the **Override price** cell on a row and
+saves the binding, that row is **removed** from the
+`_configkit_item_price_overrides` JSON entirely (the row is not
+saved with `price = null`). The library item reverts to its own
+default `price_source` resolution.
+
+The "Action" / row-delete button (`×`) in the editor performs the
+same operation explicitly without requiring the owner to clear
+the cell.
+
+### 21.4 Bundle override semantics
+
+When the override targets a `bundle` library item (BUNDLE_MODEL §2)
+the editor still shows three numbers in the same shape, but the
+**Original price** column reflects the bundle's resolved value
+(per `bundle_sum` / `fixed_bundle`) and the resolved column flows
+into the cart line as documented in PRODUCT_BINDING §18.3:
+
+- `cart_behavior = 'price_inside_main'` → the override is the
+  whole bundle's new fixed cart contribution; per-component
+  prices remain visible in §9.2's preview for stock and order
+  display.
+- `cart_behavior = 'add_child_lines'` → the override wins the
+  configurable product's cart line; child component lines bill at
+  their own resolved prices, with the BUNDLE_MODEL §10 decision 2
+  proportional reconciliation applied.
+
+### 21.5 Test default configuration price
+
+A read-only "**Test default configuration price**" preview sits
+beneath the override table per `UI_LABELS_MAPPING.md §9.3`:
+
+> "With current defaults, customer sees: **8 990 kr**" \[Recalculate\]
+
+The button re-runs the resolver against the binding's saved
+defaults + the in-memory override edits. It does NOT save anything
+— it's a sanity-check tool. Owner still has to click "Save
+binding" to persist override changes.
+
+### 21.6 Diagnostics integration
+
+Two diagnostic checks land alongside this UI in Phase 4.2b
+(PRODUCT_BINDING §18.4):
+
+- `item_overrides_valid` (critical) — every key in
+  `_configkit_item_price_overrides` resolves to a real, active
+  library item that is reachable from the bound template's
+  `allowed_sources`. Stale overrides for deleted items are
+  flagged with a precise `fix_link` to this section.
+- `item_overrides_disallowed` (warning) — overrides exist for
+  items the binding's `allowed_sources` filter would otherwise
+  exclude (PRODUCT_BINDING §19). The override still applies, but
+  Diagnostics flags the drift so the owner can clear or
+  re-allow.
+
+---
+
+## 22. Future enhancement — Apply to similar products
+
+Out of scope for Phase 4.2b. Documented here so the data model
+leaves room for it.
+
+A "**Copy overrides to other products**" action will live in the
+same Woo product ConfigKit tab once Phase 4.2b ships and owners
+have real overrides to manage. The UX:
+
+1. Owner clicks the action while on product A's binding.
+2. A modal lists candidate products (filtered by family, by
+   bound template, or by free search) with checkboxes.
+3. On confirm, ConfigKit writes the same
+   `_configkit_item_price_overrides` JSON to each selected
+   product's post meta, preserving any per-product reasons.
+4. A diff preview before write shows owners which products will
+   gain / overwrite / merge override entries.
+
+This is achievable without schema changes — `_configkit_item_price_overrides`
+is per-product post meta and a bulk-apply utility is just a loop
+over `update_post_meta`. The constraint is UX, not data model:
+the modal needs careful empty-state copy ("no products eligible")
+and a clear undo / audit trail.
+
+Acceptance:
+
+- Phase 4.2b ships with the per-product editor only.
+- The bulk-apply enhancement gets its own chunk after the editor
+  has lived with real owners for at least one production cycle.
+- This section gets re-opened then with a concrete UX sketch and
+  a deliverables checklist.
