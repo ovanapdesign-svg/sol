@@ -106,6 +106,13 @@ final class AssetLoader {
 			'configkit-diagnostics',
 			'assets/admin/js/diagnostics.js'
 		);
+
+		$this->maybe_enqueue_page_script(
+			$hook_suffix,
+			'configkit-imports',
+			'configkit-imports',
+			'assets/admin/js/import-wizard.js'
+		);
 	}
 
 	private function is_product_edit_screen( string $hook_suffix ): bool {

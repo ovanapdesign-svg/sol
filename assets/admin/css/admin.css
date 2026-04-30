@@ -1669,3 +1669,149 @@
 	align-items: center;
 	gap: 4px;
 }
+
+/* ============================================================
+   Phase 4 — Import wizard
+   ============================================================ */
+
+.configkit-import-stepper {
+	list-style: none;
+	display: flex;
+	gap: 12px;
+	padding: 0;
+	margin: 0 0 20px;
+	flex-wrap: wrap;
+}
+
+.configkit-import-stepper__step {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 14px;
+	border-radius: 4px;
+	font-size: 13px;
+	background: #f0f0f1;
+	color: #50575e;
+}
+
+.configkit-import-stepper__step--current {
+	background: #2271b1;
+	color: #fff;
+	font-weight: 600;
+}
+
+.configkit-import-stepper__step--done {
+	background: #d8eedb;
+	color: #1e6e3a;
+}
+
+.configkit-import-stepper__num {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	background: rgba( 255, 255, 255, 0.3 );
+	font-weight: 700;
+	font-size: 12px;
+}
+
+.configkit-import-stepper__step--pending .configkit-import-stepper__num {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+}
+
+.configkit-import-stepper__step--done .configkit-import-stepper__num {
+	background: #2e8b57;
+	color: #fff;
+}
+
+.configkit-import-step {
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	padding: 16px 20px;
+	margin: 0 0 16px;
+}
+
+.configkit-import-step__field-label {
+	margin: 12px 0 4px;
+	font-weight: 600;
+}
+
+.configkit-radio-group {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 4px 0 12px;
+}
+
+/* Drop zone */
+
+.configkit-dropzone {
+	position: relative;
+	border: 2px dashed #c3c4c7;
+	border-radius: 6px;
+	padding: 32px 16px;
+	text-align: center;
+	background: #fafafa;
+	cursor: pointer;
+	transition: border-color 0.15s, background 0.15s;
+}
+
+.configkit-dropzone:hover,
+.configkit-dropzone--hover {
+	border-color: #2271b1;
+	background: #f0f6fc;
+}
+
+.configkit-dropzone__input {
+	position: absolute;
+	left: -9999px;
+	opacity: 0;
+	width: 1px;
+	height: 1px;
+}
+
+/* Preview summary */
+
+.configkit-import-summary,
+.configkit-import-stats,
+.configkit-import-actions {
+	list-style: none;
+	margin: 6px 0 12px;
+	padding: 0;
+}
+
+.configkit-import-summary li,
+.configkit-import-stats li,
+.configkit-import-actions li {
+	padding: 2px 0;
+	font-size: 13px;
+}
+
+.configkit-import-summary__row--warn { color: #614500; }
+.configkit-import-summary__row--err  { color: #b32d2e; }
+
+.configkit-import-rows {
+	margin: 12px 0;
+}
+
+.configkit-row-status {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 2px;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.configkit-row-status--green  { background: #d8eedb; color: #1e6e3a; }
+.configkit-row-status--yellow { background: #fcf9e8; color: #614500; }
+.configkit-row-status--red    { background: #fdf0f0; color: #b32d2e; }
+
+.configkit-import-recent {
+	margin-top: 24px;
+}

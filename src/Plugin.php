@@ -12,6 +12,7 @@ use ConfigKit\Admin\Pages\AbstractPage;
 use ConfigKit\Admin\Pages\DashboardPage;
 use ConfigKit\Admin\Pages\DiagnosticsPage;
 use ConfigKit\Admin\Pages\FamiliesPage;
+use ConfigKit\Admin\Pages\ImportsPage;
 use ConfigKit\Admin\Pages\LibrariesPage;
 use ConfigKit\Admin\Pages\LookupTablesPage;
 use ConfigKit\Admin\Pages\ModulesPage;
@@ -148,6 +149,7 @@ final class Plugin {
 			new TemplatesPage(),
 			new ProductsPage(),
 			new DiagnosticsPage(),
+			new ImportsPage(),
 		];
 	}
 

@@ -1,0 +1,593 @@
+/* global ConfigKit */
+( function () {
+	'use strict';
+
+	const root = document.getElementById( 'configkit-imports-app' );
+	if ( ! root ) return;
+
+	// State machine for the wizard.
+	const state = {
+		step: 1,            // 1 = pick / 2 = upload / 3 = preview / 4 = result
+		view: 'wizard',     // 'wizard' | 'list' | 'detail'
+		busy: false,
+		message: null,
+
+		// Step 1 inputs
+		importType: 'lookup_cells',
+		targetTableKey: '',
+		mode: 'insert_update',
+		lookupTables: [],
+
+		// Upload state
+		fileName: null,
+		fileSize: null,
+
+		// Step 3+
+		batch: null,         // full record from /imports/{id}
+		commitSummary: null, // { inserted, updated, skipped }
+
+		// Recent imports list
+		list: { items: [] },
+	};
+
+	function el( tag, attrs, ...children ) {
+		const node = document.createElement( tag );
+		if ( attrs ) {
+			Object.keys( attrs ).forEach( ( key ) => {
+				const v = attrs[ key ];
+				if ( v === false || v === null || v === undefined ) return;
+				if ( key === 'class' ) node.className = v;
+				else if ( key === 'html' ) node.innerHTML = v;
+				else if ( key.startsWith( 'on' ) && typeof v === 'function' ) node.addEventListener( key.slice( 2 ).toLowerCase(), v );
+				else if ( key in node && typeof v === 'boolean' ) node[ key ] = v;
+				else node.setAttribute( key, String( v ) );
+			} );
+		}
+		children.flat().forEach( ( c ) => {
+			if ( c === null || c === undefined || c === false ) return;
+			node.appendChild( typeof c === 'string' ? document.createTextNode( c ) : c );
+		} );
+		return node;
+	}
+
+	function showError( err ) {
+		let desc;
+		try {
+			desc = window.ConfigKit && window.ConfigKit.describeError
+				? window.ConfigKit.describeError( err )
+				: null;
+		} catch ( e ) { desc = null; }
+		if ( ! desc ) {
+			desc = {
+				kind: 'error',
+				friendly: ( err && err.message ) || 'Something went wrong.',
+				technical: ( err && err.message ) || '',
+			};
+		}
+		state.message = { kind: desc.kind, text: desc.friendly, technical: desc.technical };
+	}
+
+	function clearMessage() { state.message = null; }
+
+	async function loadLookupTables() {
+		try {
+			const data = await ConfigKit.request( '/lookup-tables?per_page=200' );
+			state.lookupTables = ( data.items || [] ).filter( ( t ) => t.is_active );
+		} catch ( e ) { state.lookupTables = []; }
+	}
+
+	async function loadList() {
+		try {
+			const data = await ConfigKit.request( '/imports?per_page=20' );
+			state.list = data;
+		} catch ( e ) { state.list = { items: [] }; }
+	}
+
+	async function init() {
+		state.view = 'wizard';
+		state.step = 1;
+		await Promise.all( [ loadLookupTables(), loadList() ] );
+		render();
+	}
+
+	// ---- Actions ----
+
+	async function uploadFile( file ) {
+		if ( state.busy ) return;
+		if ( ! file ) {
+			showError( { message: 'Pick a file first.' } );
+			render();
+			return;
+		}
+		if ( ! /\.xlsx$/i.test( file.name ) ) {
+			showError( { message: 'Only .xlsx files are supported in this chunk.' } );
+			render();
+			return;
+		}
+		if ( file.size > 10 * 1024 * 1024 ) {
+			showError( { message: 'File exceeds the 10 MB limit.' } );
+			render();
+			return;
+		}
+
+		state.busy = true;
+		state.message = null;
+		state.fileName = file.name;
+		state.fileSize = file.size;
+		render();
+
+		const form = new FormData();
+		form.append( 'file', file );
+		form.append( 'import_type', state.importType );
+		form.append( 'target_lookup_table_key', state.targetTableKey );
+		form.append( 'mode', state.mode );
+
+		try {
+			const url = window.CONFIGKIT.restUrl + '/imports';
+			const res = await fetch( url, {
+				method: 'POST',
+				credentials: 'same-origin',
+				headers: { 'X-WP-Nonce': window.CONFIGKIT.nonce },
+				body: form,
+			} );
+			let payload = null;
+			try { payload = await res.json(); } catch ( e ) { payload = null; }
+			if ( ! res.ok ) {
+				const e = new Error( payload && payload.message ? payload.message : res.statusText );
+				e.code = payload && payload.code ? payload.code : 'http_' + res.status;
+				e.status = res.status;
+				e.data = payload && payload.data ? payload.data : null;
+				throw e;
+			}
+			state.batch = payload && payload.record ? payload.record : null;
+			state.step = 3;
+		} catch ( err ) {
+			showError( err );
+		} finally {
+			state.busy = false;
+		}
+		render();
+	}
+
+	async function commit() {
+		if ( state.busy || ! state.batch ) return;
+		if ( state.mode === 'replace_all' ) {
+			const ok = window.confirm(
+				'Replace all mode will DELETE every existing cell in this lookup table before inserting the new ones. This cannot be undone.\n\nProceed?'
+			);
+			if ( ! ok ) return;
+		}
+		state.busy = true;
+		state.message = null;
+		render();
+		try {
+			const res = await ConfigKit.request( '/imports/' + state.batch.id + '/commit', {
+				method: 'POST',
+				body: {},
+			} );
+			state.batch = res.record || state.batch;
+			state.commitSummary = res.summary || null;
+			state.step = 4;
+		} catch ( err ) {
+			showError( err );
+		} finally {
+			state.busy = false;
+		}
+		render();
+	}
+
+	async function cancel() {
+		if ( ! state.batch ) {
+			resetWizard();
+			return;
+		}
+		state.busy = true;
+		render();
+		try {
+			await ConfigKit.request( '/imports/' + state.batch.id + '/cancel', {
+				method: 'POST',
+				body: {},
+			} );
+		} catch ( e ) { /* swallow — user is leaving anyway */ }
+		state.busy = false;
+		resetWizard();
+	}
+
+	function resetWizard() {
+		state.step = 1;
+		state.batch = null;
+		state.commitSummary = null;
+		state.fileName = null;
+		state.fileSize = null;
+		state.message = null;
+		render();
+		loadList().then( render );
+	}
+
+	// ---- Rendering ----
+
+	function render() {
+		root.dataset.loading = 'false';
+		root.replaceChildren();
+
+		root.appendChild( renderStepper() );
+		if ( state.message ) root.appendChild( messageBanner( state.message ) );
+
+		if ( state.step === 1 ) root.appendChild( renderStep1() );
+		else if ( state.step === 2 ) root.appendChild( renderStep2() );
+		else if ( state.step === 3 ) root.appendChild( renderStep3() );
+		else if ( state.step === 4 ) root.appendChild( renderStep4() );
+
+		root.appendChild( renderRecentBatches() );
+	}
+
+	function messageBanner( m ) {
+		const cls = 'notice ' + (
+			m.kind === 'success' ? 'notice-success'
+				: m.kind === 'conflict' ? 'notice-warning'
+				: 'notice-error'
+		) + ' inline configkit-notice';
+		const wrap = el( 'div', { class: cls } );
+		wrap.appendChild( el( 'p', null, m.text ) );
+		if ( m.technical ) {
+			const details = el( 'details', { class: 'configkit-error-details' } );
+			details.appendChild( el( 'summary', null, 'Show technical details' ) );
+			details.appendChild( el( 'pre', null, m.technical ) );
+			wrap.appendChild( details );
+		}
+		return wrap;
+	}
+
+	function renderStepper() {
+		const steps = [
+			{ n: 1, label: 'Pick destination' },
+			{ n: 2, label: 'Upload file' },
+			{ n: 3, label: 'Preview' },
+			{ n: 4, label: 'Result' },
+		];
+		const nav = el( 'ol', { class: 'configkit-import-stepper' } );
+		steps.forEach( ( s ) => {
+			const cls = 'configkit-import-stepper__step '
+				+ ( state.step === s.n
+					? 'configkit-import-stepper__step--current'
+					: ( state.step > s.n
+						? 'configkit-import-stepper__step--done'
+						: 'configkit-import-stepper__step--pending' ) );
+			nav.appendChild( el(
+				'li',
+				{ class: cls },
+				el( 'span', { class: 'configkit-import-stepper__num' }, String( s.n ) ),
+				el( 'span', { class: 'configkit-import-stepper__label' }, s.label )
+			) );
+		} );
+		return nav;
+	}
+
+	function renderStep1() {
+		const wrap = el( 'section', { class: 'configkit-import-step' } );
+		wrap.appendChild( el( 'h3', null, 'Step 1 — Pick destination' ) );
+
+		// Import what?
+		wrap.appendChild( el( 'p', { class: 'configkit-import-step__field-label' }, 'Import what?' ) );
+		wrap.appendChild( radio(
+			'import_type',
+			[ { value: 'lookup_cells', label: 'Lookup table cells' } ],
+			state.importType,
+			( v ) => { state.importType = v; render(); }
+		) );
+
+		// Target lookup table
+		wrap.appendChild( el( 'p', { class: 'configkit-import-step__field-label' }, 'Target lookup table' ) );
+		const select = el( 'select', {
+			id: 'cf_target_table',
+			onChange: ( ev ) => { state.targetTableKey = ev.target.value; render(); },
+		} );
+		select.appendChild( el( 'option', { value: '' }, '— Select a lookup table —' ) );
+		state.lookupTables.forEach( ( t ) => {
+			const o = el( 'option', { value: t.lookup_table_key }, t.name + ' (' + t.lookup_table_key + ')' );
+			if ( t.lookup_table_key === state.targetTableKey ) o.selected = true;
+			select.appendChild( o );
+		} );
+		wrap.appendChild( select );
+		if ( state.lookupTables.length === 0 ) {
+			wrap.appendChild( el(
+				'p',
+				{ class: 'description' },
+				'No active lookup tables yet. Create one first in ConfigKit → Lookup Tables.'
+			) );
+		}
+
+		// Mode
+		wrap.appendChild( el( 'p', { class: 'configkit-import-step__field-label' }, 'Mode' ) );
+		wrap.appendChild( radio(
+			'import_mode',
+			[
+				{ value: 'insert_update', label: 'Insert / update only (default — keeps existing cells)' },
+				{ value: 'replace_all',   label: 'Replace all (delete every cell in this table first, then insert)' },
+			],
+			state.mode,
+			( v ) => { state.mode = v; render(); }
+		) );
+		if ( state.mode === 'replace_all' ) {
+			wrap.appendChild( el(
+				'p',
+				{ class: 'configkit-soft-warnings' },
+				el( 'span', null, 'Replace-all mode will DELETE every existing cell in the target table before inserting. You will be asked to confirm before commit.' )
+			) );
+		}
+
+		// Continue
+		wrap.appendChild( el(
+			'div',
+			{ class: 'configkit-form__footer' },
+			el( 'button', {
+				type: 'button',
+				class: 'button button-primary',
+				disabled: state.targetTableKey === '',
+				onClick: () => { state.step = 2; render(); },
+			}, 'Continue' )
+		) );
+
+		return wrap;
+	}
+
+	function renderStep2() {
+		const wrap = el( 'section', { class: 'configkit-import-step' } );
+		wrap.appendChild( el( 'h3', null, 'Step 2 — Upload file' ) );
+
+		wrap.appendChild( el(
+			'p',
+			{ class: 'description' },
+			'Target: ' + state.targetTableKey + ' · Mode: ' + state.mode
+		) );
+
+		const drop = el( 'div', { class: 'configkit-dropzone', tabindex: '0' } );
+		drop.appendChild( el( 'p', null, state.busy ? 'Uploading…' : 'Drop a .xlsx file here, or click to choose.' ) );
+		drop.appendChild( el( 'p', { class: 'description' }, 'Max 10 MB. .xlsx only.' ) );
+
+		const fileInput = el( 'input', {
+			type: 'file',
+			accept: '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+			class: 'configkit-dropzone__input',
+			onChange: ( ev ) => {
+				if ( ev.target.files && ev.target.files[ 0 ] ) uploadFile( ev.target.files[ 0 ] );
+			},
+		} );
+		drop.appendChild( fileInput );
+
+		drop.addEventListener( 'click', () => fileInput.click() );
+		drop.addEventListener( 'dragover', ( ev ) => {
+			ev.preventDefault();
+			drop.classList.add( 'configkit-dropzone--hover' );
+		} );
+		drop.addEventListener( 'dragleave', () => drop.classList.remove( 'configkit-dropzone--hover' ) );
+		drop.addEventListener( 'drop', ( ev ) => {
+			ev.preventDefault();
+			drop.classList.remove( 'configkit-dropzone--hover' );
+			if ( ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[ 0 ] ) {
+				uploadFile( ev.dataTransfer.files[ 0 ] );
+			}
+		} );
+
+		wrap.appendChild( drop );
+
+		if ( state.fileName ) {
+			wrap.appendChild( el(
+				'p',
+				{ class: 'description' },
+				'Selected: ' + state.fileName + ' (' + Math.round( ( state.fileSize || 0 ) / 1024 ) + ' KB)'
+			) );
+		}
+
+		wrap.appendChild( el(
+			'div',
+			{ class: 'configkit-form__footer' },
+			el( 'button', {
+				type: 'button',
+				class: 'button',
+				onClick: () => { state.step = 1; state.fileName = null; render(); },
+			}, '← Back' )
+		) );
+
+		return wrap;
+	}
+
+	function renderStep3() {
+		const wrap = el( 'section', { class: 'configkit-import-step' } );
+		wrap.appendChild( el( 'h3', null, 'Step 3 — Preview' ) );
+
+		const b = state.batch || {};
+		const summary = b.summary || {};
+		const counts  = b.counts || {};
+		const stats   = summary.stats || {};
+
+		wrap.appendChild( el(
+			'p',
+			null,
+			el( 'strong', null, 'Target: ' ),
+			state.targetTableKey,
+			' · ',
+			el( 'strong', null, 'Format: ' ),
+			summary.format === 'A' ? 'Grid (Format A)' : ( summary.format === 'B' ? 'Long (Format B)' : 'Unknown' )
+		) );
+
+		const summaryList = el( 'ul', { class: 'configkit-import-summary' } );
+		summaryList.appendChild( el( 'li', { class: 'configkit-import-summary__row' },
+			'✓ ', String( counts.green || 0 ), ' valid' ) );
+		summaryList.appendChild( el( 'li', { class: 'configkit-import-summary__row configkit-import-summary__row--warn' },
+			'⚠ ', String( counts.yellow || 0 ), ' warnings' ) );
+		summaryList.appendChild( el( 'li', { class: 'configkit-import-summary__row configkit-import-summary__row--err' },
+			'✗ ', String( counts.red || 0 ), ' errors' ) );
+		summaryList.appendChild( el( 'li', null,
+			'Total rows parsed: ', String( counts.total || 0 ) ) );
+		wrap.appendChild( summaryList );
+
+		// Stats block
+		const statsList = el( 'ul', { class: 'configkit-import-stats' } );
+		if ( stats.width_min != null ) {
+			statsList.appendChild( el( 'li', null, 'Width range: ' + stats.width_min + ' – ' + stats.width_max + ' mm' ) );
+		}
+		if ( stats.height_min != null ) {
+			statsList.appendChild( el( 'li', null, 'Height range: ' + stats.height_min + ' – ' + stats.height_max + ' mm' ) );
+		}
+		if ( stats.price_min != null ) {
+			statsList.appendChild( el( 'li', null, 'Price range: ' + stats.price_min + ' – ' + stats.price_max ) );
+		}
+		if ( Array.isArray( stats.price_groups ) && stats.price_groups.length > 0 ) {
+			statsList.appendChild( el( 'li', null, 'Price groups detected: ' + stats.price_groups.join( ', ' ) ) );
+		}
+		if ( statsList.children.length > 0 ) wrap.appendChild( statsList );
+
+		// Action on commit
+		const actionList = el( 'ul', { class: 'configkit-import-actions' } );
+		actionList.appendChild( el( 'li', null, 'Insert ' + ( counts.insert || 0 ) + ' new cells' ) );
+		actionList.appendChild( el( 'li', null, 'Update ' + ( counts.update || 0 ) + ' existing cells' ) );
+		actionList.appendChild( el( 'li', null, 'Skip ' + ( counts.skip || 0 ) + ' (errors or duplicates)' ) );
+		wrap.appendChild( el( 'h4', null, 'Action on commit' ) );
+		wrap.appendChild( actionList );
+
+		// Row-by-row details
+		wrap.appendChild( renderRowDetails( b ) );
+
+		const canCommit = ( counts.green || 0 ) + ( counts.yellow || 0 ) > 0
+			&& ( b.status === 'validated' );
+
+		wrap.appendChild( el(
+			'div',
+			{ class: 'configkit-form__footer' },
+			el( 'button', {
+				type: 'button',
+				class: 'button',
+				disabled: state.busy,
+				onClick: cancel,
+			}, 'Cancel import' ),
+			el( 'button', {
+				type: 'button',
+				class: 'button button-primary',
+				disabled: ! canCommit || state.busy,
+				onClick: commit,
+			}, state.busy ? 'Committing…' : 'Commit import' )
+		) );
+
+		return wrap;
+	}
+
+	function renderRowDetails( batch ) {
+		const rows = batch && batch.rows && Array.isArray( batch.rows.items ) ? batch.rows.items : [];
+		if ( rows.length === 0 ) return el( 'div' );
+		const wrap = el( 'details', { class: 'configkit-import-rows' } );
+		wrap.appendChild( el( 'summary', null, 'Show row details (' + rows.length + ' shown)' ) );
+		const tbl = el( 'table', { class: 'wp-list-table widefat striped' } );
+		const head = el( 'thead' );
+		head.appendChild( el( 'tr', null,
+			el( 'th', null, 'Row' ),
+			el( 'th', null, 'Status' ),
+			el( 'th', null, 'Action' ),
+			el( 'th', null, 'Width' ),
+			el( 'th', null, 'Height' ),
+			el( 'th', null, 'Price group' ),
+			el( 'th', null, 'Price' ),
+			el( 'th', null, 'Message' )
+		) );
+		tbl.appendChild( head );
+		const body = el( 'tbody' );
+		rows.forEach( ( r ) => {
+			const norm = r.normalized_data || {};
+			const sevClass = 'configkit-row-status configkit-row-status--' + r.severity;
+			body.appendChild( el( 'tr', null,
+				el( 'td', null, String( r.row_number ) ),
+				el( 'td', null, el( 'span', { class: sevClass }, r.severity ) ),
+				el( 'td', null, r.action ),
+				el( 'td', null, norm.width != null ? String( norm.width ) : '—' ),
+				el( 'td', null, norm.height != null ? String( norm.height ) : '—' ),
+				el( 'td', null, norm.price_group_key || '—' ),
+				el( 'td', null, norm.price != null ? String( norm.price ) : '—' ),
+				el( 'td', null, r.message || '' )
+			) );
+		} );
+		tbl.appendChild( body );
+		wrap.appendChild( tbl );
+		return wrap;
+	}
+
+	function renderStep4() {
+		const wrap = el( 'section', { class: 'configkit-import-step' } );
+		const s = state.commitSummary || {};
+		wrap.appendChild( el( 'h3', null, 'Step 4 — Imported' ) );
+		wrap.appendChild( el( 'p', null,
+			s.inserted + ' inserted, ' + s.updated + ' updated, ' + s.skipped + ' skipped.'
+		) );
+		const editUrl = ( window.location.pathname || '' ) + '?page=configkit-lookup-tables&action=edit';
+		wrap.appendChild( el(
+			'div',
+			{ class: 'configkit-form__footer' },
+			el( 'a', { href: editUrl, class: 'button' }, 'Open lookup table' ),
+			el( 'button', { type: 'button', class: 'button button-primary', onClick: resetWizard }, 'Import another file' )
+		) );
+		return wrap;
+	}
+
+	function renderRecentBatches() {
+		const items = state.list && state.list.items ? state.list.items : [];
+		const wrap = el( 'section', { class: 'configkit-import-recent' } );
+		wrap.appendChild( el( 'h3', null, 'Recent imports' ) );
+		if ( items.length === 0 ) {
+			wrap.appendChild( el( 'p', { class: 'description' }, 'No imports yet.' ) );
+			return wrap;
+		}
+		const tbl = el( 'table', { class: 'wp-list-table widefat striped' } );
+		const head = el( 'thead' );
+		head.appendChild( el( 'tr', null,
+			el( 'th', null, 'When' ),
+			el( 'th', null, 'File' ),
+			el( 'th', null, 'Type' ),
+			el( 'th', null, 'Status' )
+		) );
+		tbl.appendChild( head );
+		const body = el( 'tbody' );
+		items.forEach( ( b ) => {
+			body.appendChild( el( 'tr', null,
+				el( 'td', { 'data-label': 'When' }, b.created_at || '—' ),
+				el( 'td', { 'data-label': 'File' }, b.filename || '—' ),
+				el( 'td', { 'data-label': 'Type' }, b.import_type ),
+				el( 'td', { 'data-label': 'Status' },
+					el( 'span', { class: 'configkit-row-status configkit-row-status--' + statusToSeverity( b.status ) }, b.status )
+				)
+			) );
+		} );
+		tbl.appendChild( body );
+		wrap.appendChild( tbl );
+		return wrap;
+	}
+
+	function statusToSeverity( status ) {
+		if ( status === 'applied' ) return 'green';
+		if ( status === 'failed' ) return 'red';
+		if ( status === 'cancelled' ) return 'yellow';
+		return 'yellow';
+	}
+
+	function radio( name, choices, current, onChange ) {
+		const wrap = el( 'div', { class: 'configkit-radio-group' } );
+		choices.forEach( ( c ) => {
+			const id = 'cf_' + name + '_' + c.value;
+			wrap.appendChild( el(
+				'label',
+				{ for: id, class: 'configkit-checkbox' },
+				el( 'input', {
+					id: id,
+					type: 'radio',
+					name: name,
+					value: c.value,
+					checked: c.value === current,
+					onChange: ( ev ) => onChange( ev.target.value ),
+				} ),
+				' ',
+				c.label
+			) );
+		} );
+		return wrap;
+	}
+
+	init();
+} )();
