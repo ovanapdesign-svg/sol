@@ -7,6 +7,7 @@ declare(strict_types=1);
 namespace ConfigKit;
 
 use ConfigKit\Adapters\WooPriceProvider;
+use ConfigKit\Adapters\WooProductSearchProvider;
 use ConfigKit\Admin\AssetLoader;
 use ConfigKit\Admin\Menu;
 use ConfigKit\Admin\Pages\AbstractPage;
@@ -63,6 +64,7 @@ use ConfigKit\Rest\Controllers\RulesController;
 use ConfigKit\Rest\Controllers\StepsController;
 use ConfigKit\Rest\Controllers\TemplatesController;
 use ConfigKit\Rest\Controllers\TemplateVersionsController;
+use ConfigKit\Rest\Controllers\WooProductsController;
 use ConfigKit\Rest\Router;
 use ConfigKit\Service\FamilyService;
 use ConfigKit\Service\FieldOptionService;
@@ -326,6 +328,8 @@ final class Plugin {
 			$step_repo,
 			$field_repo
 		) );
+
+		$router->add( new WooProductsController( new WooProductSearchProvider() ) );
 		return $router;
 	}
 

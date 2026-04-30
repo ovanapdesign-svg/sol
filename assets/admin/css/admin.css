@@ -1951,3 +1951,149 @@
 .configkit-binding__edit-link-row .configkit-binding__edit-link {
 	font-size: 12px;
 }
+
+/* ================================================================
+ * Phase 4.2b.2 — Woo product picker
+ * Reusable autocomplete used by library item form, bundle composer,
+ * and product-binding override editor. Spec: UI_LABELS_MAPPING.md §4.
+ * ================================================================ */
+
+.configkit-woo-product-picker {
+	position: relative;
+	display: block;
+	width: 100%;
+	max-width: 480px;
+}
+
+.configkit-woo-product-picker__input {
+	width: 100%;
+	box-sizing: border-box;
+	padding: 6px 10px;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	font-size: 14px;
+	line-height: 1.4;
+}
+
+.configkit-woo-product-picker__input:focus {
+	border-color: #2271b1;
+	box-shadow: 0 0 0 1px #2271b1;
+	outline: none;
+}
+
+.configkit-woo-product-picker__chip {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 10px;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	background: #f6f7f7;
+	min-height: 32px;
+	box-sizing: border-box;
+}
+
+.configkit-woo-product-picker__chip-text {
+	flex: 1 1 auto;
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.configkit-woo-product-picker__thumb {
+	width: 28px;
+	height: 28px;
+	object-fit: cover;
+	border-radius: 3px;
+	background: #fff;
+	flex: 0 0 auto;
+}
+
+.configkit-woo-product-picker__thumb.is-empty {
+	display: inline-block;
+	background: #e0e0e0;
+}
+
+.configkit-woo-product-picker__name {
+	font-weight: 500;
+	color: #1d2327;
+}
+
+.configkit-woo-product-picker__sku {
+	color: #646970;
+	font-size: 12px;
+}
+
+.configkit-woo-product-picker__price {
+	color: #2271b1;
+	font-size: 12px;
+	white-space: nowrap;
+	margin-left: 8px;
+}
+
+.configkit-woo-product-picker__clear {
+	border: 0;
+	background: transparent;
+	color: #646970;
+	cursor: pointer;
+	font-size: 14px;
+	line-height: 1;
+	padding: 4px 6px;
+	border-radius: 3px;
+	flex: 0 0 auto;
+}
+
+.configkit-woo-product-picker__clear:hover,
+.configkit-woo-product-picker__clear:focus {
+	color: #d63638;
+	background: #fff;
+	outline: none;
+}
+
+.configkit-woo-product-picker__dropdown {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	right: 0;
+	z-index: 50;
+	margin-top: 2px;
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	box-shadow: 0 4px 14px rgba( 0, 0, 0, 0.08 );
+	max-height: 320px;
+	overflow-y: auto;
+}
+
+.configkit-woo-product-picker__option {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 10px;
+	cursor: pointer;
+	border-bottom: 1px solid #f0f0f1;
+}
+
+.configkit-woo-product-picker__option:last-child {
+	border-bottom: 0;
+}
+
+.configkit-woo-product-picker__option.is-highlighted,
+.configkit-woo-product-picker__option:hover {
+	background: #f0f6fc;
+}
+
+.configkit-woo-product-picker__option .configkit-woo-product-picker__meta {
+	flex: 1 1 auto;
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.configkit-woo-product-picker__error {
+	padding: 10px;
+	color: #b32d2e;
+	font-size: 13px;
+}

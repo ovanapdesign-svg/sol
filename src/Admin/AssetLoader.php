@@ -47,11 +47,21 @@ final class AssetLoader {
 
 		\wp_enqueue_script( 'configkit-admin' );
 
+		// Phase 4.2b.2 — shared Woo product picker module. Registered
+		// always, enqueued only on screens that pull it in via dep.
+		\wp_register_script(
+			'configkit-woo-product-picker',
+			$this->plugin_url . 'assets/admin/js/woo-product-picker.js',
+			[ 'configkit-admin' ],
+			$this->version,
+			true
+		);
+
 		if ( $is_product_edit ) {
 			\wp_enqueue_script(
 				'configkit-product-binding',
 				$this->plugin_url . 'assets/admin/js/product-binding.js',
-				[ 'configkit-admin' ],
+				[ 'configkit-admin', 'configkit-woo-product-picker' ],
 				$this->version,
 				true
 			);
@@ -69,7 +79,8 @@ final class AssetLoader {
 			$hook_suffix,
 			'configkit-libraries',
 			'configkit-libraries',
-			'assets/admin/js/libraries.js'
+			'assets/admin/js/libraries.js',
+			[ 'configkit-admin', 'configkit-woo-product-picker' ]
 		);
 
 		$this->maybe_enqueue_page_script(
@@ -126,11 +137,15 @@ final class AssetLoader {
 		return ( $screen->post_type ?? '' ) === 'product';
 	}
 
+	/**
+	 * @param list<string> $dependencies
+	 */
 	private function maybe_enqueue_page_script(
 		string $hook_suffix,
 		string $page_slug_match,
 		string $handle,
-		string $relative_path
+		string $relative_path,
+		array $dependencies = [ 'configkit-admin' ]
 	): void {
 		if ( ! str_contains( $hook_suffix, $page_slug_match ) ) {
 			return;
@@ -138,7 +153,7 @@ final class AssetLoader {
 		\wp_enqueue_script(
 			$handle,
 			$this->plugin_url . $relative_path,
-			[ 'configkit-admin' ],
+			$dependencies,
 			$this->version,
 			true
 		);
