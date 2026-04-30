@@ -506,9 +506,18 @@
 			textField( 'lookup_table_key', 'lookup_table_key', rec.lookup_table_key, ( v ) => {
 				rec.lookup_table_key = v;
 				state.dirty = true;
-			}, { mono: true, help: isNew
-				? 'Lowercase, snake_case, max 64 chars. Locked after save.'
-				: 'lookup_table_key is immutable after a table is saved.' } ),
+			}, {
+				mono: true,
+				help: isNew
+					? 'Lowercase, snake_case, max 64 chars. Locked after save.'
+					: 'lookup_table_key is immutable after a table is saved.',
+				warnings: ( isNew && window.ConfigKit && window.ConfigKit.softKeyWarnings )
+					? window.ConfigKit.softKeyWarnings( rec.lookup_table_key, {
+						hint: 'try {product}_{dimensions}_v{n}, e.g. markise_2d_v1',
+						duplicates: ( state.list.items || [] ).map( ( t ) => t.lookup_table_key ),
+					} )
+					: [],
+			} ),
 			isNew ? null : el( 'p', { class: 'description' }, 'lookup_table_key cannot be changed.' ),
 			textField( 'Family key (optional)', 'family_key', rec.family_key || '', ( v ) => {
 				rec.family_key = v;
@@ -803,6 +812,9 @@
 
 	function textField( label, name, value, onChange, opts ) {
 		opts = opts || {};
+		const warningsNode = ( opts.warnings && window.ConfigKit && window.ConfigKit.renderSoftWarnings )
+			? window.ConfigKit.renderSoftWarnings( opts.warnings )
+			: null;
 		return el(
 			'div',
 			{ class: 'configkit-field' },
@@ -815,6 +827,7 @@
 				onInput: ( ev ) => onChange( ev.target.value ),
 			} ),
 			opts.help ? el( 'p', { class: 'description' }, opts.help ) : null,
+			warningsNode,
 			fieldErrors( name )
 		);
 	}

@@ -634,7 +634,15 @@
 			textField( 'library_key', 'library_key', rec.library_key, ( v ) => {
 				rec.library_key = v;
 				state.dirty = true;
-			}, { mono: true } ),
+			}, {
+				mono: true,
+				warnings: ( isNew && window.ConfigKit && window.ConfigKit.softKeyWarnings )
+					? window.ConfigKit.softKeyWarnings( rec.library_key, {
+						hint: 'try {module}_{brand}, e.g. textiles_dickson',
+						duplicates: ( state.list.items || [] ).map( ( l ) => l.library_key ),
+					} )
+					: [],
+			} ),
 			textareaField( 'Description', 'description', rec.description || '', ( v ) => {
 				rec.description = v;
 				state.dirty = true;

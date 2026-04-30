@@ -588,7 +588,16 @@
 			textField( 'module_key', 'module_key', rec.module_key, ( v ) => {
 				rec.module_key = v;
 				state.dirty = true;
-			}, { mono: true, help: 'Lowercase, snake_case, max 64 chars. Once saved this is the stable identity for libraries and rules.' } ),
+			}, {
+				mono: true,
+				help: 'Lowercase, snake_case, max 64 chars. Once saved this is the stable identity for libraries and rules.',
+				warnings: window.ConfigKit && window.ConfigKit.softKeyWarnings
+					? window.ConfigKit.softKeyWarnings( rec.module_key, {
+						hint: 'try {brand}_{kind} format, e.g. textiles_dickson',
+						duplicates: ( state.list.items || [] ).map( ( m ) => m.module_key ),
+					} )
+					: [],
+			} ),
 			textareaField( 'Description', 'description', rec.description || '', ( v ) => {
 				rec.description = v;
 				state.dirty = true;
@@ -770,6 +779,9 @@
 
 	function textField( label, name, value, onChange, opts ) {
 		opts = opts || {};
+		const warningsNode = ( opts.warnings && window.ConfigKit && window.ConfigKit.renderSoftWarnings )
+			? window.ConfigKit.renderSoftWarnings( opts.warnings )
+			: null;
 		return el(
 			'div',
 			{ class: 'configkit-field' },
@@ -782,6 +794,7 @@
 				onInput: ( ev ) => onChange( ev.target.value ),
 			} ),
 			opts.help ? el( 'p', { class: 'description' }, opts.help ) : null,
+			warningsNode,
 			fieldErrors( name )
 		);
 	}

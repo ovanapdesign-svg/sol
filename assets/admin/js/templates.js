@@ -993,6 +993,12 @@
 				help: isNew
 					? 'Lowercase, snake_case, 3–64 chars. Locked after save.'
 					: 'template_key is immutable after a template is saved.',
+				warnings: ( isNew && window.ConfigKit && window.ConfigKit.softKeyWarnings )
+					? window.ConfigKit.softKeyWarnings( rec.template_key, {
+						hint: 'try {product}_{variant}, e.g. markise_motorisert',
+						duplicates: ( state.list.items || [] ).map( ( t ) => t.template_key ),
+					} )
+					: [],
 			} ),
 			textField( 'family_key (optional)', 'family_key', rec.family_key || '', ( v ) => {
 				rec.family_key = v;
@@ -1714,6 +1720,9 @@
 
 	function textField( label, name, value, onChange, opts ) {
 		opts = opts || {};
+		const warningsNode = ( opts.warnings && window.ConfigKit && window.ConfigKit.renderSoftWarnings )
+			? window.ConfigKit.renderSoftWarnings( opts.warnings )
+			: null;
 		return el(
 			'div',
 			{ class: 'configkit-field' },
@@ -1727,6 +1736,7 @@
 				onInput: ( ev ) => onChange( ev.target.value ),
 			} ),
 			opts.help ? el( 'p', { class: 'description' }, opts.help ) : null,
+			warningsNode,
 			fieldErrors( name )
 		);
 	}

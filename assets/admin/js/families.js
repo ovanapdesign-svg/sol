@@ -344,6 +344,12 @@
 				help: isNew
 					? 'Lowercase, snake_case, 3–64 chars. Locked after save.'
 					: 'family_key is immutable after a family is saved.',
+				warnings: ( isNew && window.ConfigKit && window.ConfigKit.softKeyWarnings )
+					? window.ConfigKit.softKeyWarnings( rec.family_key, {
+						hint: 'try a noun specific to the product family, e.g. markiser_motor',
+						duplicates: ( state.list.items || [] ).map( ( f ) => f.family_key ),
+					} )
+					: [],
 			} ),
 			textareaField( 'Description', 'description', rec.description || '', ( v ) => {
 				rec.description = v;
@@ -387,6 +393,9 @@
 
 	function textField( label, name, value, onChange, opts ) {
 		opts = opts || {};
+		const warningsNode = ( opts.warnings && window.ConfigKit && window.ConfigKit.renderSoftWarnings )
+			? window.ConfigKit.renderSoftWarnings( opts.warnings )
+			: null;
 		return el(
 			'div',
 			{ class: 'configkit-field' },
@@ -400,6 +409,7 @@
 				onInput: ( ev ) => onChange( ev.target.value ),
 			} ),
 			opts.help ? el( 'p', { class: 'description' }, opts.help ) : null,
+			warningsNode,
 			fieldErrors( name )
 		);
 	}
