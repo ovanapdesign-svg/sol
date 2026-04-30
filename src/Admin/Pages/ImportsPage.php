@@ -26,20 +26,20 @@ final class ImportsPage extends AbstractPage {
 	}
 
 	public function page_title(): string {
-		return \__( 'ConfigKit Imports', 'configkit' );
+		return \__( 'ConfigKit Import history', 'configkit' );
 	}
 
 	public function menu_title(): string {
-		return \__( 'Imports', 'configkit' );
+		return \__( 'Import history', 'configkit' );
 	}
 
 	public function render(): void {
 		$this->ensure_capability();
 		$this->open_wrap_with_header( [
-			'title'     => 'Imports',
-			'subtitle'  => 'Upload Excel files to populate lookup tables',
-			'intro'     => 'Drop a .xlsx file into the wizard. ConfigKit detects the format (grid or long), shows a preview, and only writes to the lookup table once you click Commit. Owner never edits JSON.',
-			'intro_id'  => 'imports',
+			'title'     => 'Import history',
+			'subtitle'  => 'Past Excel imports — and a fallback wizard for ad-hoc uploads',
+			'intro'     => 'Most imports start from the entity that owns the data — ConfigKit → Lookup Tables → open a table → Import from Excel. This page lists every past batch and lets you run a one-off import without picking a destination first.',
+			'intro_id'  => 'import-history',
 			'secondary' => [ 'label' => '← Back to dashboard', 'href' => PageHeader::dashboard_href() ],
 		] );
 

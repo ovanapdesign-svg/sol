@@ -87,6 +87,24 @@
 		state.view = 'wizard';
 		state.step = 1;
 		await Promise.all( [ loadLookupTables(), loadList() ] );
+
+		// Contextual entry: lookup-table detail page sends owners
+		// here with the destination already chosen via URL params.
+		// Skip step 1 and land directly on the upload screen.
+		var params = new URLSearchParams( window.location.search );
+		var targetType  = params.get( 'target_type' ) || '';
+		var targetKey   = params.get( 'target_lookup_table_key' ) || '';
+		if ( targetType === 'lookup_cells' && targetKey !== '' ) {
+			var hit = state.lookupTables.find( function ( t ) { return t.lookup_table_key === targetKey; } );
+			if ( hit ) {
+				state.importType   = 'lookup_cells';
+				state.targetTableKey = targetKey;
+				if ( params.get( 'mode' ) === 'replace_all' ) state.mode = 'replace_all';
+				state.step = 2;
+				state.contextual = true;
+			}
+		}
+
 		render();
 	}
 
@@ -210,15 +228,28 @@
 		root.dataset.loading = 'false';
 		root.replaceChildren();
 
-		root.appendChild( renderStepper() );
-		if ( state.message ) root.appendChild( messageBanner( state.message ) );
+		// History-first layout: when no upload is in flight (step 1
+		// and no batch loaded) AND the owner hasn't arrived
+		// contextually, lead with the past batches and offer the
+		// wizard below. As soon as the owner advances the wizard
+		// (steps 2/3/4) we put the wizard at the top and the
+		// history below.
+		var historyTop = ! state.contextual && state.step === 1 && ! state.batch;
 
-		if ( state.step === 1 ) root.appendChild( renderStep1() );
-		else if ( state.step === 2 ) root.appendChild( renderStep2() );
-		else if ( state.step === 3 ) root.appendChild( renderStep3() );
-		else if ( state.step === 4 ) root.appendChild( renderStep4() );
-
-		root.appendChild( renderRecentBatches() );
+		if ( historyTop ) {
+			root.appendChild( renderRecentBatches() );
+			if ( state.message ) root.appendChild( messageBanner( state.message ) );
+			root.appendChild( renderStepper() );
+			root.appendChild( renderStep1() );
+		} else {
+			root.appendChild( renderStepper() );
+			if ( state.message ) root.appendChild( messageBanner( state.message ) );
+			if ( state.step === 1 ) root.appendChild( renderStep1() );
+			else if ( state.step === 2 ) root.appendChild( renderStep2() );
+			else if ( state.step === 3 ) root.appendChild( renderStep3() );
+			else if ( state.step === 4 ) root.appendChild( renderStep4() );
+			root.appendChild( renderRecentBatches() );
+		}
 	}
 
 	function messageBanner( m ) {
@@ -382,11 +413,16 @@
 		wrap.appendChild( el(
 			'div',
 			{ class: 'configkit-form__footer' },
-			el( 'button', {
-				type: 'button',
-				class: 'button',
-				onClick: () => { state.step = 1; state.fileName = null; render(); },
-			}, '← Back' )
+			state.contextual
+				? el( 'a', {
+					href: ( window.location.pathname || '' ) + '?page=configkit-lookup-tables',
+					class: 'button',
+				}, '← Back to Lookup Tables' )
+				: el( 'button', {
+					type: 'button',
+					class: 'button',
+					onClick: () => { state.step = 1; state.fileName = null; render(); },
+				}, '← Back' )
 		) );
 
 		return wrap;
@@ -530,9 +566,13 @@
 	function renderRecentBatches() {
 		const items = state.list && state.list.items ? state.list.items : [];
 		const wrap = el( 'section', { class: 'configkit-import-recent' } );
-		wrap.appendChild( el( 'h3', null, 'Recent imports' ) );
+		wrap.appendChild( el( 'h3', null, items.length === 0 ? 'No imports yet' : 'Past imports' ) );
 		if ( items.length === 0 ) {
-			wrap.appendChild( el( 'p', { class: 'description' }, 'No imports yet.' ) );
+			wrap.appendChild( el(
+				'p',
+				{ class: 'description' },
+				'When you import an Excel file, the batch lands here so you can re-open the preview, see warnings, or audit what changed.'
+			) );
 			return wrap;
 		}
 		const tbl = el( 'table', { class: 'wp-list-table widefat striped' } );
@@ -540,19 +580,36 @@
 		head.appendChild( el( 'tr', null,
 			el( 'th', null, 'When' ),
 			el( 'th', null, 'File' ),
+			el( 'th', null, 'Target' ),
 			el( 'th', null, 'Type' ),
-			el( 'th', null, 'Status' )
+			el( 'th', null, 'Status' ),
+			el( 'th', null, 'Rows' )
 		) );
 		tbl.appendChild( head );
 		const body = el( 'tbody' );
 		items.forEach( ( b ) => {
+			var summary = b.summary || {};
+			var stats   = summary.commit_stats || {};
+			var rows;
+			if ( b.status === 'applied' ) {
+				rows = ( stats.inserted || 0 ) + ' inserted, ' + ( stats.updated || 0 ) + ' updated';
+				if ( stats.skipped ) rows += ', ' + stats.skipped + ' skipped';
+			} else if ( b.status === 'validated' || b.status === 'parsed' ) {
+				rows = 'Awaiting commit';
+			} else {
+				rows = '—';
+			}
 			body.appendChild( el( 'tr', null,
 				el( 'td', { 'data-label': 'When' }, b.created_at || '—' ),
 				el( 'td', { 'data-label': 'File' }, b.filename || '—' ),
+				el( 'td', { 'data-label': 'Target' }, summary.target_lookup_table_key
+					? el( 'code', null, summary.target_lookup_table_key )
+					: '—' ),
 				el( 'td', { 'data-label': 'Type' }, b.import_type ),
 				el( 'td', { 'data-label': 'Status' },
 					el( 'span', { class: 'configkit-row-status configkit-row-status--' + statusToSeverity( b.status ) }, b.status )
-				)
+				),
+				el( 'td', { 'data-label': 'Rows' }, rows )
 			) );
 		} );
 		tbl.appendChild( body );

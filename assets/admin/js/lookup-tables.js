@@ -738,11 +738,21 @@
 
 		// Cells block
 		const cellsBlock = el( 'div', { class: 'configkit-form configkit-items' } );
+		const importHref = ( window.location.pathname || '' )
+			+ '?page=configkit-imports&target_type=lookup_cells&target_lookup_table_key='
+			+ encodeURIComponent( t.lookup_table_key );
 		cellsBlock.appendChild( el(
 			'div',
 			{ class: 'configkit-list__header' },
 			el( 'h3', null, 'Cells' ),
-			el( 'button', { type: 'button', class: 'button button-secondary', onClick: showNewCellForm }, '+ New cell' )
+			el( 'div', { class: 'configkit-list__actions' },
+				el( 'a', {
+					href: importHref,
+					class: 'button',
+					title: 'Open the import wizard with this lookup table preselected',
+				}, '⬆ Import from Excel' ),
+				el( 'button', { type: 'button', class: 'button button-secondary', onClick: showNewCellForm }, '+ New cell' )
+			)
 		) );
 
 		const cells = state.cells.items || [];

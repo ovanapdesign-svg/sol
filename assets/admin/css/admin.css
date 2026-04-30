@@ -58,6 +58,16 @@
 	margin: 16px 0;
 	display: flex;
 	gap: 8px;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+}
+
+.configkit-list__actions {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+	align-items: center;
 }
 
 .configkit-empty {
