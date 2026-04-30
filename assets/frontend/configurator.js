@@ -131,10 +131,29 @@
 		render();
 	}
 
-	// Stub recompute — CHUNK 3 wires in the rule + pricing engines.
 	function recompute() {
 		state.price.calculating = true;
-		// CHUNK 3 will populate derived + price here.
+		var engines = window.ConfigKitEngines;
+		if ( ! engines || ! state.snapshot ) {
+			state.price.calculating = false;
+			return;
+		}
+		var ctx = { snapshot: state.snapshot, values: state.values, derived: state.derived };
+		state.derived = engines.evalRules( ctx );
+		// Re-evaluation may have queued set_default mutations into ctx.values.
+		state.values = ctx.values;
+		var price = engines.computePrice( {
+			snapshot: state.snapshot,
+			values:   state.values,
+			derived:  state.derived,
+		} );
+		state.price.subtotal = price.subtotal;
+		state.price.breakdown = price.fields;
+		state.price.base = price.base;
+		state.price.reason = price.reason;
+		state.price.vatLabel = price.vatLabel;
+		state.price.priceGroupKey = price.price_group_key;
+		state.price.resolvedDims = price.resolved_dims;
 		state.price.calculating = false;
 	}
 

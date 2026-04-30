@@ -51,9 +51,18 @@ final class ProductRenderer {
 		\wp_enqueue_style( 'configkit-configurator' );
 
 		\wp_register_script(
+			'configkit-engines',
+			$this->plugin_url . 'assets/frontend/engines.js',
+			[],
+			$this->version,
+			true
+		);
+		\wp_enqueue_script( 'configkit-engines' );
+
+		\wp_register_script(
 			'configkit-configurator',
 			$this->plugin_url . 'assets/frontend/configurator.js',
-			[],
+			[ 'configkit-engines' ],
 			$this->version,
 			true
 		);
