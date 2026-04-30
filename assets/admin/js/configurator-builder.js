@@ -39,7 +39,17 @@
 		return;
 	}
 
-	const advancedRoot = document.getElementById( 'configkit-product-binding-app' );
+	// Phase 4.4b — both legacy mounts hide-and-show together so the
+	// owner never sees the Yith builder + a legacy panel at the same
+	// time. The binding app drives the existing Phase 4.3 advanced
+	// mode; the product-builder app is the dalis-2 fallback.
+	const advancedBindingRoot = document.getElementById( 'configkit-product-binding-app' );
+	const advancedBuilderRoot = document.getElementById( 'configkit-product-builder-app' );
+
+	function setAdvancedVisibility( visible ) {
+		if ( advancedBindingRoot ) advancedBindingRoot.hidden = ! visible;
+		if ( advancedBuilderRoot ) advancedBuilderRoot.hidden = ! visible;
+	}
 
 	// =========================================================
 	// State
@@ -217,10 +227,10 @@
 			class: 'button-link configkit-cb__advanced-link',
 			onClick: () => {
 				state.showAdvanced = ! state.showAdvanced;
-				if ( advancedRoot ) advancedRoot.hidden = ! state.showAdvanced;
+				setAdvancedVisibility( state.showAdvanced );
 				render();
 			},
-		}, state.showAdvanced ? 'Back to configurator builder' : 'Show advanced settings' ) );
+		}, state.showAdvanced ? 'Back to product builder' : 'Show advanced settings' ) );
 		wrap.appendChild( headerActions );
 		return wrap;
 	}
@@ -286,7 +296,10 @@
 		const hasSections = state.sections && state.sections.length > 0;
 
 		if ( mode === 'start_blank' ) {
-			actions.appendChild( actionButton( '💾 Save as preset', 'save', { disabled: ! hasSections } ) );
+			actions.appendChild( actionButton( '💾 Save as preset', 'save', {
+				disabled: ! hasSections,
+				title: hasSections ? '' : 'Finish at least one product setup before saving it as a preset.',
+			} ) );
 			actions.appendChild( actionButton( '📋 Copy from product', 'copy' ) );
 			actions.appendChild( actionButton( '📐 Use preset', 'apply' ) );
 		} else if ( mode === 'use_preset' ) {
@@ -309,6 +322,7 @@
 			type: 'button',
 			class: 'button configkit-cb__source-action' + ( kind === 'detach' ? ' configkit-cb__source-action--warn' : '' ),
 			disabled: !! opts.disabled,
+			title: opts.title || '',
 			onClick: () => openSourceModal( kind, opts.meta || null ),
 		}, label );
 	}
@@ -796,7 +810,10 @@
 		const wrap = el( 'div', { class: 'configkit-cb__sections' } );
 		if ( state.sections.length === 0 ) {
 			wrap.appendChild( el( 'div', { class: 'configkit-cb__empty' },
-				el( 'p', null, 'No sections yet. Add a section to start building this product\'s configurator.' )
+				el( 'p', null, 'No sections yet. Add a section to start building this product\'s configurator.' ),
+				el( 'p', { class: 'description' },
+					'Add size pricing and at least one option section to test a price.'
+				)
 			) );
 		}
 		state.sections.forEach( ( section ) => wrap.appendChild( renderSectionCard( section ) ) );
@@ -2677,9 +2694,22 @@
 		root.appendChild( renderHeader() );
 
 		if ( state.showAdvanced ) {
-			root.appendChild( el( 'p', { class: 'description configkit-cb__advanced-note' },
-				'Advanced settings render below. Click "Back to configurator builder" in the header to return to the simple view.'
-			) );
+			const note = el( 'div', { class: 'notice notice-warning inline configkit-cb__advanced-banner' },
+				el( 'p', null,
+					el( 'strong', null, 'Advanced settings are for troubleshooting. ' ),
+					document.createTextNode( 'Most product setup should happen in the builder above.' )
+				),
+				el( 'button', {
+					type: 'button',
+					class: 'button',
+					onClick: () => {
+						state.showAdvanced = false;
+						setAdvancedVisibility( false );
+						render();
+					},
+				}, '← Back to product builder' )
+			);
+			root.appendChild( note );
 			return;
 		}
 		const banner = messageBanner();

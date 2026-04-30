@@ -3817,6 +3817,21 @@
 	margin-top: 2px;
 }
 
+.configkit-cb__advanced-banner {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	flex-wrap: wrap;
+	margin: 12px 0 16px;
+}
+
+.configkit-cb__advanced-banner p {
+	margin: 0;
+	flex: 1;
+	min-width: 240px;
+}
+
 .configkit-cb__option-input {
 	width: 100%;
 	padding: 4px 6px;
