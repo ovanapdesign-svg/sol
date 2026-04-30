@@ -401,7 +401,10 @@ final class Plugin {
 			new LibraryService( $library_repo, $module_repo ),
 			$library_repo,
 			new LookupCellService( $cell_repo, $lookup_repo ),
-			$cell_repo
+			$cell_repo,
+			new LibraryItemService( $item_repo, $library_repo, $module_repo ),
+			$item_repo,
+			$module_repo
 		) ) );
 		$router->add( new ProductBuilderController(
 			new ProductBuilderService(

@@ -52,8 +52,9 @@
 		message:      null,
 		sections:     [],
 		sectionTypes: [],
-		modal:        null, // { sectionId, tab, ranges?, rangeDiagnostics? }
+		modal:        null, // { sectionId, tab, ranges?, rangeDiagnostics?, options?, zipMatch? }
 		bulkPaste:    null, // { sectionId, text, errors }
+		optionCounts: {},   // sectionId → number of saved options (for card meta)
 		// drag-drop bookkeeping
 		dragId:       null,
 	};
@@ -264,9 +265,16 @@
 	}
 
 	function summariseSectionContent( section ) {
-		// Per-type meta lands in chunks 4-6 once each editor reports
-		// counts. For now we mark the underlying entity.
-		if ( section.type === 'size_pricing' ) return 'Range pricing';
+		if ( section.type === 'size_pricing' ) {
+			const n = Array.isArray( section.range_rows ) ? section.range_rows.length : 0;
+			return n > 0 ? n + ' price row' + ( n === 1 ? '' : 's' ) : 'No pricing yet';
+		}
+		// Option-group counts come from the editor cache once the
+		// modal has loaded; falls back to a generic label.
+		const cached = state.optionCounts && state.optionCounts[ section.id ];
+		if ( typeof cached === 'number' ) {
+			return cached + ' option' + ( cached === 1 ? '' : 's' );
+		}
 		return 'Choices';
 	}
 
@@ -364,10 +372,13 @@
 		const section = findSection( sectionId );
 		state.modal = { sectionId, tab: 'choices' };
 		render();
-		if ( section && section.type === 'size_pricing' ) {
+		if ( ! section ) return;
+		if ( section.type === 'size_pricing' ) {
 			await loadRanges( sectionId );
-			render();
+		} else {
+			await loadOptions( sectionId );
 		}
+		render();
 	}
 
 	async function loadRanges( sectionId ) {
@@ -467,16 +478,403 @@
 
 	function tabLabelFor( type ) {
 		switch ( type ) {
-			case 'size_pricing': return 'Pricing rows';
-			default:             return 'Choices';
+			case 'size_pricing':     return 'Pricing rows';
+			case 'option_group':     return 'Options';
+			case 'motor':            return 'Motors';
+			case 'manual_operation': return 'Operation types';
+			case 'controls':         return 'Controls';
+			case 'accessories':      return 'Accessories';
+			default:                 return 'Choices';
 		}
 	}
 
 	function renderChoicesTab( section ) {
 		if ( section.type === 'size_pricing' ) return renderRangeEditor( section );
-		return el( 'p', { class: 'description' },
-			'Editor for ' + section.type + ' lands in chunks 5-6.'
+		return renderOptionEditor( section );
+	}
+
+	// =========================================================
+	// Option editor — shared by option_group, manual_operation,
+	// controls, accessories, custom. Motor uses a richer editor
+	// (single + bundle tabs) that lands in chunk 6.
+	// =========================================================
+
+	async function loadOptions( sectionId ) {
+		try {
+			const data = await window.ConfigKit.request(
+				'/configurator/' + productId + '/sections/' + encodeURIComponent( sectionId ) + '/options'
+			);
+			if ( ! state.modal || state.modal.sectionId !== sectionId ) return;
+			const records = ( data && data.options ) || [];
+			state.modal.options = records.map( optionRecordToDraft );
+			state.optionCounts[ sectionId ] = records.length;
+			if ( state.modal.options.length === 0 ) state.modal.options = [ blankOption() ];
+		} catch ( err ) {
+			showMessage( 'error', explainError( err ) );
+		}
+	}
+
+	function optionRecordToDraft( o ) {
+		const attrs = ( o && o.attributes && typeof o.attributes === 'object' ) ? o.attributes : {};
+		return {
+			label:          o.label || '',
+			sku:            o.sku || '',
+			image_url:      o.image_url || '',
+			brand:          attrs.brand || '',
+			collection:     attrs.collection || '',
+			color_family:   o.color_family || '',
+			price_group:    o.price_group_key || '',
+			price:          ( o.price === null || o.price === undefined ) ? '' : String( o.price ),
+			active:         o.is_active !== false,
+		};
+	}
+
+	function blankOption() {
+		return {
+			label: '', sku: '', image_url: '',
+			brand: '', collection: '', color_family: '',
+			price_group: '', price: '', active: true,
+		};
+	}
+
+	function renderOptionEditor( section ) {
+		const wrap = el( 'div', { class: 'configkit-cb__option-editor' } );
+		const options = ( state.modal && Array.isArray( state.modal.options ) ) ? state.modal.options : null;
+		if ( options === null ) {
+			wrap.appendChild( el( 'p', { class: 'description' }, 'Loading options…' ) );
+			return wrap;
+		}
+
+		if ( state.modal.zipMatch ) {
+			wrap.appendChild( renderZipMatchSummary( state.modal.zipMatch ) );
+		}
+
+		const list = el( 'div', { class: 'configkit-cb__option-list' } );
+		options.forEach( ( opt, i ) => list.appendChild( renderOptionCard( section, opt, i ) ) );
+		wrap.appendChild( list );
+
+		wrap.appendChild( el( 'div', { class: 'configkit-cb__option-actions' },
+			el( 'button', {
+				type: 'button',
+				class: 'button',
+				onClick: () => {
+					readOptionDraftsFromDOM();
+					state.modal.options.push( blankOption() );
+					render();
+				},
+			}, '+ Add option' ),
+			el( 'button', {
+				type: 'button',
+				class: 'button',
+				onClick: () => openBulkPaste( section.id ),
+			}, '📋 Bulk paste options' ),
+			el( 'button', {
+				type: 'button',
+				class: 'button',
+				onClick: () => openZipMatcher( section.id ),
+			}, '🖼 Match images by SKU' ),
+			el( 'button', {
+				type: 'button',
+				class: 'button button-primary',
+				disabled: state.busy,
+				onClick: saveOptions,
+			}, state.busy ? 'Saving…' : 'Save options' )
+		) );
+		return wrap;
+	}
+
+	function renderOptionCard( section, opt, index ) {
+		const card = el( 'div', { class: 'configkit-cb__option-card', 'data-option-index': String( index ) } );
+
+		// Image preview + picker (uses wp.media if present).
+		const img = el( 'div', { class: 'configkit-cb__option-image' } );
+		const refreshImg = ( url ) => {
+			img.replaceChildren();
+			if ( url ) {
+				img.appendChild( el( 'img', { src: url, alt: '' } ) );
+			} else {
+				img.appendChild( el( 'span', { class: 'configkit-cb__option-image-empty' }, 'No image' ) );
+			}
+		};
+		refreshImg( opt.image_url );
+		const imgPick = el( 'button', {
+			type: 'button',
+			class: 'button-link',
+			onClick: () => pickImageInto( opt, 'image_url', ( url ) => {
+				refreshImg( url );
+				const hidden = card.querySelector( '[data-field="image_url"]' );
+				if ( hidden ) hidden.value = url;
+			} ),
+		}, opt.image_url ? 'Change' : 'Pick' );
+		const imgClear = el( 'button', {
+			type: 'button',
+			class: 'button-link configkit-cb__option-image-clear',
+			onClick: () => {
+				opt.image_url = '';
+				refreshImg( '' );
+				const hidden = card.querySelector( '[data-field="image_url"]' );
+				if ( hidden ) hidden.value = '';
+			},
+		}, '✕' );
+		const imgWrap = el( 'div', { class: 'configkit-cb__option-image-wrap' },
+			img,
+			el( 'div', { class: 'configkit-cb__option-image-actions' }, imgPick, opt.image_url ? imgClear : null )
 		);
+		card.appendChild( imgWrap );
+
+		// Field grid.
+		const grid = el( 'div', { class: 'configkit-cb__option-grid' } );
+		grid.appendChild( labelled( 'Name',         textInput( opt.label, 'label' ) ) );
+		grid.appendChild( labelled( 'SKU',          textInput( opt.sku, 'sku' ) ) );
+		grid.appendChild( labelled( 'Brand',        textInput( opt.brand, 'brand' ) ) );
+		grid.appendChild( labelled( 'Collection',   textInput( opt.collection, 'collection' ) ) );
+		grid.appendChild( labelled( 'Color family', textInput( opt.color_family, 'color_family' ) ) );
+		grid.appendChild( labelled( 'Price group',  textInput( opt.price_group, 'price_group' ) ) );
+		grid.appendChild( labelled( 'Price (kr)',   numberInput( opt.price, 'price' ) ) );
+		card.appendChild( grid );
+
+		// Hidden image_url field so readOptionDraftsFromDOM picks it up.
+		card.appendChild( el( 'input', {
+			type: 'hidden',
+			'data-field': 'image_url',
+			value: opt.image_url || '',
+		} ) );
+
+		// Footer: active toggle + delete.
+		const footer = el( 'div', { class: 'configkit-cb__option-footer' } );
+		const activeBox = el( 'input', {
+			type: 'checkbox',
+			'data-field': 'active',
+			checked: opt.active !== false,
+		} );
+		footer.appendChild( el( 'label', { class: 'configkit-cb__option-active' },
+			activeBox, document.createTextNode( ' Active' )
+		) );
+		footer.appendChild( el( 'button', {
+			type: 'button',
+			class: 'button-link configkit-cb__option-delete',
+			'aria-label': 'Delete option',
+			onClick: () => {
+				readOptionDraftsFromDOM();
+				state.modal.options.splice( index, 1 );
+				if ( state.modal.options.length === 0 ) state.modal.options.push( blankOption() );
+				render();
+			},
+		}, '✕ Delete' ) );
+		card.appendChild( footer );
+
+		return card;
+	}
+
+	function textInput( value, field, cls ) {
+		return el( 'input', {
+			type: 'text',
+			class: 'configkit-cb__option-input' + ( cls ? ' ' + cls : '' ),
+			'data-field': field,
+			value: value !== null && value !== undefined ? String( value ) : '',
+		} );
+	}
+
+	function numberInput( value, field ) {
+		return el( 'input', {
+			type: 'number',
+			class: 'configkit-cb__option-input',
+			'data-field': field,
+			value: value !== null && value !== undefined && value !== '' ? String( value ) : '',
+			step: '0.01',
+		} );
+	}
+
+	function labelled( label, child ) {
+		return el( 'label', { class: 'configkit-cb__option-field' },
+			el( 'span', { class: 'configkit-cb__option-field-label' }, label ),
+			child
+		);
+	}
+
+	function readOptionDraftsFromDOM() {
+		if ( ! state.modal || ! Array.isArray( state.modal.options ) ) return;
+		const cards = root.querySelectorAll( '[data-option-index]' );
+		const out = [];
+		cards.forEach( ( card ) => {
+			out.push( {
+				label:        pickString( card, 'label' ),
+				sku:          pickString( card, 'sku' ),
+				image_url:    pickString( card, 'image_url' ),
+				brand:        pickString( card, 'brand' ),
+				collection:   pickString( card, 'collection' ),
+				color_family: pickString( card, 'color_family' ),
+				price_group:  pickString( card, 'price_group' ),
+				price:        pickString( card, 'price' ),
+				active:       !! ( card.querySelector( '[data-field="active"]' ) || {} ).checked,
+			} );
+		} );
+		state.modal.options = out;
+	}
+
+	async function saveOptions() {
+		if ( ! state.modal ) return;
+		readOptionDraftsFromDOM();
+		const payload = ( state.modal.options || [] )
+			.filter( ( o ) => ( o.label || '' ).trim() !== '' )
+			.map( ( o ) => ( {
+				label:        o.label,
+				sku:          o.sku,
+				image_url:    o.image_url,
+				brand:        o.brand,
+				collection:   o.collection,
+				color_family: o.color_family,
+				price_group:  o.price_group,
+				price:        o.price === '' ? null : Number( o.price ),
+				active:       !! o.active,
+			} ) );
+		try {
+			const result = await cbRequest(
+				'/sections/' + encodeURIComponent( state.modal.sectionId ) + '/options',
+				{ method: 'POST', body: { options: payload } }
+			);
+			showMessage( 'success', result.message || 'Options saved.' );
+			state.optionCounts[ state.modal.sectionId ] = payload.length;
+			await loadOptions( state.modal.sectionId );
+			render();
+		} catch ( err ) {
+			showMessage( 'error', explainError( err ) );
+			render();
+		}
+	}
+
+	// wp.media bridge — falls back to a prompt() when wp.media isn't
+	// present (which happens on the very first load if the asset hasn't
+	// fired its enqueue yet, or in headless-test environments).
+	function pickImageInto( target, key, onChange ) {
+		const wpMedia = window.wp && window.wp.media;
+		if ( ! wpMedia ) {
+			const url = window.prompt( 'Image URL:', target[ key ] || '' );
+			if ( url !== null ) {
+				target[ key ] = url;
+				onChange( url );
+			}
+			return;
+		}
+		const frame = wpMedia( {
+			title: 'Select image',
+			button: { text: 'Use this image' },
+			multiple: false,
+			library: { type: 'image' },
+		} );
+		frame.on( 'select', () => {
+			const sel = frame.state().get( 'selection' ).first().toJSON();
+			const url = sel && sel.url ? sel.url : '';
+			target[ key ] = url;
+			onChange( url );
+		} );
+		frame.open();
+	}
+
+	// =========================================================
+	// Image-by-SKU matcher (browser side — pastes a list of
+	// filenames, surfaces matched/unmatched against the current
+	// drafts' SKUs).
+	// =========================================================
+
+	function openZipMatcher( sectionId ) {
+		state.modal.zipMatch = { sectionId, filenames: '', report: null };
+		render();
+	}
+
+	function closeZipMatcher() {
+		if ( ! state.modal ) return;
+		state.modal.zipMatch = null;
+		render();
+	}
+
+	function renderZipMatchSummary( zip ) {
+		const wrap = el( 'div', { class: 'configkit-cb__zip-match' } );
+		wrap.appendChild( el( 'h4', null, 'Match images to SKUs' ) );
+		wrap.appendChild( el( 'p', { class: 'description' },
+			'Paste image filenames (one per line) — we will match each to the option whose SKU appears at the start of the filename.'
+		) );
+		wrap.appendChild( el( 'textarea', {
+			class: 'configkit-cb__bulk-textarea',
+			rows: 5,
+			placeholder: 'U171.jpg\nu172_main.png\nU173-2.webp',
+			value: zip.filenames,
+			onInput: ( ev ) => { zip.filenames = ev.target.value; },
+		} ) );
+		const actions = el( 'div', { class: 'configkit-cb__zip-actions' } );
+		actions.appendChild( el( 'button', {
+			type: 'button',
+			class: 'button',
+			onClick: closeZipMatcher,
+		}, 'Cancel' ) );
+		actions.appendChild( el( 'button', {
+			type: 'button',
+			class: 'button button-primary',
+			onClick: applyZipMatch,
+		}, 'Match & fill' ) );
+		wrap.appendChild( actions );
+		if ( zip.report ) {
+			wrap.appendChild( el( 'p', { class: 'configkit-cb__range-diag-ok' },
+				'✓ Matched ' + zip.report.matched + ' / ' + zip.report.total + ' filename(s).'
+			) );
+			if ( ( zip.report.unmatched_filenames || [] ).length > 0 ) {
+				wrap.appendChild( el( 'p', { class: 'configkit-cb__range-diag-warn' },
+					'⚠ Unmatched files: ' + zip.report.unmatched_filenames.join( ', ' )
+				) );
+			}
+			if ( ( zip.report.unmatched_skus || [] ).length > 0 ) {
+				wrap.appendChild( el( 'p', { class: 'configkit-cb__range-diag-info' },
+					'ⓘ SKUs without an image: ' + zip.report.unmatched_skus.join( ', ' )
+				) );
+			}
+		}
+		return wrap;
+	}
+
+	function applyZipMatch() {
+		if ( ! state.modal || ! state.modal.zipMatch ) return;
+		readOptionDraftsFromDOM();
+		const filenames = String( state.modal.zipMatch.filenames || '' )
+			.split( /\r?\n/ )
+			.map( ( s ) => s.trim() )
+			.filter( Boolean );
+		const skuToIdx = {};
+		( state.modal.options || [] ).forEach( ( o, i ) => {
+			if ( o.sku ) skuToIdx[ o.sku.toLowerCase() ] = i;
+		} );
+		const unmatchedFiles = [];
+		let matched = 0;
+		filenames.forEach( ( name ) => {
+			const key = normaliseFilenameToSku( name );
+			if ( key && skuToIdx[ key ] !== undefined ) {
+				const idx = skuToIdx[ key ];
+				if ( ! state.modal.options[ idx ].image_url ) {
+					state.modal.options[ idx ].image_url = name;
+					matched++;
+					return;
+				}
+			}
+			unmatchedFiles.push( name );
+		} );
+		const unmatchedSkus = ( state.modal.options || [] )
+			.filter( ( o ) => o.sku && ! o.image_url )
+			.map( ( o ) => o.sku );
+		state.modal.zipMatch.report = {
+			total: filenames.length,
+			matched,
+			unmatched_filenames: unmatchedFiles,
+			unmatched_skus: unmatchedSkus,
+		};
+		render();
+	}
+
+	function normaliseFilenameToSku( name ) {
+		let base = String( name || '' ).replace( /\.[A-Za-z0-9]{2,5}$/, '' ).toLowerCase();
+		[ '_main', '_thumb', '_large', '_small', '_alt' ].forEach( ( s ) => {
+			if ( base.endsWith( s ) ) base = base.slice( 0, -s.length );
+		} );
+		base = base.replace( /[-_]\d+$/, '' );
+		return base.replace( /^[-_ ]+|[-_ ]+$/g, '' );
 	}
 
 	// =========================================================
@@ -720,16 +1118,19 @@
 		if ( ! state.bulkPaste || ! state.modal ) return;
 		const section = findSection( state.bulkPaste.sectionId );
 		if ( ! section ) return;
-		if ( section.type !== 'size_pricing' ) {
-			showMessage( 'error', 'Bulk paste for this section type lands in a later chunk.' );
-			closeBulkPaste();
-			return;
-		}
 		const text = String( state.bulkPaste.text || '' ).trim();
 		if ( text === '' ) {
 			closeBulkPaste();
 			return;
 		}
+		if ( section.type === 'size_pricing' ) {
+			applyBulkPasteRanges( text );
+			return;
+		}
+		applyBulkPasteOptions( section, text );
+	}
+
+	function applyBulkPasteRanges( text ) {
 		const lines = text.split( /\r?\n/ ).map( ( l ) => l.trim() ).filter( Boolean );
 		const errors = [];
 		const parsed = [];
@@ -765,9 +1166,60 @@
 			return;
 		}
 		readRangesFromDOM();
-		// Drop the trailing blank row that renderRangeEditor seeds.
 		const existing = ( state.modal.ranges || [] ).filter( ( r ) => r.width_to !== '' );
 		state.modal.ranges = existing.concat( parsed );
+		closeBulkPaste();
+	}
+
+	function applyBulkPasteOptions( section, text ) {
+		const type    = findType( section.type ) || {};
+		const columns = Array.isArray( type.bulk_paste_columns ) ? type.bulk_paste_columns : [];
+		const lines   = text.split( /\r?\n/ ).map( ( l ) => l.trim() ).filter( Boolean );
+		const errors  = [];
+		const parsed  = [];
+		lines.forEach( ( line, i ) => {
+			const parts = line.split( /\t|\s{2,}|,/ ).map( ( p ) => p.trim() );
+			if ( parts.length < 2 ) {
+				errors.push( 'Row ' + ( i + 1 ) + ': expected at least 2 values (got ' + parts.length + ').' );
+				return;
+			}
+			const draft = blankOption();
+			columns.forEach( ( col, ci ) => {
+				if ( parts[ ci ] === undefined ) return;
+				const value = parts[ ci ];
+				switch ( col ) {
+					case 'sku':            draft.sku = value; break;
+					case 'label':          draft.label = value; break;
+					case 'brand':          draft.brand = value; break;
+					case 'collection':     draft.collection = value; break;
+					case 'price_group':    draft.price_group = value; break;
+					case 'color_family':   draft.color_family = value; break;
+					case 'image_filename': draft.image_url = value; break;
+					case 'price':          draft.price = value; break;
+					case 'woo_product_sku':
+						// Stored on draft for chunk 6 (motor) lookup;
+						// option_group ignores it.
+						draft.woo_product_sku = value;
+						break;
+					default:
+						draft[ col ] = value;
+				}
+			} );
+			if ( ! draft.label ) {
+				// Common owner pattern: SKU only, no name. Fall back to
+				// SKU as the name so the owner can rename inline.
+				draft.label = draft.sku || ( '(option ' + ( i + 1 ) + ')' );
+			}
+			parsed.push( draft );
+		} );
+		if ( errors.length > 0 ) {
+			state.bulkPaste.errors = errors;
+			render();
+			return;
+		}
+		readOptionDraftsFromDOM();
+		const existing = ( state.modal.options || [] ).filter( ( o ) => ( o.label || '' ).trim() !== '' );
+		state.modal.options = existing.concat( parsed );
 		closeBulkPaste();
 	}
 

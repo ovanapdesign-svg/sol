@@ -86,6 +86,19 @@ final class ConfiguratorBuilderController extends AbstractController {
 				'permission_callback' => $this->require_cap( self::CAP ),
 			],
 		] );
+
+		\register_rest_route( self::NAMESPACE, '/configurator/(?P<product_id>\d+)/sections/(?P<section_id>[\w_-]+)/options', [
+			[
+				'methods'             => 'GET',
+				'callback'            => [ $this, 'read_options' ],
+				'permission_callback' => $this->require_cap( self::CAP ),
+			],
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'save_options' ],
+				'permission_callback' => $this->require_cap( self::CAP ),
+			],
+		] );
 	}
 
 	public function list_section_types( \WP_REST_Request $request ): \WP_REST_Response {
@@ -146,6 +159,26 @@ final class ConfiguratorBuilderController extends AbstractController {
 		$result     = $this->service->save_range_rows( $product_id, $section_id, $rows );
 		if ( ! ( $result['ok'] ?? false ) ) {
 			return $this->error( 'configurator_failed', (string) ( $result['message'] ?? 'Could not save ranges.' ), [ 'errors' => $result['errors'] ?? [] ], 400 );
+		}
+		return $this->ok( $result );
+	}
+
+	public function read_options( \WP_REST_Request $request ): \WP_REST_Response {
+		$product_id = (int) $request['product_id'];
+		$section_id = (string) $request['section_id'];
+		return $this->ok( [
+			'options' => $this->service->read_section_options( $product_id, $section_id ),
+		] );
+	}
+
+	public function save_options( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$product_id = (int) $request['product_id'];
+		$section_id = (string) $request['section_id'];
+		$body       = $this->payload( $request );
+		$options    = is_array( $body['options'] ?? null ) ? $body['options'] : [];
+		$result     = $this->service->save_section_options( $product_id, $section_id, $options );
+		if ( ! ( $result['ok'] ?? false ) ) {
+			return $this->error( 'configurator_failed', (string) ( $result['message'] ?? 'Could not save options.' ), [ 'errors' => $result['errors'] ?? [] ], 400 );
 		}
 		return $this->ok( $result );
 	}

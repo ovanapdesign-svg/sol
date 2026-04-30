@@ -37,6 +37,7 @@ final class ConfiguratorBuilderServiceTest extends TestCase {
 	private StubLookupTableRepository $lookup_tables;
 	private StubLookupCellRepository $lookup_cells;
 	private SectionListState $sections;
+	private StubLibraryItemRepository $items;
 
 	protected function setUp(): void {
 		$this->product_meta  = [];
@@ -61,6 +62,7 @@ final class ConfiguratorBuilderServiceTest extends TestCase {
 			function ( array $data ): void { $this->option_store = $data; },
 		);
 
+		$this->items = new StubLibraryItemRepository();
 		$this->service = new ConfiguratorBuilderService(
 			$this->sections,
 			$pb_state,
@@ -72,6 +74,9 @@ final class ConfiguratorBuilderServiceTest extends TestCase {
 			$this->libraries,
 			new LookupCellService( $this->lookup_cells, $this->lookup_tables ),
 			$this->lookup_cells,
+			new \ConfigKit\Service\LibraryItemService( $this->items, $this->libraries, $this->modules ),
+			$this->items,
+			$this->modules,
 		);
 	}
 
@@ -231,6 +236,50 @@ final class ConfiguratorBuilderServiceTest extends TestCase {
 		$diag = $this->service->analyse_ranges( $rows );
 		$this->assertSame( [], $diag['overlaps'] );
 		$this->assertTrue( $diag['ok'] );
+	}
+
+	public function test_save_options_creates_library_items_under_section_library(): void {
+		$created = $this->service->create_section( self::PRODUCT_ID, SectionTypeRegistry::TYPE_OPTION_GROUP, 'Dukfarge' );
+		$id  = $created['section']['id'];
+		$key = $created['section']['library_key'];
+		$result = $this->service->save_section_options( self::PRODUCT_ID, $id, [
+			[ 'sku' => 'U171', 'label' => 'Beige Sand', 'price_group' => 'I' ],
+			[ 'sku' => 'U172', 'label' => 'Grey Stone', 'price_group' => 'I' ],
+		] );
+		$this->assertTrue( $result['ok'], 'errors=' . json_encode( $result['errors'] ?? [] ) );
+
+		$items = array_values( array_filter( $this->items->records, static fn ( $r ) => $r['library_key'] === $key && ! empty( $r['is_active'] ) ) );
+		$this->assertCount( 2, $items );
+		$skus = array_column( $items, 'sku' );
+		$this->assertContains( 'U171', $skus );
+		$this->assertContains( 'U172', $skus );
+	}
+
+	public function test_save_options_replace_all_drops_prior_set(): void {
+		$created = $this->service->create_section( self::PRODUCT_ID, SectionTypeRegistry::TYPE_OPTION_GROUP );
+		$id = $created['section']['id'];
+
+		$this->service->save_section_options( self::PRODUCT_ID, $id, [
+			[ 'sku' => 'U171', 'label' => 'Beige' ],
+		] );
+		$first_active = count( array_filter( $this->items->records, static fn ( $r ) => ! empty( $r['is_active'] ) ) );
+		$this->assertSame( 1, $first_active );
+
+		$this->service->save_section_options( self::PRODUCT_ID, $id, [
+			[ 'sku' => 'U200', 'label' => 'Sand' ],
+			[ 'sku' => 'U201', 'label' => 'Stone' ],
+		] );
+		$active = array_values( array_filter( $this->items->records, static fn ( $r ) => ! empty( $r['is_active'] ) ) );
+		$this->assertCount( 2, $active );
+		$this->assertContains( 'U200', array_column( $active, 'sku' ) );
+		$this->assertNotContains( 'U171', array_column( $active, 'sku' ) );
+	}
+
+	public function test_save_options_rejects_size_pricing_section(): void {
+		$created = $this->service->create_section( self::PRODUCT_ID, SectionTypeRegistry::TYPE_SIZE_PRICING );
+		$result  = $this->service->save_section_options( self::PRODUCT_ID, $created['section']['id'], [ [ 'sku' => 'X', 'label' => 'Y' ] ] );
+		$this->assertFalse( $result['ok'] );
+		$this->assertStringContainsString( 'ranges endpoint', $result['message'] );
 	}
 
 	public function test_section_type_registry_lists_documented_types(): void {

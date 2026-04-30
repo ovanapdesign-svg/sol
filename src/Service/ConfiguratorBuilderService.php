@@ -4,9 +4,11 @@ declare(strict_types=1);
 namespace ConfigKit\Service;
 
 use ConfigKit\Admin\SectionTypeRegistry;
+use ConfigKit\Repository\LibraryItemRepository;
 use ConfigKit\Repository\LibraryRepository;
 use ConfigKit\Repository\LookupCellRepository;
 use ConfigKit\Repository\LookupTableRepository;
+use ConfigKit\Repository\ModuleRepository;
 
 /**
  * Phase 4.4 — Yith-style section orchestrator.
@@ -42,6 +44,9 @@ final class ConfiguratorBuilderService {
 		private ?LibraryRepository $library_repo = null,
 		private ?LookupCellService $lookup_cells = null,
 		private ?LookupCellRepository $lookup_cell_repo = null,
+		private ?LibraryItemService $items = null,
+		private ?LibraryItemRepository $item_repo = null,
+		private ?ModuleRepository $module_repo = null,
 	) {}
 
 	/**
@@ -308,6 +313,169 @@ final class ConfiguratorBuilderService {
 			];
 		}
 		return $out;
+	}
+
+	/**
+	 * Phase 4.4 — save the option list for a non-pricing section
+	 * (option_group / motor / manual_operation / controls /
+	 * accessories / custom). Each owner row creates a library item;
+	 * replace_all semantics — re-saving wipes prior items.
+	 *
+	 * @param list<array<string,mixed>> $options
+	 *
+	 * @return array{ok:bool, message?:string, errors?:list<array<string,mixed>>, section?:array<string,mixed>}
+	 */
+	public function save_section_options( int $product_id, string $section_id, array $options ): array {
+		if ( $this->items === null || $this->item_repo === null || $this->library_repo === null ) {
+			return [ 'ok' => false, 'message' => 'Options are not wired in this environment.' ];
+		}
+		$section = $this->sections->find( $product_id, $section_id );
+		if ( $section === null ) {
+			return [ 'ok' => false, 'message' => 'Section not found.' ];
+		}
+		if ( ( $section['type'] ?? '' ) === SectionTypeRegistry::TYPE_SIZE_PRICING ) {
+			return [ 'ok' => false, 'message' => 'Use the ranges endpoint for size_pricing sections.' ];
+		}
+		$lib_key = (string) ( $section['library_key'] ?? '' );
+		if ( $lib_key === '' ) {
+			return [ 'ok' => false, 'message' => 'Section has no underlying library.' ];
+		}
+		$library = $this->library_repo->find_by_key( $lib_key );
+		if ( $library === null ) {
+			return [ 'ok' => false, 'message' => 'Library missing for this section.' ];
+		}
+		$module = $this->module_repo !== null ? $this->module_repo->find_by_key( (string) $library['module_key'] ) : null;
+
+		// Wipe prior items so the saved list mirrors the editor.
+		$this->item_repo->soft_delete_all_in_library( $lib_key );
+
+		$inserted = 0;
+		$errors   = [];
+		foreach ( $options as $i => $row ) {
+			$payload = $this->option_to_item_payload( $row, $module ?? [], $section );
+			if ( empty( $payload['label'] ) ) {
+				$errors[] = [ 'field' => 'name', 'code' => 'required', 'message' => sprintf( 'Option #%d needs a name.', $i + 1 ) ];
+				continue;
+			}
+			$payload['item_key'] = $this->mint_item_key( $lib_key, (string) $payload['label'], $payload['sku'] ?? null );
+			$result = $this->items->create( (int) $library['id'], $payload );
+			if ( ! ( $result['ok'] ?? false ) ) {
+				$errors[] = [
+					'field'   => 'option',
+					'code'    => 'create_failed',
+					'message' => sprintf( 'Option #%d (%s) could not be saved: %s', $i + 1, (string) $payload['label'], (string) ( $result['errors'][0]['message'] ?? 'unknown' ) ),
+				];
+				continue;
+			}
+			$inserted++;
+		}
+
+		if ( count( $errors ) > 0 ) {
+			return [ 'ok' => false, 'message' => sprintf( '%d option(s) failed.', count( $errors ) ), 'errors' => $errors ];
+		}
+		return [
+			'ok'      => true,
+			'message' => sprintf( '%d option(s) saved.', $inserted ),
+			'section' => $section,
+		];
+	}
+
+	/**
+	 * Read the library items behind a section. Hydrated rows include
+	 * the attribute schema so the JS editor can show the right
+	 * fields (only those the section's module declares).
+	 *
+	 * @return list<array<string,mixed>>
+	 */
+	public function read_section_options( int $product_id, string $section_id ): array {
+		if ( $this->item_repo === null ) return [];
+		$section = $this->sections->find( $product_id, $section_id );
+		if ( $section === null ) return [];
+		$lib_key = (string) ( $section['library_key'] ?? '' );
+		if ( $lib_key === '' ) return [];
+		return $this->item_repo->list_in_library( $lib_key, 1, 1000 )['items'] ?? [];
+	}
+
+	/**
+	 * @param array<string,mixed> $row
+	 * @param array<string,mixed> $module
+	 * @param array<string,mixed> $section
+	 * @return array<string,mixed>
+	 */
+	private function option_to_item_payload( array $row, array $module, array $section ): array {
+		$payload = [
+			'label'        => isset( $row['label'] ) ? trim( (string) $row['label'] ) : '',
+			'sku'          => isset( $row['sku'] ) && $row['sku'] !== '' ? (string) $row['sku'] : null,
+			'is_active'    => array_key_exists( 'active', $row ) ? (bool) $row['active'] : true,
+			'attributes'   => [],
+			'price_source' => 'configkit',
+			'item_type'    => 'simple_option',
+		];
+
+		if ( ! empty( $module['supports_image'] ) && ! empty( $row['image_url'] ) ) {
+			$payload['image_url'] = (string) $row['image_url'];
+		}
+		if ( ! empty( $module['supports_main_image'] ) && ! empty( $row['main_image_url'] ) ) {
+			$payload['main_image_url'] = (string) $row['main_image_url'];
+		}
+		if ( ! empty( $module['supports_color_family'] ) && ! empty( $row['color_family'] ) ) {
+			$payload['color_family'] = (string) $row['color_family'];
+		}
+		if ( ! empty( $module['supports_price_group'] ) && isset( $row['price_group'] ) ) {
+			$payload['price_group_key'] = (string) $row['price_group'];
+		}
+		if ( ! empty( $module['supports_price'] ) && isset( $row['price'] )
+			&& $row['price'] !== '' && $row['price'] !== null && (float) $row['price'] >= 0
+		) {
+			$payload['price'] = (float) $row['price'];
+		}
+		if ( ! empty( $module['supports_woo_product_link'] ) && isset( $row['woo_product_id'] )
+			&& (int) $row['woo_product_id'] > 0
+		) {
+			$payload['woo_product_id'] = (int) $row['woo_product_id'];
+		}
+
+		// Brand / collection are library-level fields the bulk paste
+		// can carry per row; store them on the item's `attributes`
+		// blob when the module supports them so the section editor
+		// can read them back without a join through the library.
+		if ( ! empty( $module['capabilities']['supports_brand'] ?? false ) && ! empty( $row['brand'] ) ) {
+			$payload['attributes']['brand'] = (string) $row['brand'];
+		}
+		if ( ! empty( $module['capabilities']['supports_collection'] ?? false ) && ! empty( $row['collection'] ) ) {
+			$payload['attributes']['collection'] = (string) $row['collection'];
+		}
+
+		// Module-declared attributes (fabric_code, transparency, …).
+		$schema = is_array( $module['attribute_schema'] ?? null ) ? $module['attribute_schema'] : [];
+		foreach ( array_keys( $schema ) as $key ) {
+			if ( ! is_string( $key ) ) continue;
+			if ( isset( $row[ $key ] ) && $row[ $key ] !== '' && $row[ $key ] !== null ) {
+				$payload['attributes'][ $key ] = $row[ $key ];
+			}
+		}
+
+		unset( $section );
+		return $payload;
+	}
+
+	private function mint_item_key( string $library_key, string $label, ?string $code ): string {
+		$base = $code !== null && $code !== '' ? $code : $label;
+		$slug = strtolower( $base );
+		$slug = preg_replace( '/[^a-z0-9]+/', '_', $slug ) ?? '';
+		$slug = trim( $slug, '_' );
+		if ( $slug === '' ) $slug = 'item';
+		if ( strlen( $slug ) < 3 ) {
+			$pad = strtolower( preg_replace( '/[^a-z0-9]+/', '_', $label ) ?? '' );
+			$pad = trim( $pad, '_' );
+			$slug = $pad !== '' && strlen( $pad ) >= 3 ? $pad : ( $slug . '_item' );
+			$slug = substr( $slug, 0, 64 );
+		}
+		if ( $this->item_repo === null ) return $slug;
+		if ( ! $this->item_repo->key_exists_in_library( $library_key, $slug ) ) return $slug;
+		$i = 2;
+		while ( $this->item_repo->key_exists_in_library( $library_key, $slug . '_' . $i ) ) $i++;
+		return $slug . '_' . $i;
 	}
 
 	/**
