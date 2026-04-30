@@ -225,7 +225,8 @@ priority.
 | User-friendly REST error display                      | complete | `ConfigKit.describeError()` in admin.js maps 404 / 401-403 / 409 / 400-422 / 5xx to natural-language messages. Each banner has a "Show technical details" collapsible with the raw message + code + status. |
 
 **Engine purity preserved.** `grep -rE "wp_\|get_option\|WP_Query\|\\$wpdb" src/Engines/`
-returns zero matches. Phase 2 + 3 PHPUnit tests green (351 / 781).
+returns zero matches. Phase 2 + 3 + 3.5 PHPUnit tests green
+(364 / 926).
 
 **Phase 3 status.** Seven of seven in-scope entities are landed
 (Modules, Libraries, Lookup Tables, Families, Templates, Products,
@@ -235,7 +236,25 @@ authored inside the Templates rules drawer (B4) and that surface is
 feature-complete; a standalone cross-template rules dashboard is a
 Phase 4 polish item, not a blocker. Settings → Logs viewer remains
 pending and is the only deferred Phase 3 item. Phase 3 is feature-
-complete pending owner closure approval.
+complete; Phase 3.5 polish landed on top.
+
+---
+
+## Phase 3.5 — Admin UX polish
+
+CSS / JS / minor PHP refinements after Phase 3 backend feature-
+completion. No schema migrations, no REST contract changes, engines
+untouched.
+
+| Item                                                  | Status   | Notes                                                                  |
+|-------------------------------------------------------|----------|------------------------------------------------------------------------|
+| Mobile responsive tables → stacked cards              | complete | All `wp-list-table` instances inside `.configkit-app` collapse below 768px via CSS-only `display:block` + `td[data-label]::before`. Title cells render larger / unprefixed; action cells stack with full-width buttons. Form footers + the product-binding savebar stick to the viewport bottom on mobile. data-label attributes added to td cells across modules / libraries / library items / lookup tables / cells / families / templates / products lists. |
+| Helper tooltips for capabilities + technical concepts | complete | `ConfigKit.help()` shared helper renders a small (?) badge with native title-tip on desktop and tap-to-toggle popout on touch. Wired into all twelve Modules `supports_*` capabilities, the five `allowed_field_kinds`, all eight Library item capability-driven Properties fields, and the Lookup Tables match_mode + supports_price_group. |
+| Collapsible form sections                             | complete | `ConfigKit.makeCollapsible()` upgrades any fieldset whose body lives in `.configkit-fieldset__body`. Each entity's `fieldset()` helper now takes `{ collapsible, collapsed }` opts. Default-collapsed: Modules → Capabilities + Allowed field kinds (in edit mode), Lookup tables → Bounding box, Library item form → Tags + Attributes. New-record forms keep advanced sections open so the form is still the configuration surface. |
+| Module type preset cards                              | complete | `src/Admin/ModuleTypePresets.php` declares 5 presets (Textiles, Colors, Motors, Accessories, Custom) with capability + allowed_field_kinds seeds. `apply_to_payload()` is called by `ModulesController::create` whenever the POST body carries `module_type` — owner-supplied values always beat preset seeds. The Modules JS shows the preset grid as Step 1 of the Create flow; picking a card seeds `state.editing` then jumps to the form. Edit flow skips presets. 13 new PHPUnit tests cover every preset + the apply_to_payload paths. |
+| Empty state CTAs                                      | complete | `ConfigKit.emptyState()` shared component renders a centered icon + title + 1-line message + primary button (and optional secondary link). Wired into Modules / Libraries / Lookup Tables / Families / Templates list pages, plus Product binding sections 3 / 4 / 6 (defaults / allowed sources / visibility) where the empty state pushes the owner back to the template picker via a smooth-scroll button. Libraries empty + no modules nudges the owner to Modules first. |
+| Conditional fields                                    | complete | Product binding section 5: the Discount % input only renders when Sale mode = `discount_percent`. Switching off `discount_percent` clears any stored discount value to keep the saved JSON tidy. Library item form already conditional on module capabilities. |
+| Soft warnings on generic keys                         | complete | `ConfigKit.softKeyWarnings()` flags test_ / tmp_ / demo_ / placeholder prefixes, dictionary-ish ≤4-char stems (foo/item/red/dar/etc.), and substring-overlap with existing keys in the same table. Renders as a yellow inline `.configkit-soft-warnings` notice below the key input on the Create form. Save is **never** blocked — warnings are advisory. Wired for module_key, family_key, library_key, lookup_table_key, template_key. Edit forms skip warnings since keys are immutable post-save. |
 
 ---
 
@@ -271,8 +290,19 @@ B3 fields/wizard/three-pane + B4 rules drawer + B5 publish/version
 snapshot)** + **Products binding** (Woo product-data tab + overview)
 + **System diagnostics** (8 checks per `OWNER_UX_FLOW.md §8` Flow F,
 ack via `wp_configkit_log` rows, tabbed UI). 7 of 7 in-scope Phase 3
-entities landed. Engines remain pure; 351 PHPUnit tests / 781
-assertions green. Awaiting Phase 3 closure approval.
+entities landed.
+
+**Phase 3.5 polish landed on top:** mobile responsive cards across
+all CRUD pages, (?) tooltips on every capability and technical
+concept, collapsible advanced fieldsets, 5-card module-type preset
+flow (Textiles/Colors/Motors/Accessories/Custom), empty-state CTAs
+that push owners to the next sensible action, conditional Discount %
+in Product binding, and soft (non-blocking) warnings on generic /
+placeholder keys.
+
+Engines remain pure; 364 PHPUnit tests / 926 assertions green.
+Awaiting Phase 4 direction (Excel import wizard or frontend
+customer UI).
 
 ---
 
