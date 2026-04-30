@@ -98,6 +98,104 @@ final class PricingEngine {
 	}
 
 	/**
+	 * Phase 4.2b.2 — admin-preview helper. Returns a per-component
+	 * breakdown plus a final total for a bundle library item, or a
+	 * null total when at least one component fails to resolve.
+	 *
+	 * Accepts both the decoded list (`bundle_components`, used by the
+	 * admin form preview before save) and the raw JSON string
+	 * (`bundle_components_json`, used by repository hydration). The
+	 * caller never needs to encode/decode — this method does the
+	 * normalisation.
+	 *
+	 * Pure-PHP (no WP/Woo). Stays inside the engine boundary.
+	 *
+	 * @param array<string,mixed> $library_item
+	 * @param array<string,array{price?:float|int|string}> $product_overrides
+	 * @return array{
+	 *   components:list<array{
+	 *     component_key:string,
+	 *     woo_product_id:int,
+	 *     qty:int,
+	 *     price_source:string,
+	 *     unit_price:?float,
+	 *     subtotal:?float
+	 *   }>,
+	 *   total:?float,
+	 *   price_source:string,
+	 *   fixed_bundle_price:?float
+	 * }
+	 */
+	public function resolveBundleBreakdown( array $library_item, array $product_overrides = [] ): array {
+		$source             = (string) ( $library_item['price_source'] ?? 'bundle_sum' );
+		$fixed_bundle_price = isset( $library_item['bundle_fixed_price'] ) && is_numeric( $library_item['bundle_fixed_price'] )
+			? (float) $library_item['bundle_fixed_price']
+			: null;
+
+		$components = $this->normalise_components( $library_item );
+
+		$rows  = [];
+		$total = 0.0;
+		$any_unresolved = false;
+		foreach ( $components as $component ) {
+			$qty = (int) ( $component['qty'] ?? 1 );
+			if ( $qty <= 0 ) $qty = 1;
+
+			$unit = $this->resolveComponentPrice( $component );
+			$row  = [
+				'component_key'  => (string) ( $component['component_key'] ?? '' ),
+				'woo_product_id' => (int) ( $component['woo_product_id'] ?? 0 ),
+				'qty'            => $qty,
+				'price_source'   => (string) ( $component['price_source'] ?? 'woo' ),
+				'unit_price'     => $unit,
+				'subtotal'       => $unit === null ? null : $unit * $qty,
+			];
+			if ( $unit === null ) {
+				$any_unresolved = true;
+			} else {
+				$total += $unit * $qty;
+			}
+			$rows[] = $row;
+		}
+
+		// `bundle_sum` total is null if anything failed; `fixed_bundle`
+		// always uses the fixed price regardless of components.
+		$resolved_total = $any_unresolved ? null : $total;
+		if ( $source === 'fixed_bundle' ) {
+			$resolved_total = $fixed_bundle_price;
+		}
+		// `product_override` would be applied at line-build time, not
+		// here — preview shows the bundle's own resolution.
+		unset( $product_overrides );
+
+		return [
+			'components'         => $rows,
+			'total'              => $resolved_total,
+			'price_source'       => $source,
+			'fixed_bundle_price' => $fixed_bundle_price,
+		];
+	}
+
+	/**
+	 * @param array<string,mixed> $library_item
+	 * @return list<array<string,mixed>>
+	 */
+	private function normalise_components( array $library_item ): array {
+		$decoded = $library_item['bundle_components'] ?? null;
+		if ( ! is_array( $decoded ) ) {
+			$json = $library_item['bundle_components_json'] ?? null;
+			if ( ! is_string( $json ) || $json === '' ) return [];
+			$d = json_decode( $json, true );
+			$decoded = is_array( $d ) ? $d : [];
+		}
+		$out = [];
+		foreach ( $decoded as $entry ) {
+			if ( is_array( $entry ) ) $out[] = $entry;
+		}
+		return $out;
+	}
+
+	/**
 	 * Sum the resolved prices of every component in a `bundle_sum`
 	 * library item (BUNDLE_MODEL §4 + decision §10.4 — each component
 	 * resolves its own `price_source` independently).
@@ -111,14 +209,11 @@ final class PricingEngine {
 	 * @param array<string,array{price?:float|int|string}> $product_overrides
 	 */
 	private function resolveBundleSumPrice( array $library_item, array $product_overrides ): ?float {
-		$json = $library_item['bundle_components_json'] ?? null;
-		if ( ! is_string( $json ) || $json === '' ) return null;
-		$components = json_decode( $json, true );
-		if ( ! is_array( $components ) || count( $components ) === 0 ) return null;
+		$components = $this->normalise_components( $library_item );
+		if ( count( $components ) === 0 ) return null;
 
 		$total = 0.0;
 		foreach ( $components as $component ) {
-			if ( ! is_array( $component ) ) return null;
 			$qty = (int) ( $component['qty'] ?? 1 );
 			if ( $qty <= 0 ) $qty = 1;
 
@@ -127,6 +222,7 @@ final class PricingEngine {
 
 			$total += $component_price * $qty;
 		}
+		unset( $product_overrides );
 		return $total;
 	}
 

@@ -2280,3 +2280,83 @@
 		grid-template-columns: 1fr;
 	}
 }
+
+/* ================================================================
+ * Phase 4.2b.2 — preview panels (UI_LABELS_MAPPING §9.1 / §9.2).
+ * ================================================================ */
+
+.configkit-resolved-price-panel,
+.configkit-bundle-breakdown {
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	padding: 12px 16px;
+	margin: 12px 0;
+}
+
+.configkit-resolved-price-panel__title,
+.configkit-bundle-breakdown__title {
+	margin: 0 0 8px 0;
+	font-size: 13px;
+	text-transform: uppercase;
+	color: #50575e;
+	letter-spacing: 0.5px;
+}
+
+.configkit-resolved-price-panel__body {
+	margin: 0;
+	font-size: 15px;
+	color: #1d2327;
+}
+
+.configkit-resolved-price-panel__body.is-error,
+.configkit-bundle-breakdown .description.is-error {
+	color: #b32d2e;
+}
+
+.configkit-resolved-price-panel__body.is-warning {
+	color: #856404;
+}
+
+.configkit-resolved-price-panel__note {
+	margin: 4px 0 0;
+	color: #646970;
+	font-size: 12px;
+	font-style: italic;
+}
+
+.configkit-bundle-breakdown__table {
+	width: 100%;
+	border-collapse: collapse;
+	margin: 6px 0;
+}
+
+.configkit-bundle-breakdown__table th,
+.configkit-bundle-breakdown__table td {
+	padding: 6px 8px;
+	font-size: 13px;
+	text-align: left;
+	border-bottom: 1px solid #f0f0f1;
+}
+
+.configkit-bundle-breakdown__table th {
+	font-weight: 500;
+	color: #50575e;
+}
+
+.configkit-bundle-breakdown__num {
+	text-align: right;
+	white-space: nowrap;
+}
+
+.configkit-bundle-breakdown__totals {
+	margin: 8px 0 0;
+	font-size: 14px;
+	color: #1d2327;
+}
+
+.configkit-bundle-breakdown__totals-note {
+	color: #50575e;
+	font-size: 12px;
+	font-style: italic;
+}

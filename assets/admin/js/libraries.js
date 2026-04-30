@@ -1057,6 +1057,14 @@
 		}
 		wrap.appendChild( fieldset( 'Pricing', pricingChildren ) );
 
+		// Phase 4.2b.2 — Resolved-price preview panel. Mounts an empty
+		// host that the preview function fills in async; lives directly
+		// under the Pricing fieldset so the owner sees the effect of
+		// every choice. Spec: UI_LABELS_MAPPING.md §9.1.
+		const resolvedHost = el( 'div', { class: 'configkit-resolved-price-panel', 'data-cf-resolved-price': '' } );
+		wrap.appendChild( resolvedHost );
+		schedulePricePreview( rec, resolvedHost );
+
 		// Capability-conditional fields. Each tooltip explains the term
 		// for owners who don't think in technical capabilities.
 		const props = [];
@@ -1126,6 +1134,11 @@
 				'Package contents',
 				[ renderBundleComponents( rec ) ]
 			) );
+
+			// Package breakdown preview — UI_LABELS_MAPPING §9.2.
+			const breakdownHost = el( 'div', { class: 'configkit-bundle-breakdown', 'data-cf-bundle-breakdown': '' } );
+			wrap.appendChild( breakdownHost );
+			scheduleBundleBreakdown( rec, breakdownHost );
 		}
 
 		// Phase 4.2b.2 — bundle-only behavior toggles. Hidden entirely
@@ -1368,6 +1381,200 @@
 				},
 			} )
 		);
+	}
+
+	// Phase 4.2b.2 — preview state. The price-preview panel and the
+	// bundle-breakdown panel both call /library-items/preview-price.
+	// We debounce per-host (200 ms) and cancel stale responses by
+	// generation count so the latest input always wins.
+	const previewState = {
+		debounceHandles: new WeakMap(),
+		generation: new WeakMap(),
+	};
+
+	function schedulePricePreview( rec, host ) {
+		const prev = previewState.debounceHandles.get( host );
+		if ( prev ) clearTimeout( prev );
+
+		// Show a minimal placeholder right away so the panel doesn't
+		// flash empty between renders.
+		renderResolvedPricePanel( host, { kind: 'loading' } );
+
+		const handle = setTimeout( () => {
+			runPreview( rec, host, ( data ) => {
+				renderResolvedPricePanel( host, { kind: 'ok', data } );
+			} );
+		}, 200 );
+		previewState.debounceHandles.set( host, handle );
+	}
+
+	function scheduleBundleBreakdown( rec, host ) {
+		const prev = previewState.debounceHandles.get( host );
+		if ( prev ) clearTimeout( prev );
+
+		renderBundleBreakdownPanel( host, { kind: 'loading' } );
+
+		const handle = setTimeout( () => {
+			runPreview( rec, host, ( data ) => {
+				renderBundleBreakdownPanel( host, { kind: 'ok', data } );
+			} );
+		}, 200 );
+		previewState.debounceHandles.set( host, handle );
+	}
+
+	function runPreview( rec, host, onReady ) {
+		const generation = ( previewState.generation.get( host ) || 0 ) + 1;
+		previewState.generation.set( host, generation );
+
+		const payload = {
+			library_item: {
+				library_key:        ( state.library && state.library.library_key ) || '',
+				item_key:           rec.item_key || '',
+				item_type:          rec.item_type || 'simple_option',
+				price_source:       rec.price_source || 'configkit',
+				price:              rec.price === '' ? null : rec.price,
+				woo_product_id:     rec.woo_product_id === '' ? null : rec.woo_product_id,
+				bundle_fixed_price: rec.bundle_fixed_price === '' ? null : rec.bundle_fixed_price,
+				bundle_components:  Array.isArray( rec.bundle_components ) ? rec.bundle_components.map( ( c ) => ( {
+					component_key:  c.component_key || '',
+					woo_product_id: c.woo_product_id || 0,
+					qty:            c.qty || 1,
+					price_source:   c.price_source || 'woo',
+					price:          c.price === '' ? null : c.price,
+				} ) ) : [],
+			},
+		};
+
+		ConfigKit.request( '/library-items/preview-price', { method: 'POST', body: payload } )
+			.then( ( data ) => {
+				if ( previewState.generation.get( host ) !== generation ) return;
+				onReady( data );
+			} )
+			.catch( ( err ) => {
+				if ( previewState.generation.get( host ) !== generation ) return;
+				renderResolvedPricePanel( host, {
+					kind: 'error',
+					message: ( err && err.message ) || 'Preview failed.',
+				} );
+			} );
+	}
+
+	function renderResolvedPricePanel( host, snapshot ) {
+		host.innerHTML = '';
+		host.appendChild( el( 'h4', { class: 'configkit-resolved-price-panel__title' }, 'Resolved price preview' ) );
+		if ( snapshot.kind === 'loading' ) {
+			host.appendChild( el( 'p', { class: 'configkit-resolved-price-panel__body' }, 'Calculating…' ) );
+			return;
+		}
+		if ( snapshot.kind === 'error' ) {
+			host.appendChild( el( 'p', { class: 'configkit-resolved-price-panel__body is-error' }, snapshot.message ) );
+			return;
+		}
+		const data = snapshot.data || {};
+		const resolved = data.resolved_price;
+		const source   = data.price_source || 'configkit';
+
+		if ( resolved === null || resolved === undefined ) {
+			host.appendChild( el(
+				'p',
+				{ class: 'configkit-resolved-price-panel__body is-warning' },
+				priceMissingMessage( source )
+			) );
+			return;
+		}
+		const para = el( 'p', { class: 'configkit-resolved-price-panel__body' } );
+		para.appendChild( document.createTextNode( 'If a customer picks this item now, the price will be: ' ) );
+		para.appendChild( el( 'strong', null, formatKr( resolved ) ) );
+		host.appendChild( para );
+
+		if ( source === 'woo' ) {
+			host.appendChild( el(
+				'p',
+				{ class: 'configkit-resolved-price-panel__note' },
+				'(read from WooCommerce — frozen at add-to-cart)'
+			) );
+		}
+		if ( source === 'product_override' ) {
+			host.appendChild( el(
+				'p',
+				{ class: 'configkit-resolved-price-panel__note' },
+				'Per-product overrides apply only on specific Woo products.'
+			) );
+		}
+	}
+
+	function priceMissingMessage( source ) {
+		if ( source === 'woo' )           return 'No price yet — pick a WooCommerce product with a price.';
+		if ( source === 'configkit' )     return 'No price yet — enter a price above.';
+		if ( source === 'fixed_bundle' )  return 'No price yet — enter a fixed package price above.';
+		if ( source === 'bundle_sum' )    return 'No price yet — at least one component is missing a price.';
+		return 'No price yet.';
+	}
+
+	function renderBundleBreakdownPanel( host, snapshot ) {
+		host.innerHTML = '';
+		host.appendChild( el( 'h4', { class: 'configkit-bundle-breakdown__title' }, 'Package breakdown' ) );
+
+		if ( snapshot.kind === 'loading' ) {
+			host.appendChild( el( 'p', { class: 'description' }, 'Calculating…' ) );
+			return;
+		}
+		if ( snapshot.kind === 'error' ) {
+			host.appendChild( el( 'p', { class: 'description is-error' }, snapshot.message || 'Preview failed.' ) );
+			return;
+		}
+		const data = ( snapshot.data && snapshot.data.breakdown ) || null;
+		if ( ! data || ! Array.isArray( data.components ) || data.components.length === 0 ) {
+			host.appendChild( el( 'p', { class: 'description' }, 'Add components above to see the package breakdown.' ) );
+			return;
+		}
+
+		const table = el( 'table', { class: 'configkit-bundle-breakdown__table' } );
+		const thead = el( 'thead', null,
+			el( 'tr', null,
+				el( 'th', null, 'Component' ),
+				el( 'th', null, 'Qty' ),
+				el( 'th', null, 'Source' ),
+				el( 'th', { class: 'configkit-bundle-breakdown__num' }, 'Resolved' ),
+				el( 'th', { class: 'configkit-bundle-breakdown__num' }, 'Subtotal' )
+			)
+		);
+		table.appendChild( thead );
+
+		const tbody = el( 'tbody' );
+		data.components.forEach( ( c ) => {
+			const sourceLabel = ( PRICE_SOURCE_LABELS[ c.price_source ] || {} ).label || '—';
+			const meta = wooMetaCache[ c.woo_product_id ];
+			const componentLabel = meta && ! meta._loading
+				? meta.name
+				: ( c.component_key || ( '#' + ( c.woo_product_id || 0 ) ) );
+			tbody.appendChild( el( 'tr', null,
+				el( 'td', null, componentLabel ),
+				el( 'td', null, String( c.qty || 1 ) ),
+				el( 'td', null, sourceLabel ),
+				el( 'td', { class: 'configkit-bundle-breakdown__num' }, c.unit_price === null ? '—' : formatKr( c.unit_price ) ),
+				el( 'td', { class: 'configkit-bundle-breakdown__num' }, c.subtotal === null ? '—' : formatKr( c.subtotal ) )
+			) );
+		} );
+		table.appendChild( tbody );
+		host.appendChild( table );
+
+		const totalsRow = el( 'p', { class: 'configkit-bundle-breakdown__totals' } );
+		if ( data.price_source === 'fixed_bundle' ) {
+			totalsRow.appendChild( document.createTextNode( 'Total: ' ) );
+			totalsRow.appendChild( el( 'strong', null,
+				data.fixed_bundle_price === null ? '—' : 'Fixed at ' + formatKr( data.fixed_bundle_price )
+			) );
+			totalsRow.appendChild( el( 'span', { class: 'configkit-bundle-breakdown__totals-note' },
+				' (component prices shown above are for stock and order-line accounting only)'
+			) );
+		} else {
+			totalsRow.appendChild( document.createTextNode( 'Total: ' ) );
+			totalsRow.appendChild( el( 'strong', null,
+				data.total === null ? '—' : formatKr( data.total )
+			) );
+		}
+		host.appendChild( totalsRow );
 	}
 
 	// Phase 4.2b.2 — cache of resolved Woo product rows keyed by id,

@@ -8,6 +8,8 @@ namespace ConfigKit;
 
 use ConfigKit\Adapters\WooPriceProvider;
 use ConfigKit\Adapters\WooProductSearchProvider;
+use ConfigKit\Engines\LookupEngine;
+use ConfigKit\Engines\PricingEngine;
 use ConfigKit\Admin\AssetLoader;
 use ConfigKit\Admin\Menu;
 use ConfigKit\Admin\Pages\AbstractPage;
@@ -215,7 +217,10 @@ final class Plugin {
 		$router = new Router();
 		$router->add( new ModulesController( new ModuleService( $module_repo ) ) );
 		$router->add( new LibrariesController( new LibraryService( $library_repo, $module_repo ) ) );
-		$router->add( new LibraryItemsController( new LibraryItemService( $item_repo, $library_repo, $module_repo ) ) );
+		$router->add( new LibraryItemsController(
+			new LibraryItemService( $item_repo, $library_repo, $module_repo ),
+			new PricingEngine( new LookupEngine(), $this->build_price_provider() )
+		) );
 		$router->add( new LookupTablesController( new LookupTableService( $lookup_repo, $cell_repo ) ) );
 		$router->add( new LookupCellsController( new LookupCellService( $cell_repo, $lookup_repo ) ) );
 		$router->add( new FamiliesController( new FamilyService( new FamilyRepository( $wpdb ) ) ) );
