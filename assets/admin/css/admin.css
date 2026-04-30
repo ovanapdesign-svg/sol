@@ -3546,6 +3546,11 @@
 	color: #50575e;
 }
 
+.configkit-cb__modal-id-copy {
+	font-size: 11px;
+	margin-left: 2px;
+}
+
 .configkit-cb__modal-close {
 	border: 0;
 	background: transparent;
@@ -3787,6 +3792,29 @@
 	color: #50575e;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
+}
+
+/* Phase 4.4b — required marker + helper text + invalid state. */
+.configkit-cb__required-mark {
+	color: #b32d2e;
+	font-weight: 600;
+}
+
+.configkit-cb__field-helper {
+	font-size: 11px;
+	color: #8c8f94;
+	margin-top: 2px;
+}
+
+.configkit-cb__option-field.is-invalid .configkit-cb__option-input,
+.configkit-cb__option-field.is-invalid input {
+	border-color: #b32d2e;
+}
+
+.configkit-cb__field-error {
+	font-size: 11px;
+	color: #b32d2e;
+	margin-top: 2px;
 }
 
 .configkit-cb__option-input {

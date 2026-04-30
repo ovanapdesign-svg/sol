@@ -1035,13 +1035,17 @@
 				el( 'span', { class: 'configkit-cb__type-badge' }, type.label || section.type ),
 				renderEditableLabel( section )
 			),
-			el( 'div', { class: 'configkit-cb__modal-id' },
+			el( 'div', {
+				class: 'configkit-cb__modal-id',
+				title: 'Internal stable ID used by rules and presets. You normally do not edit this.',
+			},
 				el( 'span', { class: 'configkit-cb__modal-id-label' }, 'Element ID' ),
-				el( 'code', {
-					class: 'configkit-cb__element-id',
-					title: 'Click to copy',
+				el( 'code', { class: 'configkit-cb__element-id' }, section.id ),
+				el( 'button', {
+					type: 'button',
+					class: 'button-link configkit-cb__modal-id-copy',
 					onClick: () => copyToClipboard( section.id ),
-				}, section.id )
+				}, 'Copy' )
 			),
 			el( 'button', {
 				type: 'button',
@@ -1269,13 +1273,14 @@
 
 		// Field grid.
 		const grid = el( 'div', { class: 'configkit-cb__option-grid' } );
-		grid.appendChild( labelled( 'Name',         textInput( opt.label, 'label' ) ) );
-		grid.appendChild( labelled( 'SKU',          textInput( opt.sku, 'sku' ) ) );
-		grid.appendChild( labelled( 'Brand',        textInput( opt.brand, 'brand' ) ) );
-		grid.appendChild( labelled( 'Collection',   textInput( opt.collection, 'collection' ) ) );
-		grid.appendChild( labelled( 'Color family', textInput( opt.color_family, 'color_family' ) ) );
-		grid.appendChild( labelled( 'Price group',  textInput( opt.price_group, 'price_group' ) ) );
-		grid.appendChild( labelled( 'Price (kr)', renderPriceFieldWithOverride( section, opt ) ) );
+		grid.appendChild( labelled( 'Name',         textInput( opt.label,        'label',        '', 'e.g. Dickson U171' ), { required: true } ) );
+		grid.appendChild( labelled( 'SKU',          textInput( opt.sku,          'sku',          '', 'e.g. DICK-U171' ) ) );
+		grid.appendChild( labelled( 'Brand',        textInput( opt.brand,        'brand',        '', 'e.g. Dickson' ) ) );
+		grid.appendChild( labelled( 'Collection',   textInput( opt.collection,   'collection',   '', 'e.g. Orchestra' ) ) );
+		grid.appendChild( labelled( 'Color family', textInput( opt.color_family, 'color_family', '', 'e.g. Beige' ) ) );
+		grid.appendChild( labelled( 'Price group',  textInput( opt.price_group,  'price_group',  '', 'e.g. I, II, III' ) ) );
+		grid.appendChild( labelled( 'Price (kr)',   renderPriceFieldWithOverride( section, opt ),
+			{ helper: '0 means no surcharge for this option.' } ) );
 		card.appendChild( grid );
 
 		// Hidden image_url field so readOptionDraftsFromDOM picks it up.
@@ -1311,30 +1316,49 @@
 		return card;
 	}
 
-	function textInput( value, field, cls ) {
+	// Phase 4.4b — text/number inputs accept an optional placeholder
+	// (and number inputs an optional `step`) so per-section editors
+	// can give owners a copy-pasteable example without re-implementing
+	// the input markup. Backward-compatible: existing call sites keep
+	// working unchanged.
+	function textInput( value, field, cls, placeholder ) {
 		return el( 'input', {
 			type: 'text',
 			class: 'configkit-cb__option-input' + ( cls ? ' ' + cls : '' ),
 			'data-field': field,
 			value: value !== null && value !== undefined ? String( value ) : '',
+			placeholder: placeholder || '',
 		} );
 	}
 
-	function numberInput( value, field ) {
+	function numberInput( value, field, placeholder ) {
 		return el( 'input', {
 			type: 'number',
 			class: 'configkit-cb__option-input',
 			'data-field': field,
 			value: value !== null && value !== undefined && value !== '' ? String( value ) : '',
 			step: '0.01',
+			placeholder: placeholder || '',
 		} );
 	}
 
-	function labelled( label, child ) {
-		return el( 'label', { class: 'configkit-cb__option-field' },
-			el( 'span', { class: 'configkit-cb__option-field-label' }, label ),
-			child
-		);
+	// Phase 4.4b — labelled() learns about required + helper text.
+	// `opts.required`  → renders a red asterisk + a `data-required`
+	//                    attribute that submit-time validation reads.
+	// `opts.helper`    → small description below the field.
+	function labelled( label, child, opts ) {
+		opts = opts || {};
+		const labelNode = el( 'span', { class: 'configkit-cb__option-field-label' }, label );
+		if ( opts.required ) {
+			labelNode.appendChild( el( 'span', { class: 'configkit-cb__required-mark', 'aria-hidden': 'true' }, ' *' ) );
+		}
+		const wrap = el( 'label', {
+			class: 'configkit-cb__option-field' + ( opts.required ? ' is-required' : '' ),
+		}, labelNode, child );
+		if ( opts.helper ) {
+			wrap.appendChild( el( 'span', { class: 'configkit-cb__field-helper' }, opts.helper ) );
+		}
+		return wrap;
 	}
 
 	function readOptionDraftsFromDOM() {
@@ -1618,8 +1642,8 @@
 
 		// Common header — name + sku + active.
 		const header = el( 'div', { class: 'configkit-cb__option-grid' } );
-		header.appendChild( labelled( 'Name',          textInput( opt.label, 'label' ) ) );
-		header.appendChild( labelled( 'SKU',           textInput( opt.sku, 'sku' ) ) );
+		header.appendChild( labelled( 'Name', textInput( opt.label, 'label', '', 'e.g. Somfy IO motor' ), { required: true } ) );
+		header.appendChild( labelled( 'SKU',  textInput( opt.sku,   'sku',   '', 'e.g. SOMFY-IO-MOTOR' ) ) );
 		card.appendChild( header );
 
 		if ( isBundle ) {
@@ -1660,8 +1684,11 @@
 
 	function renderSingleMotorSection( opt ) {
 		const wrap = el( 'div', { class: 'configkit-cb__option-grid' } );
-		wrap.appendChild( labelled( 'Woo product SKU', textInput( opt.woo_product_sku, 'woo_product_sku' ) ) );
-		wrap.appendChild( labelled( 'Custom price (kr)', numberInput( opt.price, 'price' ) ) );
+		wrap.appendChild( labelled( 'Woo product SKU',
+			textInput( opt.woo_product_sku, 'woo_product_sku', '', 'Search or enter linked Woo SKU' ),
+			{ helper: 'Resolved to the matching WooCommerce product on save.' }
+		) );
+		wrap.appendChild( labelled( 'Custom price (kr)', numberInput( opt.price, 'price', 'e.g. 4500' ) ) );
 
 		const sourceSelect = el( 'select', { 'data-field': 'price_source', class: 'configkit-cb__option-input' } );
 		[ 'configkit', 'woo' ].forEach( ( v ) => {
@@ -1670,7 +1697,9 @@
 				selected: ( opt.price_source === v ),
 			}, v === 'woo' ? 'From Woo product' : 'Custom (above)' ) );
 		} );
-		wrap.appendChild( labelled( 'Price source', sourceSelect ) );
+		wrap.appendChild( labelled( 'Price source', sourceSelect, {
+			helper: 'Custom uses the price above. Woo uses the linked Woo product price.',
+		} ) );
 
 		// Hidden numeric id passes through (resolver-set).
 		wrap.appendChild( el( 'input', { type: 'hidden', 'data-field': 'woo_product_id', value: String( opt.woo_product_id || 0 ) } ) );
@@ -1901,11 +1930,11 @@
 
 		const table = el( 'div', { class: 'configkit-cb__range-table' } );
 		table.appendChild( el( 'div', { class: 'configkit-cb__range-row configkit-cb__range-row--head' },
-			el( 'span', null, 'Width from' ),
-			el( 'span', null, 'Width to' ),
-			el( 'span', null, 'Height from' ),
-			el( 'span', null, 'Height to' ),
-			el( 'span', null, 'Price (kr)' ),
+			el( 'span', null, 'Width from *' ),
+			el( 'span', null, 'Width to *' ),
+			el( 'span', null, 'Height from *' ),
+			el( 'span', null, 'Height to *' ),
+			el( 'span', null, 'Price (kr) *' ),
 			el( 'span', null, 'Group' ),
 			el( 'span', null, '' )
 		) );
@@ -1945,12 +1974,12 @@
 			: [];
 		const cls = 'configkit-cb__range-row' + ( overlapWith.length > 0 ? ' is-overlap' : '' );
 		const node = el( 'div', { class: cls, 'data-range-row': String( index ) },
-			rangeInput( row.width_from,  'width_from' ),
-			rangeInput( row.width_to,    'width_to' ),
-			rangeInput( row.height_from, 'height_from' ),
-			rangeInput( row.height_to,   'height_to' ),
-			rangeInput( row.price,       'price', 'number', '0.01' ),
-			rangeInput( row.price_group_key, 'price_group_key', 'text' ),
+			rangeInput( row.width_from,  'width_from',  'number', null,    'e.g. 2100' ),
+			rangeInput( row.width_to,    'width_to',    'number', null,    'e.g. 2400' ),
+			rangeInput( row.height_from, 'height_from', 'number', null,    'e.g. 1500' ),
+			rangeInput( row.height_to,   'height_to',   'number', null,    'e.g. 2000' ),
+			rangeInput( row.price,       'price',       'number', '0.01',  'e.g. 12000' ),
+			rangeInput( row.price_group_key, 'price_group_key', 'text', null, 'e.g. I' ),
 			el( 'button', {
 				type: 'button',
 				class: 'configkit-cb__row-remove',
@@ -1969,13 +1998,14 @@
 		return node;
 	}
 
-	function rangeInput( value, field, type, step ) {
+	function rangeInput( value, field, type, step, placeholder ) {
 		return el( 'input', {
 			type: type || 'number',
 			class: 'configkit-cb__range-input',
 			'data-field': field,
 			value: value !== null && value !== undefined && value !== '' ? String( value ) : '',
 			step: step,
+			placeholder: placeholder || '',
 		} );
 	}
 
