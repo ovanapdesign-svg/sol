@@ -35,14 +35,14 @@ N:1 — one library item, N Woo products.
 A new column `item_type` on `wp_configkit_library_items` encodes the
 two shapes:
 
-| Value     | Meaning                                                                                                            |
-| --------- | ------------------------------------------------------------------------------------------------------------------ |
-| `simple`  | Standalone option. May have `woo_product_id` or not. Default for new items and the only shape pre-Phase 4.2.       |
-| `bundle`  | Composite. Carries a `bundle_components_json` array. The library item itself usually has no direct `woo_product_id`. |
+| Value           | Meaning                                                                                                            |
+| --------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `simple_option` | Standalone option. May have `woo_product_id` or not. Default for new items and the only shape pre-Phase 4.2.       |
+| `bundle`        | Composite. Carries a `bundle_components_json` array. The library item itself usually has no direct `woo_product_id`. |
 
 Validation:
 
-- `item_type = 'simple'` ignores `bundle_components_json` /
+- `item_type = 'simple_option'` ignores `bundle_components_json` /
   `bundle_fixed_price` / `cart_behavior` / `admin_order_display`
   (they are NULL on save).
 - `item_type = 'bundle'` requires `bundle_components_json` to be a
@@ -258,7 +258,7 @@ land in the same migration):
 
 ```
 ALTER TABLE wp_configkit_library_items
-  ADD COLUMN item_type VARCHAR(32) NOT NULL DEFAULT 'simple'
+  ADD COLUMN item_type VARCHAR(32) NOT NULL DEFAULT 'simple_option'
     AFTER bundle_fixed_price,
   ADD COLUMN bundle_components_json LONGTEXT NULL
     AFTER item_type,
@@ -273,7 +273,7 @@ ALTER TABLE wp_configkit_library_items
 
 Backfill:
 
-- All existing rows: `item_type = 'simple'`,
+- All existing rows: `item_type = 'simple_option'`,
   `bundle_components_json = NULL`,
   `cart_behavior = NULL`,
   `admin_order_display = NULL`.
@@ -286,47 +286,84 @@ Migration filename: `0017_extend_library_items_pricing_bundles.php`
 
 ---
 
-## 10. Open questions for owner review
+## 10. Decisions locked
 
-1. **Bundle recursion.** Can a bundle component itself be a bundle
-   (recursive structure)? Spec author proposes **no in v1** — bundles
-   are exactly two levels deep (configurable product → bundle item
-   → simple Woo components). Allowing recursion complicates pricing
-   sums, stock checks, and order rendering. Easy to lift later if
-   owners need it.
+The five v1 questions raised in earlier drafts of this spec are
+resolved by owner decision. Listed here so the spec is
+self-contained and Phase 4.2b implementers do not need to chase
+prior conversations.
 
-2. **`fixed_bundle` reconciliation.** When `price_source = 'fixed_bundle'`
-   and `cart_behavior = 'add_child_lines'`, the per-component prices
-   sum to a number that probably doesn't equal `bundle_fixed_price`.
-   Two options for splitting the fixed price across child lines:
-   - (a) Put the difference on the **first** component as a discount
-     line — simplest, but the first component's stored price looks
-     weird in reports.
-   - (b) Distribute proportionally across components based on their
-     resolveComponentPrice — accurate per-component revenue but
-     messy decimals.
-   Spec author proposes (b) with banker's rounding. Owner pick.
-
+1. **Bundle recursion.** No recursion. Bundles are exactly one
+   level deep — `bundle_components_json[].woo_product_id` always
+   refers to a Woo product, never to another ConfigKit library
+   item or another bundle. `LibraryItemService` rejects recursive
+   nests with code `bundle.recursion_forbidden`.
+2. **`fixed_bundle` reconciliation across child cart lines.**
+   When `price_source = 'fixed_bundle'` AND `cart_behavior =
+   'add_child_lines'`, the difference between the per-component
+   sum and `bundle_fixed_price` is distributed proportionally
+   across components based on each component's resolved
+   contribution, with banker's rounding (option (b) from the
+   prior draft). Phase 4.2b unit tests lock this behaviour.
 3. **Non-Woo components.** `bundle_components_json[].woo_product_id`
-   is required in v1. Should we allow a component to reference a
-   ConfigKit-only library item (no Woo product) for cases like
-   "free fabric sample with motor purchase"? Spec author proposes
-   **no in v1** — handle via `is_required = false` toggles or
-   ConfigKit rules instead.
+   is required in v1. Components MUST reference a real Woo
+   product. ConfigKit-only "free sample" components are out of
+   scope for Phase 4.2 — owners handle that via field-level rules
+   or the existing `is_required = false` mechanic.
+4. **Component qty > 1 stock semantics.** Standard Woo rule
+   applies: the stock check uses the component's effective qty
+   (`component.qty × cart_line_qty`). The check only blocks the
+   add-to-cart when Woo stock management is enabled for that
+   component's product (decision 7).
+5. **Refunds / partial refunds.** Out of scope for Phase 4.2.
+   When `cart_behavior = 'price_inside_main'` the order is a
+   single bundle line; refund the whole line. Owners who need
+   per-component refund granularity should choose `cart_behavior
+   = 'add_child_lines'` at item creation time.
 
-4. **Component qty > 1 with stock.** When a component declares
-   `qty = 2` and Woo's available stock is exactly 2, can two
-   bundles be ordered (4 stock needed) or one (2 stock needed)?
-   Spec assumes the standard Woo rule: stock check happens on the
-   component's effective qty (`component.qty × cart_line_qty`).
+Three further owner-locked decisions inherited from
+PRICING_SOURCE_MODEL §9:
 
-5. **Refund / partial refund.** When `cart_behavior =
-   'price_inside_main'` and a customer wants to return only the
-   remote, is that supported? The order line is a single bundle
-   line, so partial refunds would need explicit per-component
-   refund UI in the order admin. Spec author proposes **out of
-   scope for Phase 4.2** — refund the whole line or use
-   `add_child_lines` for orders that need refund granularity.
+6. **Cart default.** `cart_behavior = 'price_inside_main'`
+   (default for new bundle items; toggle per item).
+7. **Stock check default.** Per-component `stock_behavior`
+   defaults to `check_components`, but the runtime check only
+   blocks when Woo stock management is enabled for the component
+   product. Component products with stock management off do not
+   block the order.
+8. **Admin order default.** `admin_order_display = 'expanded'`
+   (warehouse always sees component lines unless owner opts
+   into `'collapsed'`).
 
-After owner sign-off this spec moves from DRAFT v1 → APPROVED and
-Phase 4.2b implements it alongside `PRICING_SOURCE_MODEL.md`.
+This spec is APPROVED for Phase 4.2b implementation. Future
+modifications require a new spec version and explicit re-approval.
+
+---
+
+## 11. UI labels
+
+Every UI surface that exposes the bundle model MUST cite
+`UI_LABELS_MAPPING.md` for label, helper, and helper-text copy.
+In particular:
+
+- `UI_LABELS_MAPPING.md §3` — the `item_type` selector ("Single
+  option" default vs "Package (multiple products combined)").
+- `UI_LABELS_MAPPING.md §4` — the bundle composition editor
+  (component picker, qty, price source, optional cart label,
+  resolved-price column).
+- `UI_LABELS_MAPPING.md §5` — `cart_behavior` radio pair labels
+  ("Show customer one configured product line" /  "Show each
+  component as a separate cart line").
+- `UI_LABELS_MAPPING.md §6` — per-component stock-behaviour
+  toggle ("Check stock for this component") with the persistent
+  Woo-stock-management helper.
+- `UI_LABELS_MAPPING.md §7` — `admin_order_display` toggle.
+- `UI_LABELS_MAPPING.md §9.2` — the "Package breakdown preview"
+  panel beneath the components editor.
+
+Backend terms (`simple_option`, `bundle`, `bundle_sum`,
+`fixed_bundle`, `price_inside_main`, `add_child_lines`,
+`check_components`, `expanded`, `collapsed`) are forbidden as
+primary UI labels per `UI_LABELS_MAPPING.md §11`. Implementation
+MUST cite this mapping when rendering any bundle-related UI;
+reviewers reject PRs that expose enum values as labels.

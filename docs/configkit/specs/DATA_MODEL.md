@@ -161,7 +161,7 @@ Items inside a library.
 | price_group_key | VARCHAR(32) NULL    | If module supports_price_group     |
 | color_family    | VARCHAR(64) NULL    | If module supports_color_family    |
 | woo_product_id  | BIGINT UNSIGNED NULL| If module supports_woo_product_link|
-| item_type       | VARCHAR(32) NOT NULL DEFAULT 'simple' | Phase 4.2 — see BUNDLE_MODEL.md §2 (`simple` / `bundle`) |
+| item_type       | VARCHAR(32) NOT NULL DEFAULT 'simple_option' | Phase 4.2 — see BUNDLE_MODEL.md §2 (`simple_option` / `bundle`) |
 | bundle_components_json | LONGTEXT NULL | Phase 4.2 — required when item_type = 'bundle' (BUNDLE_MODEL §3) |
 | cart_behavior   | VARCHAR(32) NULL DEFAULT 'price_inside_main' | Phase 4.2 — bundle items only (BUNDLE_MODEL §5) |
 | admin_order_display | VARCHAR(32) NULL DEFAULT 'expanded' | Phase 4.2 — bundle items only (BUNDLE_MODEL §7) |
@@ -188,7 +188,7 @@ Indexes:
 `item_type`, `bundle_components_json`, `cart_behavior`,
 `admin_order_display`) land in migration
 `0017_extend_library_items_pricing_bundles.php`. All defaults keep
-existing rows at `price_source = 'configkit'` / `item_type = 'simple'`
+existing rows at `price_source = 'configkit'` / `item_type = 'simple_option'`
 so no behavioural change ships with the schema change. The migration
 itself is authored in Phase 4.2b after owner sign-off on
 PRICING_SOURCE_MODEL.md and BUNDLE_MODEL.md.

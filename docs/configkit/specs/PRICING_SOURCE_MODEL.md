@@ -53,7 +53,7 @@ Validation (server-side, on item create / update):
 - `fixed_bundle` requires `bundle_fixed_price IS NOT NULL`.
 - `woo` requires `woo_product_id IS NOT NULL` and forbids a
   non-NULL `library_item.price` (so the source of truth is unambiguous).
-- `configkit` is the only legal default for `item_type = 'simple'`.
+- `configkit` is the only legal default for `item_type = 'simple_option'`.
 - `product_override` is **not** writable on a library item — it is
   produced by the resolver when a binding-level override matches.
 
@@ -94,9 +94,13 @@ The ladder runs once per item per render. The engine does not retry
 or fall through — if step 2 yields NULL, the warning fires and the
 fallback price is 0.00.
 
-For bundle items the resolver recurses into components. To avoid
-runaway recursion the engine enforces a maximum depth of `2`
-(top-level bundle → simple components). See §9 open question.
+For bundle items the resolver walks each component's
+`price_source` independently and sums the results. Bundles are
+single-level only — components MUST be simple Woo products, never
+other bundles or other ConfigKit library items
+(BUNDLE_MODEL §10 decision 1). `LibraryItemService` rejects
+recursive nests with code `bundle.recursion_forbidden` at save
+time, so the resolver never has to defend against runaway depth.
 
 ---
 
@@ -281,37 +285,73 @@ Migration filename: `0017_extend_library_items_pricing_bundles.php`
 
 ---
 
-## 9. Open questions for owner review
+## 9. Decisions locked
 
-1. **Family-level overrides.** Should `product_override`-style
-   pricing also be possible at the family level (one number affecting
-   every Woo product in the family), or only at the per-product
-   binding level? (Spec assumes per-product only for v1.)
+The five v1 questions raised in earlier drafts of this spec are
+resolved by owner decision. They are reproduced here so the spec
+is self-contained and Phase 4.2b implementers do not need to
+chase prior conversations.
 
-2. **Woo price freeze on add-to-cart.** When `price_source = 'woo'`
-   and the Woo product price changes between page render and Add to
-   cart, do we use the price seen at render (matches what the
-   customer was shown) or the price at cart time (matches Woo's
-   own behaviour)? Spec assumes **freeze at add-to-cart**, with the
-   resolved price stored in the cart line meta.
+1. **Override scope.** Per-product binding only. There is no
+   family-level price override surface in v1.
+2. **Woo price freeze.** When `price_source = 'woo'`, the resolved
+   price is **snapshot at add-to-cart / order creation** and
+   stored on the cart line meta. Subsequent Woo price changes do
+   not retro-affect open carts or completed orders.
+3. **Bundle recursion.** No recursion. Bundles are exactly one
+   level deep — components are simple Woo products only. Any
+   attempt to nest a bundle inside another bundle is rejected by
+   `LibraryItemService`'s validator with code
+   `bundle.recursion_forbidden`.
+4. **`bundle_sum` with mixed component price sources.** Each
+   component resolves its own `price_source` independently
+   (`configkit` → `component.price`, `woo` → `PriceProvider`,
+   `fixed_bundle` not allowed at component level), then the
+   bundle total is the sum. No source coercion across components.
+5. **Negative prices.** Clamp to 0 at the line level (PRICING §16
+   already mandates this). The clamp applies to the post-resolution
+   line price, not to individual bundle components — a component
+   whose resolved price is negative still feeds into the bundle
+   sum negative; the line's final clamp is what guards the cart.
 
-3. **Bundle recursion depth.** §3 sets a max recursion depth of 2.
-   Is that the right default, or do owners need bundles-of-bundles
-   for accessory packages? If yes, what's the safe ceiling? (Spec
-   author proposes capping at 2 with an explicit error if exceeded.)
+Two further owner-locked decisions that this spec inherits from
+BUNDLE_MODEL §10 (also resolved):
 
-4. **Negative prices.** When `price_source = 'configkit'` and
-   `library_item.price < 0` (e.g. trade-in credit), does that flow
-   through to the cart? Existing PRICING §16 says clamp to 0 — does
-   the same rule apply here? (Spec assumes yes; clamp at the line
-   level, not the bundle level.)
+6. **Cart default.** `cart_behavior = 'price_inside_main'` is the
+   default for new bundle items; owner toggles per item.
+7. **Stock check default.** Per-component `stock_behavior` defaults
+   to `check_components`, but the runtime check only blocks when
+   Woo stock management is enabled for the component product. If
+   Woo stock management is off for a component, the order is not
+   blocked regardless of the toggle.
+8. **Admin order default.** `admin_order_display = 'expanded'` is
+   the default — warehouse always sees component lines unless the
+   owner explicitly opts into `'collapsed'`.
+9. **Migration backfill (DATA_MODEL §3.3).** Existing rows
+   backfill to `price_source = 'configkit'`,
+   `item_type = 'simple_option'`, and all bundle-only fields NULL.
+   No behavioural change ships with the schema change.
 
-5. **`woo` source with sale_price.** When Woo has its own sale
-   price and `price_source = 'woo'`, does the adapter return the
-   sale-aware effective price (i.e. `wc_get_product()->get_price()`
-   already returns the sale price), or do we want the regular price
-   so ConfigKit's own sale_mode applies on top? (Spec assumes the
-   former — Woo's own sale wins for `woo`-sourced items.)
+This spec is APPROVED for Phase 4.2b implementation. Future
+modifications require a new spec version and an explicit
+re-approval — Phase 4.2b implementers should NOT re-open these
+decisions.
 
-After owner sign-off this spec moves from DRAFT v1 → APPROVED and
-Phase 4.2b implements it.
+---
+
+## 10. UI labels
+
+Every UI surface that exposes the model defined in this spec MUST
+cite `UI_LABELS_MAPPING.md` for label, helper, and helper-text
+copy. In particular:
+
+- `UI_LABELS_MAPPING.md §2` — the `price_source` dropdown labels
+  and per-value helper text.
+- `UI_LABELS_MAPPING.md §9.1` — the "Resolved price preview" panel
+  on the library item edit screen.
+
+Backend terms (`configkit`, `woo`, `product_override`, `bundle_sum`,
+`fixed_bundle`) are forbidden as primary UI labels per
+`UI_LABELS_MAPPING.md §11`. Implementation MUST cite this mapping
+when rendering any pricing-source UI; reviewers reject PRs that
+expose enum values as labels.

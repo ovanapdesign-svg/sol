@@ -425,10 +425,10 @@ previously implicit:
 
 ### 17.1 `item_type`
 
-| Value     | Meaning                                                                                        |
-| --------- | ---------------------------------------------------------------------------------------------- |
-| `simple`  | Standalone option. Default for every existing item. Matches the current shape exactly.         |
-| `bundle`  | Composite item that maps to multiple Woo products under a single customer-visible label.       |
+| Value           | Meaning                                                                                        |
+| --------------- | ---------------------------------------------------------------------------------------------- |
+| `simple_option` | Standalone option. Default for every existing item. Matches the current shape exactly.        |
+| `bundle`        | Composite item that maps to multiple Woo products under a single customer-visible label.       |
 
 Validation (server-side, on item create / update):
 
@@ -436,10 +436,10 @@ Validation (server-side, on item create / update):
   least one component (BUNDLE_MODEL §3).
 - Each component MUST reference a real, published Woo product (no
   trashed / deleted IDs).
-- A bundle component cannot itself be a `bundle` (no recursion in
-  v1 — BUNDLE_MODEL §10 q1).
-- `simple` items ignore bundle-only fields; the validator nulls them
-  out on save so the schema stays clean.
+- A bundle component cannot itself be a `bundle` (no recursion —
+  BUNDLE_MODEL §10 decision 1, owner-locked).
+- `simple_option` items ignore bundle-only fields; the validator
+  nulls them out on save so the schema stays clean.
 
 See `BUNDLE_MODEL.md` for the full bundle model.
 
@@ -449,7 +449,7 @@ See `BUNDLE_MODEL.md` for the full bundle model.
 constrain which `price_source` values their items can use — the
 constraint is local to the item:
 
-- `simple` items may use `configkit` (default), `woo`, or
+- `simple_option` items may use `configkit` (default), `woo`, or
   `product_override` (set by the resolver, never authored).
 - `bundle` items may use `bundle_sum` or `fixed_bundle` only.
 - Validation is enforced by `LibraryItemService` per
@@ -463,5 +463,5 @@ gate which fields are *visible* on the library item form, not how
 prices are sourced.
 
 Modules created before Phase 4.2 keep working unchanged: their
-existing items default to `item_type = 'simple'` /
+existing items default to `item_type = 'simple_option'` /
 `price_source = 'configkit'`, exactly the behaviour they already had.
