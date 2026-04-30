@@ -323,12 +323,14 @@
 		};
 
 		let success = false;
+		let savedId = rec.id;
 		try {
 			if ( rec.id > 0 ) {
 				payload.version_hash = rec.version_hash;
 				await ConfigKit.request( '/libraries/' + rec.id, { method: 'PUT', body: payload } );
 			} else {
-				await ConfigKit.request( '/libraries', { method: 'POST', body: payload } );
+				const res = await ConfigKit.request( '/libraries', { method: 'POST', body: payload } );
+				savedId = res && res.record && res.record.id ? res.record.id : 0;
 			}
 			success = true;
 		} catch ( err ) {
@@ -338,6 +340,13 @@
 		}
 
 		if ( success ) {
+			// Phase 4.2c — after save, land on the library detail page
+			// instead of the list, so the owner can immediately add
+			// items or trigger an Excel import.
+			if ( savedId > 0 ) {
+				redirectToLibrary( savedId, wasNew ? 'lib_created' : 'lib_updated' );
+				return;
+			}
 			redirectToList( wasNew ? 'lib_created' : 'lib_updated' );
 			return;
 		}
@@ -657,6 +666,14 @@
 		wrap.appendChild( el( 'h2', null, isNew ? 'New library' : 'Edit library: ' + rec.name ) );
 
 		if ( state.message ) wrap.appendChild( messageBanner( state.message ) );
+
+		// Phase 4.2c — helper text reminds owners that the module
+		// drives every form they'll see downstream.
+		wrap.appendChild( el(
+			'p',
+			{ class: 'description configkit-form__intro' },
+			'Module decides what fields appear here and on items in this library.'
+		) );
 
 		// If no modules exist, show explainer
 		if ( state.modules.length === 0 && isNew ) {
