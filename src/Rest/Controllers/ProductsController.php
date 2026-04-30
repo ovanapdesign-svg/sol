@@ -9,6 +9,7 @@ use ConfigKit\Repository\TemplateRepository;
 use ConfigKit\Rest\AbstractController;
 use ConfigKit\Service\ProductBindingService;
 use ConfigKit\Service\ProductDiagnosticsService;
+use ConfigKit\Service\TestDefaultPriceService;
 
 final class ProductsController extends AbstractController {
 
@@ -20,6 +21,7 @@ final class ProductsController extends AbstractController {
 		private TemplateRepository $templates,
 		private StepRepository $steps,
 		private FieldRepository $fields,
+		private ?TestDefaultPriceService $test_default_price = null,
 	) {}
 
 	public function register_routes(): void {
@@ -65,6 +67,18 @@ final class ProductsController extends AbstractController {
 				[
 					'methods'             => 'POST',
 					'callback'            => [ $this, 'diagnostics' ],
+					'permission_callback' => $this->require_cap( self::CAP ),
+				],
+			]
+		);
+
+		\register_rest_route(
+			self::NAMESPACE,
+			'/products/(?P<product_id>\d+)/test-default-price',
+			[
+				[
+					'methods'             => 'POST',
+					'callback'            => [ $this, 'test_default_price' ],
 					'permission_callback' => $this->require_cap( self::CAP ),
 				],
 			]
@@ -124,6 +138,17 @@ final class ProductsController extends AbstractController {
 	public function diagnostics( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$result = $this->diagnostics->run( (int) $request['product_id'] );
 		if ( $result === null ) {
+			return $this->error( 'not_found', 'Product not found.', [], 404 );
+		}
+		return $this->ok( $result );
+	}
+
+	public function test_default_price( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		if ( $this->test_default_price === null ) {
+			return $this->error( 'preview_unavailable', 'Test-default-price service is not wired in this environment.', [], 500 );
+		}
+		$result = $this->test_default_price->compute( (int) $request['product_id'] );
+		if ( ! ( $result['ok'] ?? false ) && ( $result['not_found'] ?? false ) ) {
 			return $this->error( 'not_found', 'Product not found.', [], 404 );
 		}
 		return $this->ok( $result );

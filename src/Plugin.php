@@ -83,6 +83,7 @@ use ConfigKit\Service\RuleService;
 use ConfigKit\Service\StepService;
 use ConfigKit\Service\SystemDiagnosticsService;
 use ConfigKit\Service\TemplateService;
+use ConfigKit\Service\TestDefaultPriceService;
 use ConfigKit\Service\TemplateValidator;
 use ConfigKit\Service\TemplateVersionService;
 use ConfigKit\Settings\GeneralSettings;
@@ -273,12 +274,20 @@ final class Plugin {
 			$item_repo,
 			$rule_repo
 		);
+		$test_default_price_service = new TestDefaultPriceService(
+			$binding_repo,
+			$field_repo,
+			$step_repo,
+			$item_repo,
+			new PricingEngine( new LookupEngine(), $this->build_price_provider() )
+		);
 		$router->add( new ProductsController(
 			$binding_service,
 			$diagnostics_service,
 			$template_repo,
 			$step_repo,
-			$field_repo
+			$field_repo,
+			$test_default_price_service
 		) );
 
 		$log_repo = new LogRepository( $wpdb );

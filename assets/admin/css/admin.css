@@ -2458,3 +2458,67 @@
 	color: #646970;
 	font-style: italic;
 }
+
+/* ================================================================
+ * Phase 4.2b.2 — Test default configuration price panel
+ * (UI_LABELS_MAPPING §9.3).
+ * ================================================================ */
+
+.configkit-test-default-price-panel {
+	margin-top: 24px;
+	padding: 12px 16px;
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+}
+
+.configkit-test-default-price-panel__title {
+	margin: 0 0 8px 0;
+	font-size: 13px;
+	text-transform: uppercase;
+	color: #50575e;
+	letter-spacing: 0.5px;
+}
+
+.configkit-test-default-price-panel__status {
+	margin: 0 0 8px 0;
+}
+
+.configkit-test-default-price-panel__resolved {
+	margin: 0;
+	font-size: 15px;
+	color: #1d2327;
+}
+
+.configkit-test-default-price-panel__warning {
+	margin: 0;
+	color: #856404;
+}
+
+.configkit-test-default-price-panel__hint {
+	margin: 0;
+	color: #646970;
+	font-size: 13px;
+}
+
+.configkit-test-default-price-panel__lines {
+	margin: 8px 0 0 18px;
+	font-size: 13px;
+	color: #1d2327;
+}
+
+.configkit-test-default-price-panel__line-meta {
+	color: #646970;
+	font-size: 12px;
+}
+
+.configkit-test-default-price-panel__line-price {
+	color: #2271b1;
+	font-weight: 500;
+}
+
+.configkit-test-default-price-panel__warnings {
+	margin: 6px 0 0 18px;
+	font-size: 12px;
+	color: #b32d2e;
+}

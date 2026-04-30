@@ -842,11 +842,125 @@
 			setItemOverride( pickedKey, { price: 0 } );
 		} );
 
+		const testPanel = renderTestDefaultPricePanel();
+
 		return section(
 			'section-item-overrides',
 			'Item price overrides for this product',
-			[ intro, table, adder ]
+			[ intro, table, adder, testPanel ]
 		);
+	}
+
+	let testDefaultPriceState = { kind: 'idle' };
+
+	/**
+	 * Phase 4.2b.2 — "Test default configuration price" panel.
+	 *
+	 * Spec: UI_LABELS_MAPPING.md §9.3. The button re-runs a focused
+	 * snapshot computation against the current binding state — saves
+	 * are still required for customers to see anything new. The
+	 * Recalculate button hits POST /products/{id}/test-default-price
+	 * which today resolves library-sourced defaults through the
+	 * PricingEngine (per-item overrides included). Lookup-table base
+	 * price + rule surcharges + VAT come in Phase 4.2b.3.
+	 */
+	function renderTestDefaultPricePanel() {
+		const wrap = el( 'div', { class: 'configkit-test-default-price-panel' } );
+		wrap.appendChild( el( 'h4', { class: 'configkit-test-default-price-panel__title' }, 'Test default configuration price' ) );
+
+		const status = el( 'div', { class: 'configkit-test-default-price-panel__status' } );
+		const recalculate = el( 'button', {
+			type: 'button',
+			class: 'button',
+			onClick: () => recalculateTestDefaultPrice( status ),
+		}, testDefaultPriceState.kind === 'loading' ? 'Calculating…' : 'Recalculate' );
+
+		// Render the most recent result if we have one.
+		renderTestDefaultPriceStatus( status, testDefaultPriceState );
+
+		wrap.appendChild( status );
+		wrap.appendChild( recalculate );
+		return wrap;
+	}
+
+	function recalculateTestDefaultPrice( statusNode ) {
+		testDefaultPriceState = { kind: 'loading' };
+		renderTestDefaultPriceStatus( statusNode, testDefaultPriceState );
+
+		ConfigKit.request( '/products/' + productId + '/test-default-price', { method: 'POST', body: {} } )
+			.then( ( data ) => {
+				testDefaultPriceState = { kind: 'ok', data };
+				renderTestDefaultPriceStatus( statusNode, testDefaultPriceState );
+			} )
+			.catch( ( err ) => {
+				testDefaultPriceState = { kind: 'error', message: ( err && err.message ) || 'Preview failed.' };
+				renderTestDefaultPriceStatus( statusNode, testDefaultPriceState );
+			} );
+	}
+
+	function renderTestDefaultPriceStatus( host, snapshot ) {
+		host.innerHTML = '';
+		if ( snapshot.kind === 'idle' ) {
+			host.appendChild( el(
+				'p',
+				{ class: 'configkit-test-default-price-panel__hint' },
+				'Press Recalculate to see the resolved price for the current defaults + overrides.'
+			) );
+			return;
+		}
+		if ( snapshot.kind === 'loading' ) {
+			host.appendChild( el( 'p', null, 'Calculating…' ) );
+			return;
+		}
+		if ( snapshot.kind === 'error' ) {
+			host.appendChild( el( 'p', { class: 'is-error' }, snapshot.message ) );
+			return;
+		}
+		const data = snapshot.data || {};
+		if ( data.subtotal === null || data.subtotal === undefined ) {
+			host.appendChild( el( 'p', { class: 'configkit-test-default-price-panel__warning' },
+				'Some default items did not resolve a price. Check the warnings below.'
+			) );
+		} else {
+			const para = el( 'p', { class: 'configkit-test-default-price-panel__resolved' } );
+			para.appendChild( document.createTextNode( 'With current defaults, customer sees: ' ) );
+			para.appendChild( el( 'strong', null, formatKr( data.subtotal ) ) );
+			host.appendChild( para );
+		}
+		if ( Array.isArray( data.warnings ) && data.warnings.length > 0 ) {
+			const ul = el( 'ul', { class: 'configkit-test-default-price-panel__warnings' } );
+			data.warnings.forEach( ( m ) => ul.appendChild( el( 'li', null, m ) ) );
+			host.appendChild( ul );
+		}
+		if ( Array.isArray( data.lines ) && data.lines.length > 0 ) {
+			const list = el( 'ul', { class: 'configkit-test-default-price-panel__lines' } );
+			data.lines.forEach( ( line ) => {
+				const sourceLabel = priceSourceLabel( line.price_source );
+				const item = el( 'li' );
+				item.appendChild( el( 'span', { class: 'configkit-test-default-price-panel__line-label' },
+					line.item_label + ' '
+				) );
+				item.appendChild( el( 'span', { class: 'configkit-test-default-price-panel__line-meta' },
+					'(' + line.field_key + ' — ' + sourceLabel + ')'
+				) );
+				item.appendChild( el( 'span', { class: 'configkit-test-default-price-panel__line-price' },
+					line.price === null || line.price === undefined ? ' — no price' : ' ' + formatKr( line.price )
+				) );
+				list.appendChild( item );
+			} );
+			host.appendChild( list );
+		}
+	}
+
+	function priceSourceLabel( source ) {
+		const labels = {
+			configkit:        'ConfigKit price',
+			woo:              'WooCommerce price',
+			product_override: 'special price for this product',
+			bundle_sum:       'package sum',
+			fixed_bundle:     'fixed package price',
+		};
+		return labels[ source ] || source;
 	}
 
 	function renderItemOverrideRow( key, entry ) {
