@@ -160,6 +160,7 @@
 		state.view = 'library_form';
 		state.editingLibrary = blankLibrary();
 		state.dirty = false;
+		state.userEditedLibraryKey = false;
 		clearMessages();
 		setUrl( { action: 'new', id: null } );
 		loadModulesCache().then( render );
@@ -195,6 +196,7 @@
 		state.editingItem = blankItem( state.moduleOfLibrary );
 		state.view = 'item_form';
 		state.dirty = false;
+		state.userEditedItemKey = false;
 		clearMessages();
 		setUrl( { action: null, id: state.library.id, item_action: 'new', item_id: null } );
 		render();
@@ -705,14 +707,20 @@
 			textField( 'Name', 'name', rec.name, ( v ) => {
 				rec.name = v;
 				state.dirty = true;
-				if ( ! rec.library_key && isNew ) {
+				// Phase 4 dalis 4 BUG 2 — patch the technical_key
+				// input directly instead of re-rendering.
+				if ( isNew && ! state.userEditedLibraryKey ) {
 					rec.library_key = slugify( v );
-					render();
+					const techInput = document.getElementById( 'cf_library_key' );
+					if ( techInput && techInput.value !== rec.library_key ) {
+						techInput.value = rec.library_key;
+					}
 				}
 			} ),
 			textField( 'Technical key', 'library_key', rec.library_key, ( v ) => {
 				rec.library_key = v;
 				state.dirty = true;
+				state.userEditedLibraryKey = true;
 			}, {
 				mono: true,
 				help: 'Used internally to reference this library from items and rules. Lowercase, snake_case.',
@@ -994,14 +1002,19 @@
 			textField( 'Label', 'label', rec.label, ( v ) => {
 				rec.label = v;
 				state.dirty = true;
-				if ( ! rec.item_key && isNew ) {
+				// Phase 4 dalis 4 BUG 2 — patch item_key in place.
+				if ( isNew && ! state.userEditedItemKey ) {
 					rec.item_key = slugify( v );
-					render();
+					const techInput = document.getElementById( 'cf_item_key' );
+					if ( techInput && techInput.value !== rec.item_key ) {
+						techInput.value = rec.item_key;
+					}
 				}
 			} ),
 			textField( 'Technical key', 'item_key', rec.item_key, ( v ) => {
 				rec.item_key = v;
 				state.dirty = true;
+				state.userEditedItemKey = true;
 			}, { mono: true } ),
 			textField( 'Short label', 'short_label', rec.short_label || '', ( v ) => {
 				rec.short_label = v;

@@ -221,6 +221,7 @@
 		state.view = 'form';
 		state.editing = blankRecord();
 		state.dirty = false;
+		state.userEditedTemplateKey = false;
 		clearMessages();
 		setUrl( { action: 'new', id: null } );
 		render();
@@ -627,6 +628,7 @@
 		state.view = 'step_form';
 		state.editingStep = blankStep();
 		state.dirty = false;
+		state.userEditedStepKey = false;
 		clearMessages();
 		setUrl( { action: null, id: state.viewing.id, step_action: 'new', step_id: null } );
 		render();
@@ -1008,14 +1010,19 @@
 			textField( 'Name', 'name', rec.name, ( v ) => {
 				rec.name = v;
 				state.dirty = true;
-				if ( ! rec.template_key && isNew ) {
+				// Phase 4 dalis 4 BUG 2 — DOM patch keeps cursor in field.
+				if ( isNew && ! state.userEditedTemplateKey ) {
 					rec.template_key = slugify( v );
-					render();
+					const techInput = document.getElementById( 'cf_template_key' );
+					if ( techInput && techInput.value !== rec.template_key ) {
+						techInput.value = rec.template_key;
+					}
 				}
 			} ),
 			textField( 'Technical key', 'template_key', rec.template_key, ( v ) => {
 				rec.template_key = v;
 				state.dirty = true;
+				state.userEditedTemplateKey = true;
 			}, {
 				mono: true,
 				disabled: ! isNew,
@@ -1624,14 +1631,17 @@
 			modal.appendChild( el( 'p', null, 'Field name and key.' ) );
 			modal.appendChild( textField( 'Field name', 'wiz_label', w.label, ( v ) => {
 				w.label = v;
-				if ( ! w.fieldKey ) {
+				if ( ! w.userEditedFieldKey ) {
 					w.fieldKey = slugify( v );
-					render();
+					const techInput = document.getElementById( 'cf_wiz_field_key' );
+					if ( techInput && techInput.value !== w.fieldKey ) {
+						techInput.value = w.fieldKey;
+					}
 				}
 			} ) );
 			modal.appendChild( textField( 'field_key', 'wiz_field_key', w.fieldKey, ( v ) => {
 				w.fieldKey = v;
-				render();
+				w.userEditedFieldKey = true;
 			}, { mono: true, help: 'Lowercase, snake_case, 3–64 chars. Locked after save.' } ) );
 		}
 
@@ -1693,14 +1703,18 @@
 			textField( 'Step name', 'label', rec.label, ( v ) => {
 				rec.label = v;
 				state.dirty = true;
-				if ( ! rec.step_key && isNew ) {
+				if ( isNew && ! state.userEditedStepKey ) {
 					rec.step_key = slugify( v );
-					render();
+					const techInput = document.getElementById( 'cf_step_key' );
+					if ( techInput && techInput.value !== rec.step_key ) {
+						techInput.value = rec.step_key;
+					}
 				}
 			} ),
 			textField( 'step_key', 'step_key', rec.step_key, ( v ) => {
 				rec.step_key = v;
 				state.dirty = true;
+				state.userEditedStepKey = true;
 			}, {
 				mono: true,
 				disabled: ! isNew,
@@ -2353,12 +2367,15 @@
 			wrap.appendChild( fieldset( 'Basics', [
 				textField( 'Rule name', 'rule_name', f.name, ( v ) => {
 					f.name = v;
-					if ( ! f.rule_key && f.id === 0 ) {
+					if ( f.id === 0 && ! f.userEditedRuleKey ) {
 						f.rule_key = slugify( v );
-						render();
+						const techInput = document.getElementById( 'cf_rule_key' );
+						if ( techInput && techInput.value !== f.rule_key ) {
+							techInput.value = f.rule_key;
+						}
 					}
 				} ),
-				textField( 'rule_key', 'rule_key', f.rule_key, ( v ) => { f.rule_key = v; }, {
+				textField( 'rule_key', 'rule_key', f.rule_key, ( v ) => { f.rule_key = v; f.userEditedRuleKey = true; }, {
 					mono: true,
 					disabled: f.id > 0,
 					help: f.id > 0 ? 'Immutable after save.' : 'Lowercase, snake_case, 3-64 chars. Locked after save.',

@@ -198,6 +198,7 @@
 		state.editing = blankRecord();
 		state.pickedPresetId = null;
 		state.dirty = false;
+		state.userEditedKey = false;
 		clearMessages();
 		setUrl( { action: 'new', id: null } );
 		render();
@@ -592,14 +593,22 @@
 			textField( 'Name', 'name', rec.name, ( v ) => {
 				rec.name = v;
 				state.dirty = true;
-				if ( ! rec.module_key && ! rec.id ) {
+				// Phase 4 dalis 4 BUG 2 — DO NOT call render() here.
+				// Re-rendering the form on every keystroke wipes the
+				// input DOM and ejects the cursor mid-word. Patch the
+				// technical_key field directly instead.
+				if ( ! rec.id && ! state.userEditedKey ) {
 					rec.module_key = slugify( v );
-					render();
+					const techInput = document.getElementById( 'cf_module_key' );
+					if ( techInput && techInput.value !== rec.module_key ) {
+						techInput.value = rec.module_key;
+					}
 				}
 			} ),
 			textField( 'Technical key', 'module_key', rec.module_key, ( v ) => {
 				rec.module_key = v;
 				state.dirty = true;
+				state.userEditedKey = true; // owner took manual control
 			}, {
 				mono: true,
 				help: 'Used internally to reference this module from libraries and rules. Lowercase, snake_case, max 64 chars.',

@@ -117,6 +117,7 @@
 		state.view = 'form';
 		state.editing = blankRecord();
 		state.dirty = false;
+		state.userEditedFamilyKey = false;
 		clearMessages();
 		setUrl( { action: 'new', id: null } );
 		render();
@@ -342,14 +343,19 @@
 			textField( 'Name', 'name', rec.name, ( v ) => {
 				rec.name = v;
 				state.dirty = true;
-				if ( ! rec.family_key && isNew ) {
+				// Phase 4 dalis 4 BUG 2 — DOM patch instead of render.
+				if ( isNew && ! state.userEditedFamilyKey ) {
 					rec.family_key = slugify( v );
-					render();
+					const techInput = document.getElementById( 'cf_family_key' );
+					if ( techInput && techInput.value !== rec.family_key ) {
+						techInput.value = rec.family_key;
+					}
 				}
 			} ),
 			textField( 'Technical key', 'family_key', rec.family_key, ( v ) => {
 				rec.family_key = v;
 				state.dirty = true;
+				state.userEditedFamilyKey = true;
 			}, {
 				mono: true,
 				disabled: ! isNew,

@@ -167,6 +167,7 @@
 		state.view = 'table_form';
 		state.editingTable = blankTable();
 		state.dirty = false;
+		state.userEditedLookupKey = false;
 		clearMessages();
 		setUrl( { action: 'new', id: null, cell_id: null, cell_action: null } );
 		render();
@@ -554,14 +555,20 @@
 			textField( 'Name', 'name', rec.name, ( v ) => {
 				rec.name = v;
 				state.dirty = true;
-				if ( ! rec.lookup_table_key && isNew ) {
+				// Phase 4 dalis 4 BUG 2 — DOM-patch the technical key
+				// instead of re-rendering, so the cursor stays put.
+				if ( isNew && ! state.userEditedLookupKey ) {
 					rec.lookup_table_key = slugify( v );
-					render();
+					const techInput = document.getElementById( 'cf_lookup_table_key' );
+					if ( techInput && techInput.value !== rec.lookup_table_key ) {
+						techInput.value = rec.lookup_table_key;
+					}
 				}
 			} ),
 			textField( 'Technical key', 'lookup_table_key', rec.lookup_table_key, ( v ) => {
 				rec.lookup_table_key = v;
 				state.dirty = true;
+				state.userEditedLookupKey = true;
 			}, {
 				mono: true,
 				help: isNew
