@@ -26,6 +26,11 @@ use ConfigKit\Repository\CountsService;
 use ConfigKit\Repository\FamilyRepository;
 use ConfigKit\Repository\FieldOptionRepository;
 use ConfigKit\Repository\FieldRepository;
+use ConfigKit\Import\Parser as ImportParser;
+use ConfigKit\Import\Runner as ImportRunner;
+use ConfigKit\Import\Validator as ImportValidator;
+use ConfigKit\Repository\ImportBatchRepository;
+use ConfigKit\Repository\ImportRowRepository;
 use ConfigKit\Repository\LibraryItemRepository;
 use ConfigKit\Repository\LibraryRepository;
 use ConfigKit\Repository\LogRepository;
@@ -39,6 +44,7 @@ use ConfigKit\Repository\TemplateRepository;
 use ConfigKit\Repository\TemplateVersionRepository;
 use ConfigKit\Rest\Controllers\DiagnosticsController;
 use ConfigKit\Rest\Controllers\FamiliesController;
+use ConfigKit\Rest\Controllers\ImportsController;
 use ConfigKit\Rest\Controllers\FieldOptionsController;
 use ConfigKit\Rest\Controllers\FieldsController;
 use ConfigKit\Rest\Controllers\LibrariesController;
@@ -55,6 +61,7 @@ use ConfigKit\Rest\Router;
 use ConfigKit\Service\FamilyService;
 use ConfigKit\Service\FieldOptionService;
 use ConfigKit\Service\FieldService;
+use ConfigKit\Service\ImportService;
 use ConfigKit\Service\LibraryItemService;
 use ConfigKit\Service\LibraryService;
 use ConfigKit\Service\LookupCellService;
@@ -249,6 +256,21 @@ final class Plugin {
 			$log_repo
 		);
 		$router->add( new DiagnosticsController( $system_diagnostics ) );
+
+		$import_batches = new ImportBatchRepository( $wpdb );
+		$import_rows    = new ImportRowRepository( $wpdb );
+		$import_parser  = new ImportParser();
+		$import_validator = new ImportValidator( $lookup_repo, $cell_repo );
+		$import_runner    = new ImportRunner(
+			$wpdb,
+			$import_batches,
+			$import_rows,
+			$cell_repo,
+			$lookup_repo,
+			$import_parser,
+			$import_validator
+		);
+		$router->add( new ImportsController( new ImportService( $import_runner, $import_batches, $import_rows ) ) );
 		return $router;
 	}
 
