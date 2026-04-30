@@ -15,8 +15,10 @@
 		// Step 1 inputs
 		importType: 'lookup_cells',
 		targetTableKey: '',
+		targetLibraryKey: '',
 		mode: 'insert_update',
 		lookupTables: [],
+		libraries: [],
 
 		// Upload state
 		fileName: null,
@@ -76,6 +78,13 @@
 		} catch ( e ) { state.lookupTables = []; }
 	}
 
+	async function loadLibraries() {
+		try {
+			const data = await ConfigKit.request( '/libraries?per_page=500' );
+			state.libraries = ( data.items || [] ).filter( ( l ) => l.is_active );
+		} catch ( e ) { state.libraries = []; }
+	}
+
 	async function loadList() {
 		try {
 			const data = await ConfigKit.request( '/imports?per_page=20' );
@@ -86,19 +95,36 @@
 	async function init() {
 		state.view = 'wizard';
 		state.step = 1;
-		await Promise.all( [ loadLookupTables(), loadList() ] );
+		await Promise.all( [ loadLookupTables(), loadLibraries(), loadList() ] );
 
-		// Contextual entry: lookup-table detail page sends owners
-		// here with the destination already chosen via URL params.
-		// Skip step 1 and land directly on the upload screen.
+		// Contextual entry: detail pages send owners here with the
+		// destination already chosen via URL params. Skip step 1 and
+		// land directly on the upload screen. Two flavours:
+		//   ?target_type=lookup_cells&target_lookup_table_key=KEY
+		//   ?target_type=library_items&target_library_key=KEY (or target_id=42)
 		var params = new URLSearchParams( window.location.search );
 		var targetType  = params.get( 'target_type' ) || '';
 		var targetKey   = params.get( 'target_lookup_table_key' ) || '';
+		var targetLibKey = params.get( 'target_library_key' ) || '';
+		var targetId     = params.get( 'target_id' );
 		if ( targetType === 'lookup_cells' && targetKey !== '' ) {
 			var hit = state.lookupTables.find( function ( t ) { return t.lookup_table_key === targetKey; } );
 			if ( hit ) {
 				state.importType   = 'lookup_cells';
 				state.targetTableKey = targetKey;
+				if ( params.get( 'mode' ) === 'replace_all' ) state.mode = 'replace_all';
+				state.step = 2;
+				state.contextual = true;
+			}
+		} else if ( targetType === 'library_items' ) {
+			if ( targetLibKey === '' && targetId ) {
+				var libHit = state.libraries.find( function ( l ) { return String( l.id ) === String( targetId ); } );
+				if ( libHit ) targetLibKey = libHit.library_key;
+			}
+			var libHit2 = state.libraries.find( function ( l ) { return l.library_key === targetLibKey; } );
+			if ( libHit2 ) {
+				state.importType      = 'library_items';
+				state.targetLibraryKey = targetLibKey;
 				if ( params.get( 'mode' ) === 'replace_all' ) state.mode = 'replace_all';
 				state.step = 2;
 				state.contextual = true;
@@ -137,7 +163,11 @@
 		const form = new FormData();
 		form.append( 'file', file );
 		form.append( 'import_type', state.importType );
-		form.append( 'target_lookup_table_key', state.targetTableKey );
+		if ( state.importType === 'library_items' ) {
+			form.append( 'target_library_key', state.targetLibraryKey );
+		} else {
+			form.append( 'target_lookup_table_key', state.targetTableKey );
+		}
 		form.append( 'mode', state.mode );
 
 		try {
@@ -302,50 +332,85 @@
 		wrap.appendChild( el( 'p', { class: 'configkit-import-step__field-label' }, 'Import what?' ) );
 		wrap.appendChild( radio(
 			'import_type',
-			[ { value: 'lookup_cells', label: 'Lookup table cells' } ],
+			[
+				{ value: 'lookup_cells',  label: 'Lookup table cells' },
+				{ value: 'library_items', label: 'Library items' },
+			],
 			state.importType,
 			( v ) => { state.importType = v; render(); }
 		) );
 
-		// Target lookup table
-		wrap.appendChild( el( 'p', { class: 'configkit-import-step__field-label' }, 'Target lookup table' ) );
-		const select = el( 'select', {
-			id: 'cf_target_table',
-			onChange: ( ev ) => { state.targetTableKey = ev.target.value; render(); },
-		} );
-		select.appendChild( el( 'option', { value: '' }, '— Select a lookup table —' ) );
-		state.lookupTables.forEach( ( t ) => {
-			const o = el( 'option', { value: t.lookup_table_key }, t.name + ' (' + t.lookup_table_key + ')' );
-			if ( t.lookup_table_key === state.targetTableKey ) o.selected = true;
-			select.appendChild( o );
-		} );
-		wrap.appendChild( select );
-		if ( state.lookupTables.length === 0 ) {
-			wrap.appendChild( el(
-				'p',
-				{ class: 'description' },
-				'No active lookup tables yet. Create one first in ConfigKit → Lookup Tables.'
-			) );
+		// Target dropdown depends on import_type.
+		if ( state.importType === 'library_items' ) {
+			wrap.appendChild( el( 'p', { class: 'configkit-import-step__field-label' }, 'Target library' ) );
+			const libSelect = el( 'select', {
+				id: 'cf_target_library',
+				onChange: ( ev ) => { state.targetLibraryKey = ev.target.value; render(); },
+			} );
+			libSelect.appendChild( el( 'option', { value: '' }, '— Select a library —' ) );
+			state.libraries.forEach( ( l ) => {
+				const o = el( 'option', { value: l.library_key }, l.name + ' (' + l.library_key + ')' );
+				if ( l.library_key === state.targetLibraryKey ) o.selected = true;
+				libSelect.appendChild( o );
+			} );
+			wrap.appendChild( libSelect );
+			if ( state.libraries.length === 0 ) {
+				wrap.appendChild( el(
+					'p',
+					{ class: 'description' },
+					'No active libraries yet. Create one first in ConfigKit → Libraries.'
+				) );
+			}
+		} else {
+			wrap.appendChild( el( 'p', { class: 'configkit-import-step__field-label' }, 'Target lookup table' ) );
+			const select = el( 'select', {
+				id: 'cf_target_table',
+				onChange: ( ev ) => { state.targetTableKey = ev.target.value; render(); },
+			} );
+			select.appendChild( el( 'option', { value: '' }, '— Select a lookup table —' ) );
+			state.lookupTables.forEach( ( t ) => {
+				const o = el( 'option', { value: t.lookup_table_key }, t.name + ' (' + t.lookup_table_key + ')' );
+				if ( t.lookup_table_key === state.targetTableKey ) o.selected = true;
+				select.appendChild( o );
+			} );
+			wrap.appendChild( select );
+			if ( state.lookupTables.length === 0 ) {
+				wrap.appendChild( el(
+					'p',
+					{ class: 'description' },
+					'No active lookup tables yet. Create one first in ConfigKit → Lookup Tables.'
+				) );
+			}
 		}
 
 		// Mode
 		wrap.appendChild( el( 'p', { class: 'configkit-import-step__field-label' }, 'Mode' ) );
+		const replaceLabel = state.importType === 'library_items'
+			? 'Replace all (soft-delete every item in this library first, then insert)'
+			: 'Replace all (delete every cell in this table first, then insert)';
 		wrap.appendChild( radio(
 			'import_mode',
 			[
-				{ value: 'insert_update', label: 'Insert / update only (default — keeps existing cells)' },
-				{ value: 'replace_all',   label: 'Replace all (delete every cell in this table first, then insert)' },
+				{ value: 'insert_update', label: 'Insert / update only (default — match by item_key, keep existing rows)' },
+				{ value: 'replace_all',   label: replaceLabel },
 			],
 			state.mode,
 			( v ) => { state.mode = v; render(); }
 		) );
 		if ( state.mode === 'replace_all' ) {
+			const warning = state.importType === 'library_items'
+				? 'Replace-all mode will soft-delete every item in this library before inserting. You will be asked to confirm before commit.'
+				: 'Replace-all mode will DELETE every existing cell in the target table before inserting. You will be asked to confirm before commit.';
 			wrap.appendChild( el(
 				'p',
 				{ class: 'configkit-soft-warnings' },
-				el( 'span', null, 'Replace-all mode will DELETE every existing cell in the target table before inserting. You will be asked to confirm before commit.' )
+				el( 'span', null, warning )
 			) );
 		}
+
+		const targetChosen = state.importType === 'library_items'
+			? state.targetLibraryKey !== ''
+			: state.targetTableKey !== '';
 
 		// Continue
 		wrap.appendChild( el(
@@ -354,7 +419,7 @@
 			el( 'button', {
 				type: 'button',
 				class: 'button button-primary',
-				disabled: state.targetTableKey === '',
+				disabled: ! targetChosen,
 				onClick: () => { state.step = 2; render(); },
 			}, 'Continue' )
 		) );
@@ -366,10 +431,11 @@
 		const wrap = el( 'section', { class: 'configkit-import-step' } );
 		wrap.appendChild( el( 'h3', null, 'Step 2 — Upload file' ) );
 
+		const target = state.importType === 'library_items' ? state.targetLibraryKey : state.targetTableKey;
 		wrap.appendChild( el(
 			'p',
 			{ class: 'description' },
-			'Target: ' + state.targetTableKey + ' · Mode: ' + state.mode
+			'Target: ' + target + ' · Mode: ' + state.mode
 		) );
 
 		const drop = el( 'div', { class: 'configkit-dropzone', tabindex: '0' } );
@@ -410,14 +476,17 @@
 			) );
 		}
 
+		const backHref = state.importType === 'library_items'
+			? ( window.location.pathname || '' ) + '?page=configkit-libraries'
+			: ( window.location.pathname || '' ) + '?page=configkit-lookup-tables';
+		const backLabel = state.importType === 'library_items'
+			? '← Back to Libraries'
+			: '← Back to Lookup Tables';
 		wrap.appendChild( el(
 			'div',
 			{ class: 'configkit-form__footer' },
 			state.contextual
-				? el( 'a', {
-					href: ( window.location.pathname || '' ) + '?page=configkit-lookup-tables',
-					class: 'button',
-				}, '← Back to Lookup Tables' )
+				? el( 'a', { href: backHref, class: 'button' }, backLabel )
 				: el( 'button', {
 					type: 'button',
 					class: 'button',
@@ -437,14 +506,22 @@
 		const counts  = b.counts || {};
 		const stats   = summary.stats || {};
 
+		const targetKey = state.importType === 'library_items' ? state.targetLibraryKey : state.targetTableKey;
+		const formatLabel = summary.format === 'A'
+			? 'Grid (Format A)'
+			: summary.format === 'B'
+				? 'Long (Format B)'
+				: summary.format === 'C'
+					? 'Library items (Format C)'
+					: 'Unknown';
 		wrap.appendChild( el(
 			'p',
 			null,
 			el( 'strong', null, 'Target: ' ),
-			state.targetTableKey,
+			targetKey,
 			' · ',
 			el( 'strong', null, 'Format: ' ),
-			summary.format === 'A' ? 'Grid (Format A)' : ( summary.format === 'B' ? 'Long (Format B)' : 'Unknown' )
+			formatLabel
 		) );
 
 		const summaryList = el( 'ul', { class: 'configkit-import-summary' } );
@@ -472,12 +549,22 @@
 		if ( Array.isArray( stats.price_groups ) && stats.price_groups.length > 0 ) {
 			statsList.appendChild( el( 'li', null, 'Price groups detected: ' + stats.price_groups.join( ', ' ) ) );
 		}
+		if ( Array.isArray( stats.price_sources ) && stats.price_sources.length > 0 ) {
+			statsList.appendChild( el( 'li', null, 'Price sources used: ' + stats.price_sources.join( ', ' ) ) );
+		}
+		if ( Array.isArray( stats.item_types ) && stats.item_types.length > 0 ) {
+			statsList.appendChild( el( 'li', null, 'Item types: ' + stats.item_types.join( ', ' ) ) );
+		}
+		if ( Array.isArray( summary.columns ) && summary.columns.length > 0 ) {
+			statsList.appendChild( el( 'li', null, 'Columns parsed: ' + summary.columns.join( ', ' ) ) );
+		}
 		if ( statsList.children.length > 0 ) wrap.appendChild( statsList );
 
 		// Action on commit
 		const actionList = el( 'ul', { class: 'configkit-import-actions' } );
-		actionList.appendChild( el( 'li', null, 'Insert ' + ( counts.insert || 0 ) + ' new cells' ) );
-		actionList.appendChild( el( 'li', null, 'Update ' + ( counts.update || 0 ) + ' existing cells' ) );
+		const noun = state.importType === 'library_items' ? 'items' : 'cells';
+		actionList.appendChild( el( 'li', null, 'Insert ' + ( counts.insert || 0 ) + ' new ' + noun ) );
+		actionList.appendChild( el( 'li', null, 'Update ' + ( counts.update || 0 ) + ' existing ' + noun ) );
 		actionList.appendChild( el( 'li', null, 'Skip ' + ( counts.skip || 0 ) + ' (errors or duplicates)' ) );
 		wrap.appendChild( el( 'h4', null, 'Action on commit' ) );
 		wrap.appendChild( actionList );
@@ -515,31 +602,60 @@
 		wrap.appendChild( el( 'summary', null, 'Show row details (' + rows.length + ' shown)' ) );
 		const tbl = el( 'table', { class: 'wp-list-table widefat striped' } );
 		const head = el( 'thead' );
-		head.appendChild( el( 'tr', null,
-			el( 'th', null, 'Row' ),
-			el( 'th', null, 'Status' ),
-			el( 'th', null, 'Action' ),
-			el( 'th', null, 'Width' ),
-			el( 'th', null, 'Height' ),
-			el( 'th', null, 'Price group' ),
-			el( 'th', null, 'Price' ),
-			el( 'th', null, 'Message' )
-		) );
+
+		const isLibraryItems = state.importType === 'library_items';
+		if ( isLibraryItems ) {
+			head.appendChild( el( 'tr', null,
+				el( 'th', null, 'Row' ),
+				el( 'th', null, 'Status' ),
+				el( 'th', null, 'Action' ),
+				el( 'th', null, 'item_key' ),
+				el( 'th', null, 'Label' ),
+				el( 'th', null, 'SKU' ),
+				el( 'th', null, 'Price' ),
+				el( 'th', null, 'Message' )
+			) );
+		} else {
+			head.appendChild( el( 'tr', null,
+				el( 'th', null, 'Row' ),
+				el( 'th', null, 'Status' ),
+				el( 'th', null, 'Action' ),
+				el( 'th', null, 'Width' ),
+				el( 'th', null, 'Height' ),
+				el( 'th', null, 'Price group' ),
+				el( 'th', null, 'Price' ),
+				el( 'th', null, 'Message' )
+			) );
+		}
 		tbl.appendChild( head );
+
 		const body = el( 'tbody' );
 		rows.forEach( ( r ) => {
 			const norm = r.normalized_data || {};
 			const sevClass = 'configkit-row-status configkit-row-status--' + r.severity;
-			body.appendChild( el( 'tr', null,
-				el( 'td', null, String( r.row_number ) ),
-				el( 'td', null, el( 'span', { class: sevClass }, r.severity ) ),
-				el( 'td', null, r.action ),
-				el( 'td', null, norm.width != null ? String( norm.width ) : '—' ),
-				el( 'td', null, norm.height != null ? String( norm.height ) : '—' ),
-				el( 'td', null, norm.price_group_key || '—' ),
-				el( 'td', null, norm.price != null ? String( norm.price ) : '—' ),
-				el( 'td', null, r.message || '' )
-			) );
+			if ( isLibraryItems ) {
+				body.appendChild( el( 'tr', null,
+					el( 'td', null, String( r.row_number ) ),
+					el( 'td', null, el( 'span', { class: sevClass }, r.severity ) ),
+					el( 'td', null, r.action ),
+					el( 'td', null, norm.item_key || '—' ),
+					el( 'td', null, norm.label || '—' ),
+					el( 'td', null, norm.sku || '—' ),
+					el( 'td', null, norm.price != null ? String( norm.price ) : '—' ),
+					el( 'td', null, r.message || '' )
+				) );
+			} else {
+				body.appendChild( el( 'tr', null,
+					el( 'td', null, String( r.row_number ) ),
+					el( 'td', null, el( 'span', { class: sevClass }, r.severity ) ),
+					el( 'td', null, r.action ),
+					el( 'td', null, norm.width != null ? String( norm.width ) : '—' ),
+					el( 'td', null, norm.height != null ? String( norm.height ) : '—' ),
+					el( 'td', null, norm.price_group_key || '—' ),
+					el( 'td', null, norm.price != null ? String( norm.price ) : '—' ),
+					el( 'td', null, r.message || '' )
+				) );
+			}
 		} );
 		tbl.appendChild( body );
 		wrap.appendChild( tbl );
@@ -549,18 +665,43 @@
 	function renderStep4() {
 		const wrap = el( 'section', { class: 'configkit-import-step' } );
 		const s = state.commitSummary || {};
+		const isLibraryItems = state.importType === 'library_items';
 		wrap.appendChild( el( 'h3', null, 'Step 4 — Imported' ) );
-		wrap.appendChild( el( 'p', null,
-			s.inserted + ' inserted, ' + s.updated + ' updated, ' + s.skipped + ' skipped.'
-		) );
-		const editUrl = ( window.location.pathname || '' ) + '?page=configkit-lookup-tables&action=edit';
+
+		if ( isLibraryItems ) {
+			const lib = state.libraries.find( ( l ) => l.library_key === state.targetLibraryKey );
+			const libLabel = lib ? '"' + ( lib.name || state.targetLibraryKey ) + '"' : state.targetLibraryKey;
+			wrap.appendChild( el( 'p', null,
+				( s.inserted || 0 ) + ' items imported into ' + libLabel + ', '
+				+ ( s.updated || 0 ) + ' updated, '
+				+ ( s.skipped || 0 ) + ' skipped.'
+			) );
+		} else {
+			wrap.appendChild( el( 'p', null,
+				( s.inserted || 0 ) + ' inserted, '
+				+ ( s.updated || 0 ) + ' updated, '
+				+ ( s.skipped || 0 ) + ' skipped.'
+			) );
+		}
+
+		const editUrl = isLibraryItems
+			? ( window.location.pathname || '' ) + '?page=configkit-libraries' + ( libraryIdForKey( state.targetLibraryKey ) ? '&id=' + libraryIdForKey( state.targetLibraryKey ) : '' )
+			: ( window.location.pathname || '' ) + '?page=configkit-lookup-tables&action=edit';
+		const editLabel = isLibraryItems ? 'Open library' : 'Open lookup table';
+
 		wrap.appendChild( el(
 			'div',
 			{ class: 'configkit-form__footer' },
-			el( 'a', { href: editUrl, class: 'button' }, 'Open lookup table' ),
+			el( 'a', { href: editUrl, class: 'button' }, editLabel ),
 			el( 'button', { type: 'button', class: 'button button-primary', onClick: resetWizard }, 'Import another file' )
 		) );
 		return wrap;
+	}
+
+	function libraryIdForKey( key ) {
+		if ( ! key ) return null;
+		const lib = state.libraries.find( ( l ) => l.library_key === key );
+		return lib ? lib.id : null;
 	}
 
 	function renderRecentBatches() {
@@ -599,11 +740,14 @@
 			} else {
 				rows = '—';
 			}
+			const targetText = summary.target_library_key
+				? summary.target_library_key
+				: summary.target_lookup_table_key || '';
 			body.appendChild( el( 'tr', null,
 				el( 'td', { 'data-label': 'When' }, b.created_at || '—' ),
 				el( 'td', { 'data-label': 'File' }, b.filename || '—' ),
-				el( 'td', { 'data-label': 'Target' }, summary.target_lookup_table_key
-					? el( 'code', null, summary.target_lookup_table_key )
+				el( 'td', { 'data-label': 'Target' }, targetText
+					? el( 'code', null, targetText )
 					: '—' ),
 				el( 'td', { 'data-label': 'Type' }, b.import_type ),
 				el( 'td', { 'data-label': 'Status' },

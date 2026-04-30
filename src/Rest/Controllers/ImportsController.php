@@ -23,10 +23,11 @@ use ConfigKit\Service\ImportService;
  */
 final class ImportsController extends AbstractController {
 
-	private const CAP             = 'configkit_manage_lookup_tables';
-	private const ALLOWED_TYPES   = [ 'lookup_cells' ];
-	private const ALLOWED_MODES   = [ 'insert_update', 'replace_all' ];
-	private const MAX_BYTES       = 10 * 1024 * 1024; // 10 MB
+	private const CAP_LOOKUP_CELLS  = 'configkit_manage_lookup_tables';
+	private const CAP_LIBRARY_ITEMS = 'configkit_manage_libraries';
+	private const ALLOWED_TYPES     = [ 'lookup_cells', 'library_items' ];
+	private const ALLOWED_MODES     = [ 'insert_update', 'replace_all' ];
+	private const MAX_BYTES         = 10 * 1024 * 1024; // 10 MB
 	private const ALLOWED_MIME    = [
 		'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 		'application/vnd.ms-excel',
@@ -41,7 +42,7 @@ final class ImportsController extends AbstractController {
 			[
 				'methods'             => 'GET',
 				'callback'            => [ $this, 'list' ],
-				'permission_callback' => $this->require_cap( self::CAP ),
+				'permission_callback' => $this->require_either_cap(),
 				'args'                => [
 					'page'        => [ 'type' => 'integer', 'default' => 1, 'minimum' => 1 ],
 					'per_page'    => [ 'type' => 'integer', 'default' => 50, 'minimum' => 1, 'maximum' => 200 ],
@@ -52,7 +53,7 @@ final class ImportsController extends AbstractController {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ $this, 'create' ],
-				'permission_callback' => $this->require_cap( self::CAP ),
+				'permission_callback' => $this->require_either_cap(),
 			],
 		] );
 
@@ -60,7 +61,7 @@ final class ImportsController extends AbstractController {
 			[
 				'methods'             => 'GET',
 				'callback'            => [ $this, 'read' ],
-				'permission_callback' => $this->require_cap( self::CAP ),
+				'permission_callback' => $this->require_either_cap(),
 			],
 		] );
 
@@ -68,7 +69,7 @@ final class ImportsController extends AbstractController {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ $this, 'parse' ],
-				'permission_callback' => $this->require_cap( self::CAP ),
+				'permission_callback' => $this->require_either_cap(),
 			],
 		] );
 
@@ -76,7 +77,7 @@ final class ImportsController extends AbstractController {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ $this, 'commit' ],
-				'permission_callback' => $this->require_cap( self::CAP ),
+				'permission_callback' => $this->require_either_cap(),
 			],
 		] );
 
@@ -84,9 +85,21 @@ final class ImportsController extends AbstractController {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ $this, 'cancel' ],
-				'permission_callback' => $this->require_cap( self::CAP ),
+				'permission_callback' => $this->require_either_cap(),
 			],
 		] );
+	}
+
+	/**
+	 * Phase 4 dalis 3 — let owners with EITHER capability hit the
+	 * import routes. Per-import-type fine-grained gating happens
+	 * inside `create()`.
+	 */
+	private function require_either_cap(): \Closure {
+		return static function (): bool {
+			return \current_user_can( self::CAP_LOOKUP_CELLS )
+				|| \current_user_can( self::CAP_LIBRARY_ITEMS );
+		};
 	}
 
 	public function list( \WP_REST_Request $request ): \WP_REST_Response {
@@ -136,18 +149,33 @@ final class ImportsController extends AbstractController {
 
 		// Move the upload into a stable plugin-owned dir so the parser
 		// can re-open it. Owner-supplied filenames are not trusted.
-		$import_type   = (string) ( $request->get_param( 'import_type' ) ?? 'lookup_cells' );
-		$target_key    = (string) ( $request->get_param( 'target_lookup_table_key' ) ?? '' );
-		$mode          = (string) ( $request->get_param( 'mode' ) ?? 'insert_update' );
+		$import_type = (string) ( $request->get_param( 'import_type' ) ?? 'lookup_cells' );
+		$mode        = (string) ( $request->get_param( 'mode' ) ?? 'insert_update' );
 
 		if ( ! in_array( $import_type, self::ALLOWED_TYPES, true ) ) {
-			return $this->error( 'unsupported_type', 'Only lookup_cells imports are supported in this chunk.', [], 400 );
-		}
-		if ( $target_key === '' ) {
-			return $this->error( 'missing_target', 'target_lookup_table_key is required.', [], 400 );
+			return $this->error( 'unsupported_type', 'Unknown import_type "' . $import_type . '".', [], 400 );
 		}
 		if ( ! in_array( $mode, self::ALLOWED_MODES, true ) ) {
 			return $this->error( 'invalid_mode', 'mode must be insert_update or replace_all.', [], 400 );
+		}
+
+		// Per-type gate: lookup_cells needs lookup-table cap; library_items
+		// needs libraries cap. Owners with the wrong cap can't smuggle one
+		// type through a route admin authorised them for the other.
+		$needs_cap = $import_type === 'library_items' ? self::CAP_LIBRARY_ITEMS : self::CAP_LOOKUP_CELLS;
+		if ( ! \current_user_can( $needs_cap ) ) {
+			return $this->error( 'forbidden', 'You do not have permission to run this import type.', [], 403 );
+		}
+
+		$target_lookup = (string) ( $request->get_param( 'target_lookup_table_key' ) ?? '' );
+		$target_lib    = (string) ( $request->get_param( 'target_library_key' ) ?? '' );
+
+		if ( $import_type === 'library_items' ) {
+			if ( $target_lib === '' ) {
+				return $this->error( 'missing_target', 'target_library_key is required for library_items imports.', [], 400 );
+			}
+		} elseif ( $target_lookup === '' ) {
+			return $this->error( 'missing_target', 'target_lookup_table_key is required.', [], 400 );
 		}
 
 		$stored_path = $this->store_upload( $tmp_name, (string) $file['name'] );
@@ -155,15 +183,21 @@ final class ImportsController extends AbstractController {
 			return $this->error( 'store_failed', 'Could not store the uploaded file.', [], 500 );
 		}
 
+		$payload = [
+			'import_type' => $import_type,
+			'filename'    => (string) $file['name'],
+			'file_path'   => $stored_path,
+			'mode'        => $mode,
+			'created_by'  => function_exists( 'get_current_user_id' ) ? (int) \get_current_user_id() : 0,
+		];
+		if ( $import_type === 'library_items' ) {
+			$payload['target_library_key'] = $target_lib;
+		} else {
+			$payload['target_lookup_table_key'] = $target_lookup;
+		}
+
 		try {
-			$result = $this->service->create_and_parse( [
-				'import_type'             => $import_type,
-				'filename'                => (string) $file['name'],
-				'file_path'               => $stored_path,
-				'target_lookup_table_key' => $target_key,
-				'mode'                    => $mode,
-				'created_by'              => function_exists( 'get_current_user_id' ) ? (int) \get_current_user_id() : 0,
-			] );
+			$result = $this->service->create_and_parse( $payload );
 		} catch ( \Throwable $e ) {
 			return $this->error( 'parse_failed', $e->getMessage(), [], 500 );
 		}
