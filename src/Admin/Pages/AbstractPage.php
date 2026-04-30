@@ -45,13 +45,16 @@ abstract class AbstractPage {
 	/**
 	 * Pages override this to declare their breadcrumb trail. Default
 	 * is "ConfigKit › <menu_title>" which suits every top-level page.
+	 * The current segment carries its own slug as `href` so the
+	 * client-side `subBreadcrumb()` helper can promote it into a real
+	 * link when the page transitions into a sub-view (Edit, New, etc.).
 	 *
 	 * @return list<array{label:string, href?:string|null}>
 	 */
 	protected function breadcrumb_segments(): array {
 		return [
 			[ 'label' => 'ConfigKit', 'href' => Breadcrumb::configkit_root_href() ],
-			[ 'label' => $this->menu_title() ],
+			[ 'label' => $this->menu_title(), 'href' => Breadcrumb::admin_page_href( $this->slug() ) ],
 		];
 	}
 

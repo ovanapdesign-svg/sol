@@ -866,7 +866,9 @@
 			window.ConfigKit.subBreadcrumb( null );
 			return;
 		}
-		const segs = [ { label: 'Templates', onClick: () => { setUrl( { view: null, id: null, action: null, step_id: null, drawer: null } ); loadList(); } } ];
+		// Server breadcrumb already ends in "Templates" → JS appends
+		// the tail only.
+		const segs = [];
 		const tmpl = state.template || state.editing;
 		if ( state.view === 'form' ) {
 			const rec = state.editing;

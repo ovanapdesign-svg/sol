@@ -1255,11 +1255,6 @@
 	font-weight: 500;
 }
 
-.configkit-subbreadcrumb {
-	margin-top: -4px;
-	padding-top: 0;
-}
-
 @media ( max-width: 768px ) {
 	.configkit-breadcrumb {
 		font-size: 12px;

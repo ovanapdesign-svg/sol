@@ -287,34 +287,55 @@
 	}
 
 	/**
-	 * Render an extra breadcrumb tail under the server-rendered nav.
-	 * Used by JS form views to communicate "Edit X" / "New Y" without
-	 * round-tripping the server.
+	 * Extend the server-rendered breadcrumb in place rather than
+	 * rendering a second nav line. The original "current" segment
+	 * (rendered server-side as a span with `data-cf-href`) is
+	 * promoted to a link on the way in, and restored when the
+	 * caller clears the tail with `subBreadcrumb(null)`.
 	 *
 	 *   ConfigKit.subBreadcrumb([
-	 *     { label: 'Libraries', onClick: backToList },
-	 *     { label: 'Dickson Orchestra' },
-	 *     { label: 'New item' },
+	 *     { label: 'Edit "Dickson Orchestra"' },
 	 *   ]);
 	 *
-	 * Replaces any prior sub-breadcrumb on the same page.
+	 * Result: "ConfigKit › Libraries › Edit \"Dickson Orchestra\""
+	 * — single line.
 	 */
 	function subBreadcrumb( segments ) {
-		const existing = document.querySelector( '.configkit-subbreadcrumb' );
-		if ( existing && existing.parentNode ) existing.parentNode.removeChild( existing );
-		if ( ! segments || segments.length === 0 ) return;
-		const nav = document.createElement( 'nav' );
-		nav.className = 'configkit-breadcrumb configkit-subbreadcrumb';
-		nav.setAttribute( 'aria-label', 'Sub-breadcrumb' );
+		const nav = document.querySelector( '.wrap.configkit-admin > .configkit-breadcrumb' );
+		if ( ! nav ) return;
+		// Cache the original innerHTML once so we can restore on
+		// subsequent calls instead of stripping segments forever.
+		if ( nav.dataset.cfBaseHtml === undefined ) {
+			nav.dataset.cfBaseHtml = nav.innerHTML;
+		}
+		const baseHtml = nav.dataset.cfBaseHtml;
+
+		if ( ! segments || segments.length === 0 ) {
+			nav.innerHTML = baseHtml;
+			return;
+		}
+
+		// Reset to base, then promote the existing "current" span to a
+		// link if it carries an href.
+		nav.innerHTML = baseHtml;
+		const lastSpan = nav.querySelector( '.configkit-breadcrumb__current[data-cf-href]' );
+		if ( lastSpan ) {
+			const href = lastSpan.getAttribute( 'data-cf-href' );
+			const a = document.createElement( 'a' );
+			a.className = 'configkit-breadcrumb__link';
+			a.href = href;
+			a.textContent = lastSpan.textContent;
+			lastSpan.parentNode.replaceChild( a, lastSpan );
+		}
+
 		const last = segments.length - 1;
 		segments.forEach( ( seg, i ) => {
-			if ( i > 0 ) {
-				const sep = document.createElement( 'span' );
-				sep.className = 'configkit-breadcrumb__sep';
-				sep.setAttribute( 'aria-hidden', 'true' );
-				sep.textContent = '›';
-				nav.appendChild( sep );
-			}
+			const sep = document.createElement( 'span' );
+			sep.className = 'configkit-breadcrumb__sep';
+			sep.setAttribute( 'aria-hidden', 'true' );
+			sep.textContent = '›';
+			nav.appendChild( sep );
+
 			const isLast = i === last;
 			if ( isLast || ( ! seg.href && ! seg.onClick ) ) {
 				const span = document.createElement( 'span' );
@@ -336,15 +357,6 @@
 				nav.appendChild( a );
 			}
 		} );
-		// Insert just after the server-rendered breadcrumb, or at the
-		// top of the .wrap if there isn't one.
-		const serverNav = document.querySelector( '.wrap.configkit-admin > .configkit-breadcrumb' );
-		if ( serverNav && serverNav.parentNode ) {
-			serverNav.parentNode.insertBefore( nav, serverNav.nextSibling );
-		} else {
-			const wrap = document.querySelector( '.wrap.configkit-admin' );
-			if ( wrap ) wrap.insertBefore( nav, wrap.firstChild );
-		}
 	}
 
 	/**

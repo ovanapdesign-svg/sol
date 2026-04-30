@@ -233,10 +233,7 @@
 		}
 		const rec = state.editing;
 		const tail = rec && rec.id > 0 ? 'Edit "' + ( rec.name || rec.family_key ) + '"' : 'New family';
-		window.ConfigKit.subBreadcrumb( [
-			{ label: 'Families', onClick: () => { setUrl( { action: null, id: null } ); loadList(); } },
-			{ label: tail },
-		] );
+		window.ConfigKit.subBreadcrumb( [ { label: tail } ] );
 	}
 
 	function messageBanner( m ) {

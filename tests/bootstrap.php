@@ -70,3 +70,22 @@ if ( ! function_exists( 'wp_json_encode' ) ) {
 		return json_encode( $data, $options, $depth );
 	}
 }
+
+// Minimal escaper stubs for tests that exercise admin renderers
+// (Breadcrumb, PageHeader). Production uses WordPress's real
+// escapers; these are pass-through with HTML entity safety.
+if ( ! function_exists( 'esc_html' ) ) {
+	function esc_html( $value ): string {
+		return htmlspecialchars( (string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8' );
+	}
+}
+if ( ! function_exists( 'esc_url' ) ) {
+	function esc_url( $value ): string {
+		return (string) $value;
+	}
+}
+if ( ! function_exists( 'esc_attr' ) ) {
+	function esc_attr( $value ): string {
+		return htmlspecialchars( (string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8' );
+	}
+}

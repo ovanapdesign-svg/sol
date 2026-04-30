@@ -402,11 +402,13 @@
 			window.ConfigKit.subBreadcrumb( null );
 			return;
 		}
-		const segs = [ { label: 'Modules', onClick: () => { setUrl( { action: null, id: null } ); loadList(); } } ];
+		// The server breadcrumb already ends in "Modules" — JS only
+		// appends the tail (the entity action or name).
 		const rec = state.editing;
-		if ( rec && rec.id > 0 ) segs.push( { label: 'Edit "' + ( rec.name || rec.module_key ) + '"' } );
-		else segs.push( { label: 'New module' } );
-		window.ConfigKit.subBreadcrumb( segs );
+		const tail = rec && rec.id > 0
+			? 'Edit "' + ( rec.name || rec.module_key ) + '"'
+			: 'New module';
+		window.ConfigKit.subBreadcrumb( [ { label: tail } ] );
 	}
 
 	function renderPresetButtons() {

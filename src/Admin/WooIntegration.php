@@ -39,20 +39,19 @@ final class WooIntegration {
 		echo '<div id="configkit_product_data" class="panel woocommerce_options_panel hidden">';
 		echo '<div class="configkit-product-tab configkit-admin" data-product-id="' . \esc_attr( (string) $product_id ) . '">';
 
+		$products_url = function_exists( 'admin_url' )
+			? \admin_url( 'edit.php?post_type=product' )
+			: 'edit.php?post_type=product';
+		$product_edit_url = function_exists( 'admin_url' ) && $product_id > 0
+			? \admin_url( 'post.php?post=' . $product_id . '&action=edit' )
+			: '';
 		echo Breadcrumb::render( [
+			[ 'label' => 'WooCommerce', 'href' => $products_url ],
+			[ 'label' => 'Products',    'href' => $products_url ],
 			[
-				'label' => 'WooCommerce',
-				'href'  => function_exists( 'admin_url' )
-					? \admin_url( 'edit.php?post_type=product' )
-					: 'edit.php?post_type=product',
+				'label' => $post_title !== '' ? '"' . $post_title . '"' : 'Edit product',
+				'href'  => $product_edit_url !== '' ? $product_edit_url : null,
 			],
-			[
-				'label' => 'Products',
-				'href'  => function_exists( 'admin_url' )
-					? \admin_url( 'edit.php?post_type=product' )
-					: 'edit.php?post_type=product',
-			],
-			[ 'label' => $post_title !== '' ? 'Edit "' . $post_title . '"' : 'Edit product' ],
 			[ 'label' => 'ConfigKit' ],
 		] );
 

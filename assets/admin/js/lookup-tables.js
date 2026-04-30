@@ -418,7 +418,9 @@
 			window.ConfigKit.subBreadcrumb( null );
 			return;
 		}
-		const segs = [ { label: 'Lookup Tables', onClick: () => { setUrl( { view: null, id: null, cell_id: null, action: null } ); loadList(); } } ];
+		// Server breadcrumb already ends in "Lookup Tables" → JS
+		// appends the tail only.
+		const segs = [];
 		const tableName = state.table && state.table.name
 			? state.table.name
 			: ( state.editingTable && state.editingTable.name );

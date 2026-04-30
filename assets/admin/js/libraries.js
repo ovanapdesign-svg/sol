@@ -449,7 +449,9 @@
 			window.ConfigKit.subBreadcrumb( null );
 			return;
 		}
-		const segs = [ { label: 'Libraries', onClick: () => { setUrl( { view: null, id: null, item_id: null, action: null } ); loadList(); } } ];
+		// Server breadcrumb already ends in "Libraries" → JS appends
+		// the tail only.
+		const segs = [];
 		const lib = state.library || state.editingLibrary;
 		if ( state.view === 'library_form' ) {
 			const rec = state.editingLibrary;

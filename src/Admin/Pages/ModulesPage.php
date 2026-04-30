@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace ConfigKit\Admin\Pages;
 
-use ConfigKit\Admin\Breadcrumb;
 use ConfigKit\Admin\PageHeader;
 
 /**
@@ -31,19 +30,6 @@ final class ModulesPage extends AbstractPage {
 
 	public function menu_title(): string {
 		return \__( 'Modules', 'configkit' );
-	}
-
-	/**
-	 * Modules sit under Settings per ADMIN_SITEMAP §2.8.2.
-	 *
-	 * @return list<array{label:string, href?:string|null}>
-	 */
-	protected function breadcrumb_segments(): array {
-		return [
-			[ 'label' => 'ConfigKit', 'href' => Breadcrumb::configkit_root_href() ],
-			[ 'label' => 'Settings', 'href' => Breadcrumb::admin_page_href( 'configkit-settings' ) ],
-			[ 'label' => 'Modules' ],
-		];
 	}
 
 	public function render(): void {
