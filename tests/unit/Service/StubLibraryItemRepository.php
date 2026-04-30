@@ -39,6 +39,21 @@ final class StubLibraryItemRepository extends LibraryItemRepository {
 		return $count;
 	}
 
+	public function sku_exists_in_library( string $library_key, string $sku, ?int $exclude_id = null ): bool {
+		$sku = trim( $sku );
+		if ( $sku === '' ) return false;
+		foreach ( $this->records as $rec ) {
+			if ( ( $rec['library_key'] ?? '' ) === $library_key
+				&& ( $rec['sku'] ?? '' ) === $sku
+				&& ! empty( $rec['is_active'] )
+				&& ( $exclude_id === null || (int) $rec['id'] !== $exclude_id )
+			) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	public function key_exists_in_library( string $library_key, string $item_key, ?int $exclude_id = null ): bool {
 		foreach ( $this->records as $rec ) {
 			if ( $rec['library_key'] === $library_key

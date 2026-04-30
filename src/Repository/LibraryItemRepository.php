@@ -57,6 +57,37 @@ class LibraryItemRepository {
 		return is_int( $rows ) ? $rows : 0;
 	}
 
+	/**
+	 * Phase 4 dalis 4 BUG 4 — SKU uniqueness check within a library.
+	 * Empty SKU is treated as "no SKU" and never matches. The optional
+	 * `$exclude_id` skips the row currently being updated so the same
+	 * SKU keeps validating after the first save.
+	 */
+	public function sku_exists_in_library( string $library_key, string $sku, ?int $exclude_id = null ): bool {
+		$sku = trim( $sku );
+		if ( $sku === '' ) return false;
+		$table = $this->table();
+		if ( $exclude_id === null ) {
+			$value = $this->wpdb->get_var(
+				$this->wpdb->prepare(
+					"SELECT id FROM `{$table}` WHERE library_key = %s AND sku = %s AND is_active = 1 LIMIT 1",
+					$library_key,
+					$sku
+				)
+			);
+		} else {
+			$value = $this->wpdb->get_var(
+				$this->wpdb->prepare(
+					"SELECT id FROM `{$table}` WHERE library_key = %s AND sku = %s AND is_active = 1 AND id <> %d LIMIT 1",
+					$library_key,
+					$sku,
+					$exclude_id
+				)
+			);
+		}
+		return $value !== null;
+	}
+
 	public function key_exists_in_library( string $library_key, string $item_key, ?int $exclude_id = null ): bool {
 		$table = $this->table();
 		if ( $exclude_id === null ) {

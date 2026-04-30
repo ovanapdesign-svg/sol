@@ -203,6 +203,23 @@ final class LibraryItemService {
 			$errors[] = [ 'field' => 'sale_price', 'code' => 'invalid_type', 'message' => 'sale_price must be numeric.' ];
 		}
 
+		// Phase 4 dalis 4 BUG 4 — SKU uniqueness within a library.
+		// Owners hit "validation_failed" without knowing why; surface
+		// the specific reason now.
+		if ( ! empty( $input['sku'] ) && ! empty( $module['supports_sku'] ) ) {
+			$sku = trim( (string) $input['sku'] );
+			if ( $sku !== '' ) {
+				$exclude_id = isset( $existing['id'] ) ? (int) $existing['id'] : null;
+				if ( $this->items->sku_exists_in_library( (string) $library['library_key'], $sku, $exclude_id ) ) {
+					$errors[] = [
+						'field'   => 'sku',
+						'code'    => 'duplicate',
+						'message' => sprintf( 'sku "%s" already exists in this library.', $sku ),
+					];
+				}
+			}
+		}
+
 		// Phase 4.2 — pricing source / item type / bundle composition
 		// validation per PRICING_SOURCE_MODEL §2 + BUNDLE_MODEL §3.
 		$item_type      = isset( $input['item_type'] ) ? (string) $input['item_type'] : 'simple_option';

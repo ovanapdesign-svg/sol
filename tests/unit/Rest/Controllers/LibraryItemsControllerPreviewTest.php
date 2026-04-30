@@ -131,6 +131,57 @@ final class LibraryItemsControllerPreviewTest extends TestCase {
 		$this->assertSame( 8990.0, $data['breakdown']['fixed_bundle_price'] );
 	}
 
+	public function test_create_validation_error_includes_specific_field_message(): void {
+		// Phase 4 dalis 4 BUG 4 — top-level error message must surface
+		// the failed field so owners don't see a generic
+		// "Library item could not be created. (validation_failed)
+		// [HTTP 400]" with no actionable detail.
+		$svc = new LibraryItemService(
+			new StubLibraryItemRepository(),
+			new StubLibraryRepository(),
+			new StubModuleRepository(),
+		);
+		// Seed library + module via service so capability gates work.
+		$mods = new \ConfigKit\Service\ModuleService( new StubModuleRepository() );
+		// Reuse the existing constructor-time stubs via the existing service.
+		$libRepo = new StubLibraryRepository();
+		$modRepo = new StubModuleRepository();
+		$itemRepo = new StubLibraryItemRepository();
+		$modRepo->create( [
+			'module_key' => 'm', 'name' => 'M', 'allowed_field_kinds' => [],
+			'attribute_schema' => [], 'is_active' => true,
+		] );
+		$libRepo->create( [
+			'library_key' => 'lib', 'module_key' => 'm', 'name' => 'L', 'is_active' => true,
+		] );
+		$svc = new LibraryItemService( $itemRepo, $libRepo, $modRepo );
+		$ctrl = new LibraryItemsController( $svc, null );
+
+		$req = new WP_REST_Request();
+		$req->set_param( 'id', 1 ); // library id
+		$req->set_json_params( [
+			// item_key empty AND label empty — two errors.
+			'item_key' => '',
+			'label'    => '',
+		] );
+
+		$res = $ctrl->create( $req );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'validation_failed', $res->get_error_code() );
+
+		// Top-level message MUST mention something specific from the
+		// first error, NOT just "Library item could not be created.".
+		$msg = $res->get_error_message();
+		$this->assertNotSame( 'Library item could not be created.', $msg );
+		$this->assertMatchesRegularExpression( '/Library item could not be created — /', $msg );
+
+		// Structured errors stay in the payload for UIs to render
+		// per-field hints.
+		$data = $res->get_error_data();
+		$this->assertIsArray( $data );
+		$this->assertNotEmpty( $data['errors'] );
+	}
+
 	public function test_preview_returns_500_when_engine_missing(): void {
 		$service = new LibraryItemService(
 			new StubLibraryItemRepository(),

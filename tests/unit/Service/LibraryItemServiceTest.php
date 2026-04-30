@@ -73,6 +73,24 @@ final class LibraryItemServiceTest extends TestCase {
 		);
 	}
 
+	public function test_create_duplicate_sku_within_library_is_rejected(): void {
+		// Phase 4 dalis 4 BUG 4 — owner used to get "validation_failed"
+		// with no clue why. Now the duplicate SKU surfaces by name.
+		$first = $this->service->create( $this->library_id, $this->valid_item() );
+		$this->assertTrue( $first['ok'], 'first create failed: ' . json_encode( $first['errors'] ?? [] ) );
+
+		$second = $this->service->create( $this->library_id, $this->valid_item( [
+			'item_key' => 'u172',
+			'sku'      => 'DCK-U171', // same SKU as the first row
+		] ) );
+		$this->assertFalse( $second['ok'] );
+		$codes = array_column( $second['errors'], 'code' );
+		$this->assertContains( 'duplicate', $codes );
+		$dup = array_values( array_filter( $second['errors'], static fn ( $e ) => ( $e['field'] ?? '' ) === 'sku' ) );
+		$this->assertNotEmpty( $dup, 'expected an sku-field error' );
+		$this->assertStringContainsString( 'DCK-U171', $dup[0]['message'] );
+	}
+
 	public function test_create_with_valid_item_succeeds(): void {
 		$result = $this->service->create( $this->library_id, $this->valid_item() );
 		$this->assertTrue( $result['ok'] );

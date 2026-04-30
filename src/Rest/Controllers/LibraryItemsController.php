@@ -114,13 +114,13 @@ final class LibraryItemsController extends AbstractController {
 	public function create( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$result = $this->service->create( (int) $request['id'], $this->payload( $request ) );
 		if ( ! ( $result['ok'] ?? false ) ) {
-			$first = $result['errors'][0]['code'] ?? '';
-			if ( $first === 'library_not_found' ) {
+			$first_code = $result['errors'][0]['code'] ?? '';
+			if ( $first_code === 'library_not_found' ) {
 				return $this->error( 'not_found', 'Library not found.', [], 404 );
 			}
 			return $this->error(
 				'validation_failed',
-				'Library item could not be created.',
+				$this->summary_message( 'Library item could not be created', $result['errors'] ?? [] ),
 				[ 'errors' => $result['errors'] ?? [] ],
 				400
 			);
@@ -136,16 +136,48 @@ final class LibraryItemsController extends AbstractController {
 		}
 		$result = $this->service->update( (int) $request['id'], (int) $request['item_id'], $payload, $expected );
 		if ( ! ( $result['ok'] ?? false ) ) {
-			$first = $result['errors'][0]['code'] ?? '';
-			if ( $first === 'conflict' ) {
+			$first_code = $result['errors'][0]['code'] ?? '';
+			if ( $first_code === 'conflict' ) {
 				return $this->error( 'conflict', 'Stale version_hash.', [ 'errors' => $result['errors'] ], 409 );
 			}
-			if ( in_array( $first, [ 'not_found', 'library_not_found' ], true ) ) {
+			if ( in_array( $first_code, [ 'not_found', 'library_not_found' ], true ) ) {
 				return $this->error( 'not_found', $result['errors'][0]['message'] ?? 'Not found.', [], 404 );
 			}
-			return $this->error( 'validation_failed', 'Library item could not be updated.', [ 'errors' => $result['errors'] ?? [] ], 400 );
+			return $this->error(
+				'validation_failed',
+				$this->summary_message( 'Library item could not be updated', $result['errors'] ?? [] ),
+				[ 'errors' => $result['errors'] ?? [] ],
+				400
+			);
 		}
 		return $this->ok( [ 'record' => $result['record'] ?? null ] );
+	}
+
+	/**
+	 * Phase 4 dalis 4 BUG 4 — surface the specific failed field in the
+	 * top-level error message so owners don't see a generic
+	 * "Library item could not be created." with HTTP 400 and no
+	 * actionable detail. The structured `errors` array stays in the
+	 * response body for UIs that render per-field hints.
+	 *
+	 * @param list<array{field?:string,code?:string,message?:string}> $errors
+	 */
+	private function summary_message( string $prefix, array $errors ): string {
+		if ( count( $errors ) === 0 ) return $prefix . '.';
+		$first = $errors[0];
+		$field = (string) ( $first['field']   ?? '' );
+		$msg   = (string) ( $first['message'] ?? '' );
+		if ( $field !== '' && $msg !== '' ) {
+			$summary = $prefix . ' — ' . $msg;
+		} elseif ( $msg !== '' ) {
+			$summary = $prefix . ' — ' . $msg;
+		} else {
+			$summary = $prefix . '.';
+		}
+		if ( count( $errors ) > 1 ) {
+			$summary .= sprintf( ' (+%d more)', count( $errors ) - 1 );
+		}
+		return $summary;
 	}
 
 	public function search_global( \WP_REST_Request $request ): \WP_REST_Response {
