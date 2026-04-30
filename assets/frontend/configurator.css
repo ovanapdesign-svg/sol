@@ -373,3 +373,260 @@
 		font-size: 22px;
 	}
 }
+
+/* ================================================================
+   Stepper + layout + price sidebar + sticky bar
+   ================================================================ */
+
+.configkit-c__stepper {
+	list-style: none;
+	display: flex;
+	gap: 8px;
+	padding: 0;
+	margin: 0 0 24px;
+	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
+	scrollbar-width: none;
+}
+
+.configkit-c__stepper::-webkit-scrollbar { display: none; }
+
+.configkit-c__stepper-item {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 14px;
+	border-radius: 999px;
+	background: #f3f4f6;
+	color: #5e6470;
+	cursor: pointer;
+	font-size: 13px;
+	font-weight: 500;
+	user-select: none;
+	transition: background 0.12s, color 0.12s;
+	white-space: nowrap;
+}
+
+.configkit-c__stepper-item--current {
+	background: #1d2128;
+	color: #fff;
+	font-weight: 600;
+}
+
+.configkit-c__stepper-item--done {
+	background: #d8eedb;
+	color: #1e6e3a;
+}
+
+.configkit-c__stepper-num {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	background: rgba( 255, 255, 255, 0.18 );
+	font-weight: 700;
+	font-size: 12px;
+}
+
+.configkit-c__stepper-item--pending .configkit-c__stepper-num {
+	background: #fff;
+	border: 1px solid #d8dadf;
+}
+
+.configkit-c__stepper-item--done .configkit-c__stepper-num {
+	background: #2e8b57;
+	color: #fff;
+}
+
+.configkit-c__layout {
+	display: grid;
+	grid-template-columns: minmax( 0, 1fr ) 320px;
+	gap: 32px;
+	align-items: start;
+}
+
+@media ( max-width: 980px ) {
+	.configkit-c__layout {
+		grid-template-columns: 1fr;
+	}
+}
+
+/* Step nav */
+
+.configkit-c__step-nav {
+	margin-top: 24px;
+	display: flex;
+	gap: 12px;
+	justify-content: space-between;
+}
+
+.configkit-c__nav-btn {
+	border: 0;
+	border-radius: 999px;
+	padding: 14px 22px;
+	font-size: 15px;
+	font-weight: 600;
+	cursor: pointer;
+	min-height: 48px;
+	transition: background 0.12s, transform 0.05s;
+	font-family: inherit;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.configkit-c__nav-btn--primary {
+	background: #1d2128;
+	color: #fff;
+}
+
+.configkit-c__nav-btn--primary:hover:not( :disabled ) { background: #34394a; }
+.configkit-c__nav-btn--primary:active:not( :disabled ) { transform: translateY( 1px ); }
+
+.configkit-c__nav-btn--secondary {
+	background: #f3f4f6;
+	color: #1d2128;
+}
+
+.configkit-c__nav-btn--secondary:hover:not( :disabled ) { background: #e6e8ec; }
+
+.configkit-c__nav-btn:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.configkit-c__nav-btn--block {
+	display: block;
+	width: 100%;
+}
+
+/* Sidebar (price summary) */
+
+.configkit-c__sidebar {
+	position: sticky;
+	top: 80px;
+	background: #fff;
+	border: 1px solid #ececef;
+	border-radius: 12px;
+	padding: 22px 24px;
+	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.03 );
+}
+
+.configkit-c__sidebar-header {
+	border-bottom: 1px solid #f1f1f3;
+	padding-bottom: 14px;
+	margin-bottom: 14px;
+}
+
+.configkit-c__sidebar-eyebrow {
+	color: #5e6470;
+	font-size: 12px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	margin: 0 0 6px;
+}
+
+.configkit-c__sidebar-amount {
+	font-size: 28px;
+	font-weight: 700;
+	margin: 0;
+	letter-spacing: -0.01em;
+}
+
+.configkit-c__sidebar-vat {
+	color: #5e6470;
+	font-size: 12px;
+	margin: 2px 0 0;
+}
+
+.configkit-c__sidebar-status {
+	color: #5e6470;
+	font-size: 12px;
+	font-style: italic;
+	margin: 4px 0 0;
+}
+
+.configkit-c__breakdown {
+	list-style: none;
+	margin: 0 0 14px;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.configkit-c__breakdown-row {
+	display: flex;
+	justify-content: space-between;
+	font-size: 13px;
+	color: #34394a;
+}
+
+.configkit-c__breakdown-row--base { font-weight: 600; color: #1d2128; }
+
+.configkit-c__breakdown-empty {
+	color: #5e6470;
+	font-size: 13px;
+	margin: 0 0 14px;
+}
+
+.configkit-c__sidebar-cta {
+	border-top: 1px solid #f1f1f3;
+	padding-top: 14px;
+}
+
+/* Sticky mobile bar (hidden on desktop, shown via media query) */
+
+.configkit-c__sticky {
+	display: none;
+}
+
+@media ( max-width: 980px ) {
+	.configkit-c__sidebar { display: none; }
+
+	.configkit-c__sticky {
+		display: block;
+		position: fixed;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: #fff;
+		border-top: 1px solid #ececef;
+		padding: 12px 16px env( safe-area-inset-bottom, 12px );
+		box-shadow: 0 -2px 12px rgba( 0, 0, 0, 0.06 );
+		z-index: 100;
+	}
+
+	.configkit-c__sticky-row {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		max-width: 1180px;
+		margin: 0 auto;
+	}
+
+	.configkit-c__sticky-amount {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+	}
+
+	.configkit-c__sticky-amount-value {
+		font-size: 18px;
+		font-weight: 700;
+	}
+
+	.configkit-c__sticky-vat {
+		color: #5e6470;
+		font-size: 11px;
+	}
+
+	.configkit-c__sticky-btn {
+		flex: 1;
+	}
+
+	/* Push the page so content isn't hidden behind the sticky bar. */
+	.configkit-frontend { padding-bottom: 96px; }
+}

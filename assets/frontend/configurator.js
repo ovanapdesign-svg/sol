@@ -172,7 +172,12 @@
 
 		var wrap = el( 'div', { class: 'configkit-c' }, [
 			renderHeader(),
-			renderBody(),
+			renderStepper(),
+			el( 'div', { class: 'configkit-c__layout' }, [
+				renderBody(),
+				renderPriceSidebar(),
+			] ),
+			renderStickyBar(),
 		] );
 		mount.appendChild( wrap );
 	}
@@ -205,20 +210,185 @@
 	}
 
 	function renderBody() {
-		var snapshot = state.snapshot;
-		// Stepper mode is the only one shipped in this chunk.
-		var steps = ( snapshot.steps || [] ).slice().sort( function ( a, b ) {
-			return ( a.sort_order || 0 ) - ( b.sort_order || 0 );
-		} );
-		var visible = steps.filter( function ( s ) { return ! state.derived.hiddenSteps[ s.step_key ]; } );
+		var visible = visibleSteps();
 		if ( visible.length === 0 ) {
-			return el( 'p', null, [ 'This template has no steps yet.' ] );
+			return el( 'div', { class: 'configkit-c__body' }, [ el( 'p', null, [ 'This template has no steps yet.' ] ) ] );
 		}
 		if ( state.stepIndex >= visible.length ) state.stepIndex = visible.length - 1;
+		if ( state.stepIndex < 0 ) state.stepIndex = 0;
 		var current = visible[ state.stepIndex ];
 		return el( 'div', { class: 'configkit-c__body' }, [
 			renderStepContent( current ),
+			renderStepNav( visible ),
 		] );
+	}
+
+	function visibleSteps() {
+		var snapshot = state.snapshot;
+		return ( snapshot.steps || [] ).slice()
+			.sort( function ( a, b ) { return ( a.sort_order || 0 ) - ( b.sort_order || 0 ); } )
+			.filter( function ( s ) { return ! state.derived.hiddenSteps[ s.step_key ]; } );
+	}
+
+	function renderStepper() {
+		var visible = visibleSteps();
+		if ( visible.length === 0 ) return null;
+		var nav = el( 'ol', { class: 'configkit-c__stepper' }, visible.map( function ( step, i ) {
+			var status = i < state.stepIndex
+				? 'configkit-c__stepper-item--done'
+				: ( i === state.stepIndex
+					? 'configkit-c__stepper-item--current'
+					: 'configkit-c__stepper-item--pending' );
+			return el( 'li', {
+				class: 'configkit-c__stepper-item ' + status,
+				onClick: function () {
+					if ( i <= state.stepIndex ) {
+						state.stepIndex = i;
+						render();
+					}
+				},
+				role: 'button',
+				tabindex: i <= state.stepIndex ? '0' : '-1',
+				'aria-current': i === state.stepIndex ? 'step' : 'false',
+			}, [
+				el( 'span', { class: 'configkit-c__stepper-num' }, [ String( i + 1 ) ] ),
+				el( 'span', { class: 'configkit-c__stepper-label' }, [ step.label ] ),
+			] );
+		} ) );
+		return nav;
+	}
+
+	function renderStepNav( visible ) {
+		var atFirst = state.stepIndex === 0;
+		var atLast  = state.stepIndex === visible.length - 1;
+		return el( 'div', { class: 'configkit-c__step-nav' }, [
+			el( 'button', {
+				type: 'button',
+				class: 'configkit-c__nav-btn configkit-c__nav-btn--secondary',
+				disabled: atFirst,
+				onClick: function () { if ( ! atFirst ) { state.stepIndex--; render(); window.scrollTo( { top: 0, behavior: 'smooth' } ); } },
+			}, [ '← Back' ] ),
+			atLast
+				? el( 'button', {
+					type: 'button',
+					class: 'configkit-c__nav-btn configkit-c__nav-btn--primary',
+					onClick: function () {
+						if ( window.ConfigKitFrontend && typeof window.ConfigKitFrontend.addToCart === 'function' ) {
+							window.ConfigKitFrontend.addToCart();
+						}
+					},
+				}, [ 'Add to cart' ] )
+				: el( 'button', {
+					type: 'button',
+					class: 'configkit-c__nav-btn configkit-c__nav-btn--primary',
+					onClick: function () { state.stepIndex++; render(); window.scrollTo( { top: 0, behavior: 'smooth' } ); },
+				}, [ 'Continue →' ] ),
+		] );
+	}
+
+	function renderPriceSidebar() {
+		var p = state.price || {};
+		var s = state.snapshot || {};
+		var children = [
+			el( 'header', { class: 'configkit-c__sidebar-header' }, [
+				el( 'p', { class: 'configkit-c__sidebar-eyebrow' }, [ ( s.template && s.template.name ) || 'Configuration' ] ),
+				el( 'p', { class: 'configkit-c__sidebar-amount' }, [ formatPrice( p.subtotal ) ] ),
+				p.vatLabel && p.vatLabel !== 'inherit' && p.vatLabel !== 'off'
+					? el( 'p', { class: 'configkit-c__sidebar-vat' }, [ p.vatLabel === 'incl_vat' ? 'incl. VAT' : 'excl. VAT' ] )
+					: null,
+				p.calculating ? el( 'p', { class: 'configkit-c__sidebar-status' }, [ 'Calculating…' ] ) : null,
+				p.subtotal === null && p.reason ? el( 'p', { class: 'configkit-c__sidebar-status' }, [ priceReasonMessage( p.reason ) ] ) : null,
+			] ),
+			renderBreakdown( p ),
+			renderSummaryActions(),
+		];
+		return el( 'aside', { class: 'configkit-c__sidebar' }, children );
+	}
+
+	function renderStickyBar() {
+		var p = state.price || {};
+		return el( 'div', { class: 'configkit-c__sticky' }, [
+			el( 'div', { class: 'configkit-c__sticky-row' }, [
+				el( 'div', { class: 'configkit-c__sticky-amount' }, [
+					el( 'span', { class: 'configkit-c__sticky-amount-value' }, [ formatPrice( p.subtotal ) ] ),
+					p.vatLabel && p.vatLabel !== 'inherit' && p.vatLabel !== 'off'
+						? el( 'span', { class: 'configkit-c__sticky-vat' }, [ p.vatLabel === 'incl_vat' ? 'incl. VAT' : 'excl. VAT' ] )
+						: null,
+				] ),
+				el( 'button', {
+					type: 'button',
+					class: 'configkit-c__nav-btn configkit-c__nav-btn--primary configkit-c__sticky-btn',
+					onClick: function () {
+						if ( window.ConfigKitFrontend && typeof window.ConfigKitFrontend.addToCart === 'function' ) {
+							window.ConfigKitFrontend.addToCart();
+						}
+					},
+				}, [ 'Add to cart' ] ),
+			] ),
+		] );
+	}
+
+	function renderBreakdown( price ) {
+		var rows = ( price && price.fields ) || [];
+		var hasAny = rows.length > 0 || price.base !== null;
+		if ( ! hasAny ) {
+			return el( 'p', { class: 'configkit-c__breakdown-empty' }, [ 'Pick options to see your price.' ] );
+		}
+		return el( 'ul', { class: 'configkit-c__breakdown' }, [
+			price.base !== null
+				? el( 'li', { class: 'configkit-c__breakdown-row configkit-c__breakdown-row--base' }, [
+					el( 'span', null, [ 'Base' ] ),
+					el( 'span', null, [ formatPrice( price.base ) ] ),
+				] )
+				: null
+		].concat( rows.map( function ( r ) {
+			return el( 'li', { class: 'configkit-c__breakdown-row' }, [
+				el( 'span', null, [ r.label ] ),
+				el( 'span', null, [ ( r.amount > 0 ? '+' : '' ) + formatPrice( r.amount ) ] ),
+			] );
+		} ) ) );
+	}
+
+	function renderSummaryActions() {
+		var visible = visibleSteps();
+		var atLast = state.stepIndex === visible.length - 1;
+		if ( ! atLast ) return null;
+		return el( 'div', { class: 'configkit-c__sidebar-cta' }, [
+			el( 'button', {
+				type: 'button',
+				class: 'configkit-c__nav-btn configkit-c__nav-btn--primary configkit-c__nav-btn--block',
+				onClick: function () {
+					if ( window.ConfigKitFrontend && typeof window.ConfigKitFrontend.addToCart === 'function' ) {
+						window.ConfigKitFrontend.addToCart();
+					}
+				},
+			}, [ 'Add to cart' ] ),
+		] );
+	}
+
+	function priceReasonMessage( reason ) {
+		switch ( reason ) {
+			case 'awaiting_dimensions': return 'Enter width and height to see your price.';
+			case 'no_cell':              return 'No price found for this combination — try different dimensions.';
+			case 'exceeds_max_dimensions': return 'Dimensions exceed this product\u2019s maximum.';
+			case 'exceeds_min_dimensions': return 'Dimensions below this product\u2019s minimum.';
+			case 'fallback':             return 'Using fallback price.';
+		}
+		return '';
+	}
+
+	function formatPrice( n ) {
+		if ( n === null || n === undefined || Number.isNaN( n ) ) return '—';
+		var locale = ( document.documentElement.lang || 'en' );
+		try {
+			return new Intl.NumberFormat( locale, {
+				style: 'currency',
+				currency: 'NOK',
+				maximumFractionDigits: 0,
+			} ).format( Number( n ) );
+		} catch ( e ) {
+			return Math.round( Number( n ) ) + ' kr';
+		}
 	}
 
 	function renderStepContent( step ) {
