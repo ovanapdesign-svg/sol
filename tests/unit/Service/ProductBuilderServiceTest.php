@@ -335,6 +335,56 @@ final class ProductBuilderServiceTest extends TestCase {
 		$this->assertFalse( $result['ok'] );
 	}
 
+	public function test_can_enable_configurator_returns_false_when_blocks_missing(): void {
+		$status = $this->service->can_enable_configurator( self::PRODUCT_ID );
+		$this->assertFalse( $status['ready'] );
+		// product_type is the first failing required block.
+		$this->assertSame( 'product_type', $status['checklist'][0]['id'] );
+		$this->assertFalse( $status['checklist'][0]['done'] );
+	}
+
+	public function test_can_enable_configurator_returns_true_when_all_required_blocks_complete(): void {
+		$this->service->set_product_type( self::PRODUCT_ID, 'markise' );
+		$this->service->save_pricing_rows( self::PRODUCT_ID, [
+			[ 'to_width' => 2400, 'to_height' => 2000, 'price' => 12000 ],
+		] );
+		$this->service->save_fabrics( self::PRODUCT_ID, [ [ 'name' => 'Beige', 'code' => 'U1' ] ] );
+		$this->service->save_operation_mode( self::PRODUCT_ID, 'motorized_only' );
+		$this->service->save_motors( self::PRODUCT_ID, [
+			[ 'name' => 'Motor A', 'code' => 'MA', 'price_source' => 'configkit', 'price' => 4500 ],
+		] );
+
+		$status = $this->service->can_enable_configurator( self::PRODUCT_ID );
+		$this->assertTrue( $status['ready'], 'checklist=' . json_encode( $status['checklist'] ) );
+	}
+
+	public function test_enable_configurator_refuses_when_not_ready(): void {
+		$result = $this->service->enable_configurator( self::PRODUCT_ID );
+		$this->assertFalse( $result['ok'] );
+		$this->assertNotEmpty( $result['checklist'] );
+	}
+
+	public function test_enable_configurator_writes_post_meta_when_ready(): void {
+		$this->service->set_product_type( self::PRODUCT_ID, 'markise' );
+		$this->service->save_pricing_rows( self::PRODUCT_ID, [
+			[ 'to_width' => 2400, 'to_height' => 2000, 'price' => 12000 ],
+		] );
+		$this->service->save_fabrics( self::PRODUCT_ID, [ [ 'name' => 'Beige', 'code' => 'U1' ] ] );
+		$this->service->save_operation_mode( self::PRODUCT_ID, 'motorized_only' );
+		$this->service->save_motors( self::PRODUCT_ID, [
+			[ 'name' => 'Motor A', 'code' => 'MA', 'price_source' => 'configkit', 'price' => 4500 ],
+		] );
+
+		$writes = [];
+		$result = $this->service->enable_configurator( self::PRODUCT_ID, function ( int $pid, string $key, $value ) use ( &$writes ): void {
+			$writes[ $key ] = $value;
+		} );
+		$this->assertTrue( $result['ok'], 'errors=' . json_encode( $result ) );
+		$this->assertSame( 1, $writes['_configkit_enabled'] );
+		$this->assertSame( 'product_4242_markise', $writes['_configkit_template_key'] );
+		$this->assertSame( 'product_4242_pricing', $writes['_configkit_lookup_table_key'] );
+	}
+
 	public function test_state_marks_product_as_auto_managed_after_first_action(): void {
 		$this->assertFalse( $this->state->is_auto_managed( self::PRODUCT_ID ) );
 		$this->service->set_product_type( self::PRODUCT_ID, 'markise' );

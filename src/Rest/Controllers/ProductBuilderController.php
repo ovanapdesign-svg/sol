@@ -93,6 +93,22 @@ final class ProductBuilderController extends AbstractController {
 				'permission_callback' => $this->require_cap( self::CAP ),
 			],
 		] );
+
+		\register_rest_route( self::NAMESPACE, '/product-builder/(?P<product_id>\d+)/checklist', [
+			[
+				'methods'             => 'GET',
+				'callback'            => [ $this, 'read_checklist' ],
+				'permission_callback' => $this->require_cap( self::CAP ),
+			],
+		] );
+
+		\register_rest_route( self::NAMESPACE, '/product-builder/(?P<product_id>\d+)/enable', [
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'enable' ],
+				'permission_callback' => $this->require_cap( self::CAP ),
+			],
+		] );
 	}
 
 	public function list_recipes( \WP_REST_Request $request ): \WP_REST_Response {
@@ -176,6 +192,25 @@ final class ProductBuilderController extends AbstractController {
 		$result     = $this->service->save_operation_mode( $product_id, $mode );
 		if ( ! ( $result['ok'] ?? false ) ) {
 			return $this->error( 'product_builder_failed', (string) ( $result['message'] ?? 'Could not save operation mode.' ), [], 400 );
+		}
+		return $this->ok( $result );
+	}
+
+	public function read_checklist( \WP_REST_Request $request ): \WP_REST_Response {
+		$product_id = (int) $request['product_id'];
+		return $this->ok( $this->service->can_enable_configurator( $product_id ) );
+	}
+
+	public function enable( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$product_id = (int) $request['product_id'];
+		$result     = $this->service->enable_configurator( $product_id );
+		if ( ! ( $result['ok'] ?? false ) ) {
+			return $this->error(
+				'product_builder_not_ready',
+				(string) ( $result['message'] ?? 'Configurator could not be enabled.' ),
+				[ 'checklist' => $result['checklist'] ?? [] ],
+				400
+			);
 		}
 		return $this->ok( $result );
 	}

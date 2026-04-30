@@ -751,11 +751,135 @@ final class ProductBuilderService {
 		$slug = preg_replace( '/[^a-z0-9]+/', '_', $slug ) ?? '';
 		$slug = trim( $slug, '_' );
 		if ( $slug === '' ) $slug = 'item';
+		// KeyValidator requires 3-64 chars; pad short slugs with the
+		// label or a trailing _ to clear the floor without surprising
+		// the owner.
+		if ( strlen( $slug ) < 3 ) {
+			$pad = strtolower( preg_replace( '/[^a-z0-9]+/', '_', $label ) ?? '' );
+			$pad = trim( $pad, '_' );
+			$slug = $pad !== '' && strlen( $pad ) >= 3 ? $pad : ( $slug . '_item' );
+			$slug = substr( $slug, 0, 64 );
+		}
 		if ( $this->item_repo === null ) return $slug;
 		if ( ! $this->item_repo->key_exists_in_library( $library_key, $slug ) ) return $slug;
 		$i = 2;
 		while ( $this->item_repo->key_exists_in_library( $library_key, $slug . '_' . $i ) ) $i++;
 		return $slug . '_' . $i;
+	}
+
+	/**
+	 * Phase 4.3 — Block 10. Compute the readiness checklist for the
+	 * product. Each entry is owner-friendly: id (machine-readable
+	 * for the JS to bind icons/anchors), label, done, required
+	 * (recipe-driven). The configurator can only be enabled when
+	 * every required entry is done.
+	 *
+	 * @return array{ready:bool, product_type:?string, checklist:list<array{id:string,label:string,done:bool,required:bool}>}
+	 */
+	public function can_enable_configurator( int $product_id ): array {
+		$state        = $this->state->get( $product_id );
+		$product_type = is_string( $state['product_type'] ?? null ) ? $state['product_type'] : null;
+		$recipe       = $product_type !== null ? ProductTypeRecipes::find( $product_type ) : null;
+		$blocks       = is_array( $recipe['blocks'] ?? null ) ? $recipe['blocks'] : [];
+
+		$checklist = [];
+		$checklist[] = [
+			'id'       => 'product_type',
+			'label'    => 'Product type selected',
+			'done'     => $product_type !== null,
+			'required' => true,
+		];
+		$checklist[] = [
+			'id'       => 'pricing_rows',
+			'label'    => 'At least one pricing row',
+			'done'     => $this->pricing_row_count( $product_id ) > 0,
+			'required' => in_array( 'pricing', $blocks, true ),
+		];
+		$checklist[] = [
+			'id'       => 'fabrics',
+			'label'    => 'At least one fabric',
+			'done'     => count( $this->read_fabrics( $product_id ) ) > 0,
+			'required' => in_array( 'fabrics', $blocks, true ),
+		];
+		$checklist[] = [
+			'id'       => 'operation_mode',
+			'label'    => 'Operation options set',
+			'done'     => $this->state->get_string( $product_id, 'operation_mode' ) !== null,
+			'required' => in_array( 'operation', $blocks, true ),
+		];
+		if ( in_array( 'stang', $blocks, true ) || in_array( 'motor', $blocks, true ) ) {
+			$has_stang = count( $this->read_stangs( $product_id ) ) > 0;
+			$has_motor = count( $this->read_motors( $product_id ) ) > 0;
+			$checklist[] = [
+				'id'       => 'operation_options',
+				'label'    => 'Stang or motor options',
+				'done'     => $has_stang || $has_motor,
+				'required' => true,
+			];
+		}
+
+		$ready = true;
+		foreach ( $checklist as $row ) {
+			if ( $row['required'] && ! $row['done'] ) { $ready = false; break; }
+		}
+
+		return [
+			'ready'        => $ready,
+			'product_type' => $product_type,
+			'checklist'    => $checklist,
+		];
+	}
+
+	private function pricing_row_count( int $product_id ): int {
+		if ( $this->lookup_cell_repo === null ) return 0;
+		$key = $this->state->get_string( $product_id, 'lookup_table_key' );
+		if ( $key === null ) return 0;
+		$listing = $this->lookup_cell_repo->list_in_table( $key, [], 1, 5 );
+		return (int) ( $listing['total'] ?? count( $listing['items'] ?? [] ) );
+	}
+
+	/**
+	 * Phase 4.3 — Block 10 enable. Flip `_configkit_enabled` on the
+	 * product post + write the orchestrator's auto-managed
+	 * template_key / lookup_table_key onto the binding so the
+	 * storefront renderer picks them up.
+	 *
+	 * Refuses to enable when the readiness check fails — owners
+	 * shouldn't ship half-configured products. Returns the checklist
+	 * alongside the failure so the UI can highlight what's missing.
+	 *
+	 * The post-meta writer is injectable so unit tests run without
+	 * WordPress; production passes a callable that delegates to
+	 * `update_post_meta()`.
+	 *
+	 * @return array{ok:bool, message?:string, checklist?:list<array<string,mixed>>, state?:array<string,mixed>}
+	 */
+	public function enable_configurator( int $product_id, ?callable $writer = null ): array {
+		$status = $this->can_enable_configurator( $product_id );
+		if ( ! $status['ready'] ) {
+			return [
+				'ok'        => false,
+				'message'   => 'Some blocks still need attention.',
+				'checklist' => $status['checklist'],
+			];
+		}
+		$state = $this->state->get( $product_id );
+
+		$write = $writer ?? static function ( int $pid, string $key, mixed $value ): void {
+			if ( function_exists( 'update_post_meta' ) ) \update_post_meta( $pid, $key, $value );
+		};
+		$write( $product_id, '_configkit_enabled', 1 );
+		if ( ! empty( $state['template_key'] ) ) {
+			$write( $product_id, '_configkit_template_key', (string) $state['template_key'] );
+		}
+		if ( ! empty( $state['lookup_table_key'] ) ) {
+			$write( $product_id, '_configkit_lookup_table_key', (string) $state['lookup_table_key'] );
+		}
+		return [
+			'ok'      => true,
+			'message' => 'Configurator enabled.',
+			'state'   => $state,
+		];
 	}
 
 	/**
