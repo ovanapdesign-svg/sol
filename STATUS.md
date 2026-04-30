@@ -226,7 +226,7 @@ priority.
 
 **Engine purity preserved.** `grep -rE "wp_\|get_option\|WP_Query\|\\$wpdb" src/Engines/`
 returns zero matches. Phase 2 + 3 + 3.5 + 3.6 + 4 PHPUnit tests green
-(393 / 1010).
+(395 / 1016).
 
 **Phase 3 status.** Seven of seven in-scope entities are landed
 (Modules, Libraries, Lookup Tables, Families, Templates, Products,
@@ -281,13 +281,14 @@ no REST contract changes, engines untouched.
 | Excel import wizard for lookup-table cells               | complete | PhpSpreadsheet ^2.0 added via composer (vendor/ stays gitignored). New `src/Import/` package: FormatDetector (Format A grid / Format B long, ambiguous → unknown per `IMPORT_WIZARD_SPEC.md §5.2`), Parser (multi-sheet price groups + "Price group: X" separator rows + string-typed numeric cells in long format), Validator (numeric / >0 / ≥0 price / snake_case key / sane bounds + cross-row duplicate detection where last row wins per spec §8.2), Runner (8-state machine: received → parsing → parsed → validated → committing → applied / failed / cancelled, transactional commit with ROLLBACK on throw, idempotent insert/update via LookupCellRepository::find_by_coordinates, replace-all wipe via delete_all_in_table). New REST controller `ImportsController` with 5 routes under `configkit/v1/imports/*`; capability `configkit_manage_lookup_tables`. Multipart upload validated server-side: 10 MB cap, .xlsx-only, MIME allow-list, files moved to `wp-content/uploads/configkit-imports/` (mode 0700 + .htaccess `Require all denied`, randomized filenames). Wizard UI at ConfigKit → Imports renders 4-step flow (pick destination → drag-drop upload → preview with green/yellow/red counts + width/height/price/group stats + insert/update/skip tally + expandable per-row table → result with "Import another file"). Replace-all mode requires window.confirm before commit. Recent-imports list below the wizard. 28 new PHPUnit tests (Parser ×10, Validator ×10, Runner ×8) cover format detection, multi-sheet groups, separator rows, idempotent re-import, replace-all wiping unrelated cells, mixed red+green files only inserting green rows, parse-failure path. |
 | Frontend customer configurator UI                        | complete | New `src/Frontend/` package: ProductRenderer hooks `woocommerce_before_single_product_summary` and replaces `woocommerce_template_single_add_to_cart` for products with `_configkit_enabled = 1` AND a template_key. RenderDataController (public, no cap) returns `/products/{id}/render-data` payload — full template snapshot (steps + fields + options + rules) + binding (defaults / overrides / locked values) + library items keyed by library + module capability flags + lookup table cells (cap 5000). AddToCartController re-validates submitted selections server-side (unknown_field / locked_value_mismatch / required_missing) and pushes the line into Woo cart with `_configkit_selections`, `_configkit_template_key`, `_configkit_binding_hash` meta. Storefront app at `assets/frontend/configurator.js` (vanilla JS, no framework) + `engines.js` ports a deliberate subset of the PHP RuleEngine + LookupEngine + PricingEngine (covers atomic / all / any / not / always conditions; equals / not_equals / >/< / between / in / not_in / contains / is_selected / is_empty operators; show_step / hide_step / show_field / hide_field / require_field / set_default / disable_option / filter_source / reset_value actions; lookup match modes exact / round_up / nearest with bounding-box guard; pricing modes fixed / per_unit / per_m2 / lookup_dimension / none with sale_price precedence + product_surcharge + discount_percent + minimum floor + VAT label). Server is the source of truth — JS is for live UX only. UI: top stepper (pill style, scrollable on mobile), step nav (Back / Continue / Add-to-cart), desktop price sidebar (sticky top:80px) + mobile sticky bar (display switches at 980px breakpoint). Field renderers: number with +/- pill, radio plain, radio cards (image + ✓ badge on selection), swatch grid (aspect-ratio:1/1 + color_family fallback palette for missing images), checkbox cards / list, display-only headings, text fallback. NOK currency via Intl.NumberFormat (0 fraction digits) with "kr" string fallback. ProductRenderer enqueues only on configurator-bound product pages so non-Woo / non-bound pages stay clean. |
 | Server-side re-pricing via PricingEngine on cart events  | pending  | The cart line currently uses Woo's stock price; the JS port computes a live price for UX. Hooking `woocommerce_before_calculate_totals` to override the cart-line price via the PHP PricingEngine is the next chunk.                                                                       |
+| Phase 4 polish (PhpSpreadsheet + Module CRUD + import flow + icons) | complete | Owner audit caught four real issues after Phase 4 ship: (1) the Excel upload was returning 500 because the uploads dir wasn't created on activation; PhpSpreadsheet ^2.0 was already installed via composer.lock 2.4.5. New `src/Import/UploadPaths.php` is the single source of truth for `wp-content/uploads/configkit/imports/`; `Plugin::on_activation()` calls `ensure()` so fresh installs have it ready, and `register_admin_init()` calls it as a belt-and-suspenders for installs that pre-date the hook. (2) Module Create flow used to gate the form behind a preset picker; `state.view = 'presets'` is gone, `showNewForm()` lands directly on a blank form. The 4 named presets re-appear as inline "Apply preset" buttons inside the Create form that overlay capabilities on top of current state without ever clearing owner-checked boxes. ModuleService already accepted any combination including all-blank — two new PHPUnit tests now lock that down. (3) Capability icons were inconsistently coloured — fixed by wrapping each checkbox in a `.configkit-capability-row` container whose `.is-checked` class drives the icon + label colour through CSS, no longer relying on per-icon `--checked` modifiers. Smooth 0.15s transitions. (4) Excel import lived behind a separate menu detached from the data: Lookup Tables → detail page now carries a "⬆ Import from Excel" button next to "+ New cell" that links to `?page=configkit-imports&target_type=lookup_cells&target_lookup_table_key=KEY`. The wizard reads those params, sets `state.contextual = true`, and skips step 1. ConfigKit → Imports menu renamed to "Import history"; the page leads with the past-batches table when the owner hasn't started a fresh upload, and falls back to the wizard below for ad-hoc destination picking. Recent imports table grew Target + Rows columns. Suite now 395 / 1016 green. |
 | Library items import                                     | pending  | Out of scope for the lookup-cells import chunk; pending its own session.                                          |
 | Diagnostics catalogue expansion (warnings + info)        | pending  |                                                                        |
 | Product Readiness Board                                  | pending  |                                                                        |
 
 **Engine purity preserved.** `grep -rE "wp_\|get_option\|WP_Query\|\\$wpdb" src/Engines/`
 returns zero matches. Phase 2 + 3 + 3.5 + 3.6 + 4 PHPUnit tests
-green (393 / 1010).
+green (395 / 1016).
 
 ---
 
@@ -365,7 +366,17 @@ of the PHP RuleEngine + LookupEngine + PricingEngine for live UX
 (server is still the source of truth for pricing on cart events,
 which lands as a follow-up chunk).
 
-Engines stay pure; suite now 393 / 1010 green.
+**Phase 4 polish** then resolved four owner-reported issues:
+fresh `UploadPaths::ensure()` runs at activation so the Excel
+500 disappears; the Module Create form now lands blank (presets
+become inline overlay buttons); capability icons use a unified
+`.configkit-capability-row.is-checked` state for consistent
+colouring; and the Excel import lives where the data lives —
+Lookup Tables → detail page → "Import from Excel", with
+ConfigKit → Imports renamed to "Import history" and hosting a
+fallback ad-hoc wizard.
+
+Engines stay pure; suite now 395 / 1016 green.
 
 Awaiting next direction (cart-event re-pricing via PricingEngine,
 library items import, or diagnostics catalogue expansion).
