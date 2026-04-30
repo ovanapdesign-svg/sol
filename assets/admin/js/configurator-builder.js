@@ -346,17 +346,287 @@
 			}, '✕' )
 		) );
 
-		modal.appendChild( el( 'div', { class: 'configkit-cb__modal-body' },
-			el( 'p', { class: 'description' },
-				'The action modal body lands in the next chunk. Confirm to proceed.'
-			)
-		) );
-
-		modal.appendChild( el( 'div', { class: 'configkit-cb__modal-footer' },
-			el( 'button', { type: 'button', class: 'button', onClick: closeSourceModal }, 'Cancel' )
-		) );
+		const body   = el( 'div', { class: 'configkit-cb__modal-body' } );
+		const footer = el( 'div', { class: 'configkit-cb__modal-footer' } );
+		buildSourceModalBody( body, footer );
+		modal.appendChild( body );
+		modal.appendChild( footer );
 		overlay.appendChild( modal );
 		return overlay;
+	}
+
+	function buildSourceModalBody( body, footer ) {
+		const m = state.sourceModal || {};
+		switch ( m.kind ) {
+			case 'save':           return buildSaveAsPresetBody( body, footer, m );
+			case 'apply':          return buildApplyPresetBody( body, footer, m );
+			case 'copy':           return buildCopyFromProductBody( body, footer, m );
+			case 'detach':         return buildDetachBody( body, footer, m );
+			case 'products-using': return buildProductsUsingBody( body, footer, m );
+			default:
+				body.appendChild( el( 'p', { class: 'description' }, 'Unknown action.' ) );
+				footer.appendChild( el( 'button', { type: 'button', class: 'button', onClick: closeSourceModal }, 'Close' ) );
+		}
+	}
+
+	function buildSaveAsPresetBody( body, footer, m ) {
+		m.payload = m.payload || { name: '', description: '', product_type: '' };
+		body.appendChild( el( 'p', { class: 'description' },
+			'Save this product\'s current configurator as a reusable preset. Other products can then apply it without rebuilding from scratch — library items + lookup tables stay shared.'
+		) );
+		body.appendChild( labelledField( 'Name (required)', el( 'input', {
+			type: 'text',
+			class: 'regular-text',
+			value: m.payload.name,
+			onInput: ( ev ) => { m.payload.name = ev.target.value; },
+		} ) ) );
+		body.appendChild( labelledField( 'Description', el( 'textarea', {
+			class: 'configkit-cb__source-textarea',
+			rows: 2,
+			onInput: ( ev ) => { m.payload.description = ev.target.value; },
+			value: m.payload.description,
+		} ) ) );
+		body.appendChild( labelledField( 'Product type (optional)', el( 'input', {
+			type: 'text',
+			class: 'regular-text',
+			placeholder: 'markise, screen, …',
+			value: m.payload.product_type,
+			onInput: ( ev ) => { m.payload.product_type = ev.target.value; },
+		} ) ) );
+		footer.appendChild( el( 'button', { type: 'button', class: 'button', onClick: closeSourceModal }, 'Cancel' ) );
+		footer.appendChild( el( 'button', {
+			type: 'button',
+			class: 'button button-primary',
+			disabled: m.busy || ! ( m.payload.name && m.payload.name.trim() ),
+			onClick: submitSaveAsPreset,
+		}, m.busy ? 'Saving…' : 'Save preset' ) );
+	}
+
+	async function submitSaveAsPreset() {
+		const m = state.sourceModal;
+		if ( ! m || ! m.payload || ! m.payload.name.trim() ) return;
+		m.busy = true; render();
+		try {
+			const result = await window.ConfigKit.request( '/product-builder/' + productId + '/save-as-preset', {
+				method: 'POST',
+				body: {
+					name:         m.payload.name.trim(),
+					description:  m.payload.description || '',
+					product_type: m.payload.product_type || '',
+				},
+			} );
+			closeSourceModal();
+			showMessage( 'success', ( result && result.message ) || 'Preset saved.' );
+		} catch ( err ) {
+			m.busy = false;
+			showMessage( 'error', explainError( err ) );
+			render();
+		}
+	}
+
+	function buildApplyPresetBody( body, footer, m ) {
+		m.payload = m.payload || { preset_id: 0 };
+		body.appendChild( el( 'p', { class: 'description' },
+			'Apply a preset. This product will inherit the preset\'s sections; library items + lookup tables are shared (no duplication).'
+		) );
+		if ( ! Array.isArray( state.presets ) ) {
+			body.appendChild( el( 'p', { class: 'description' }, 'Loading presets…' ) );
+			loadPresets().then( () => render() );
+		} else if ( state.presets.length === 0 ) {
+			body.appendChild( el( 'p', { class: 'configkit-cb__range-diag-warn' },
+				'No presets saved yet. Build one product first, then click Save as preset.'
+			) );
+		} else {
+			const select = el( 'select', { class: 'configkit-cb__source-select' } );
+			select.appendChild( el( 'option', { value: '' }, 'Choose a preset…' ) );
+			state.presets.forEach( ( p ) => {
+				select.appendChild( el( 'option', { value: String( p.id ), selected: m.payload.preset_id === p.id }, p.name + ( p.product_type ? ' (' + p.product_type + ')' : '' ) ) );
+			} );
+			select.addEventListener( 'change', ( ev ) => { m.payload.preset_id = parseInt( ev.target.value || '0', 10 ); } );
+			body.appendChild( labelledField( 'Preset', select ) );
+		}
+		footer.appendChild( el( 'button', { type: 'button', class: 'button', onClick: closeSourceModal }, 'Cancel' ) );
+		footer.appendChild( el( 'button', {
+			type: 'button',
+			class: 'button button-primary',
+			disabled: m.busy || ! m.payload.preset_id,
+			onClick: submitApplyPreset,
+		}, m.busy ? 'Applying…' : 'Apply preset' ) );
+	}
+
+	async function loadPresets() {
+		try {
+			const data = await window.ConfigKit.request( '/presets' );
+			state.presets = ( data && data.items ) || [];
+		} catch ( e ) {
+			state.presets = [];
+		}
+	}
+
+	async function submitApplyPreset() {
+		const m = state.sourceModal;
+		if ( ! m || ! m.payload || ! m.payload.preset_id ) return;
+		m.busy = true; render();
+		try {
+			const result = await window.ConfigKit.request( '/product-builder/' + productId + '/apply-preset', {
+				method: 'POST',
+				body: { preset_id: m.payload.preset_id },
+			} );
+			closeSourceModal();
+			showMessage( 'success', ( result && result.message ) || 'Preset applied.' );
+			await loadSections();
+			loadDiagnostics();
+			render();
+		} catch ( err ) {
+			m.busy = false;
+			showMessage( 'error', explainError( err ) );
+			render();
+		}
+	}
+
+	function buildCopyFromProductBody( body, footer, m ) {
+		m.payload = m.payload || { source_product_id: 0, lookup_table_choice: 'inherit' };
+		body.appendChild( el( 'p', { class: 'description' },
+			'Copy another product\'s configurator into this one. The target becomes independent — future changes to the source do not propagate.'
+		) );
+		body.appendChild( labelledField( 'Source product ID', el( 'input', {
+			type: 'number',
+			class: 'regular-text',
+			min: '1',
+			value: m.payload.source_product_id || '',
+			onInput: ( ev ) => { m.payload.source_product_id = parseInt( ev.target.value || '0', 10 ); },
+		} ) ) );
+		const lookupRow = el( 'div', { class: 'configkit-cb__source-lookup' } );
+		[
+			[ 'inherit', 'Inherit (share source\'s table)' ],
+			[ 'reuse',   'Use existing table key' ],
+			[ 'new',     'Create a new empty table' ],
+		].forEach( ( pair ) => {
+			lookupRow.appendChild( el( 'label', null,
+				el( 'input', {
+					type: 'radio',
+					name: 'cb-lookup-choice',
+					value: pair[0],
+					checked: m.payload.lookup_table_choice === pair[0],
+					onChange: () => { m.payload.lookup_table_choice = pair[0]; render(); },
+				} ),
+				document.createTextNode( ' ' + pair[1] )
+			) );
+		} );
+		body.appendChild( labelledField( 'Lookup table', lookupRow ) );
+		if ( m.payload.lookup_table_choice === 'reuse' ) {
+			body.appendChild( labelledField( 'Reuse table key', el( 'input', {
+				type: 'text',
+				class: 'regular-text',
+				placeholder: 'product_42_size_pricing_a8f2',
+				onInput: ( ev ) => { m.payload.lookup_table_key = ev.target.value; },
+				value: m.payload.lookup_table_key || '',
+			} ) ) );
+		}
+		footer.appendChild( el( 'button', { type: 'button', class: 'button', onClick: closeSourceModal }, 'Cancel' ) );
+		footer.appendChild( el( 'button', {
+			type: 'button',
+			class: 'button button-primary',
+			disabled: m.busy || ! m.payload.source_product_id,
+			onClick: submitCopyFromProduct,
+		}, m.busy ? 'Copying…' : 'Copy' ) );
+	}
+
+	async function submitCopyFromProduct() {
+		const m = state.sourceModal;
+		if ( ! m || ! m.payload || ! m.payload.source_product_id ) return;
+		m.busy = true; render();
+		try {
+			const result = await window.ConfigKit.request( '/product-builder/' + productId + '/copy-from-product', {
+				method: 'POST',
+				body: {
+					source_product_id:   m.payload.source_product_id,
+					lookup_table_choice: m.payload.lookup_table_choice,
+					lookup_table_key:    m.payload.lookup_table_key || '',
+				},
+			} );
+			closeSourceModal();
+			showMessage( 'success', ( result && result.message ) || 'Copy complete.' );
+			await loadSections();
+			loadDiagnostics();
+			render();
+		} catch ( err ) {
+			m.busy = false;
+			showMessage( 'error', explainError( err ) );
+			render();
+		}
+	}
+
+	function buildDetachBody( body, footer, m ) {
+		body.appendChild( el( 'p', { class: 'description' },
+			'Detaching copies the current view into this product as local sections. After this, future changes to the preset / source product do NOT affect this product.'
+		) );
+		body.appendChild( el( 'p', { class: 'configkit-cb__range-diag-warn' },
+			'Note: option-level overrides (price overrides, hidden options) are cleared on detach — option prices return to the library\'s stock value.'
+		) );
+		footer.appendChild( el( 'button', { type: 'button', class: 'button', onClick: closeSourceModal }, 'Cancel' ) );
+		footer.appendChild( el( 'button', {
+			type: 'button',
+			class: 'button button-primary configkit-cb__source-action--warn',
+			disabled: m.busy,
+			onClick: submitDetach,
+		}, m.busy ? 'Detaching…' : 'Detach' ) );
+	}
+
+	async function submitDetach() {
+		const m = state.sourceModal;
+		if ( ! m ) return;
+		m.busy = true; render();
+		try {
+			const result = await window.ConfigKit.request( '/product-builder/' + productId + '/detach-from-preset', {
+				method: 'POST',
+				body: {},
+			} );
+			closeSourceModal();
+			showMessage( 'success', ( result && result.message ) || 'Detached.' );
+			await loadSections();
+			loadDiagnostics();
+			render();
+		} catch ( err ) {
+			m.busy = false;
+			showMessage( 'error', explainError( err ) );
+			render();
+		}
+	}
+
+	function buildProductsUsingBody( body, footer, m ) {
+		const presetId = ( m.meta && m.meta.preset_id ) || 0;
+		if ( ! Array.isArray( m.payload ) ) {
+			body.appendChild( el( 'p', { class: 'description' }, 'Loading…' ) );
+			window.ConfigKit.request( '/presets/' + presetId + '/products-using' ).then( ( data ) => {
+				m.payload = ( data && data.products ) || [];
+				render();
+			} ).catch( ( err ) => {
+				m.payload = [];
+				showMessage( 'error', explainError( err ) );
+				render();
+			} );
+		} else if ( m.payload.length === 0 ) {
+			body.appendChild( el( 'p', { class: 'description' }, 'No other products use this preset yet.' ) );
+		} else {
+			const ul = el( 'ul', { class: 'configkit-cb__source-list' } );
+			m.payload.forEach( ( p ) => {
+				ul.appendChild( el( 'li', null,
+					p.edit_url
+						? el( 'a', { href: p.edit_url }, p.name || ( '#' + p.product_id ) )
+						: el( 'span', null, ( p.name || ( '#' + p.product_id ) ) + ' (#' + p.product_id + ')' )
+				) );
+			} );
+			body.appendChild( ul );
+		}
+		footer.appendChild( el( 'button', { type: 'button', class: 'button', onClick: closeSourceModal }, 'Close' ) );
+	}
+
+	function labelledField( label, child ) {
+		return el( 'div', { class: 'configkit-cb__source-field' },
+			el( 'label', { class: 'configkit-cb__source-field-label' }, label ),
+			child
+		);
 	}
 
 	function sourceModalTitle( kind ) {
@@ -369,6 +639,49 @@
 			case 'products-using': return 'Products using this preset';
 			default:               return 'Configurator source';
 		}
+	}
+
+	// =========================================================
+	// Phase 4.3b half B — Section source badge.
+	//
+	// Each section card carries a small pill in its title row so the
+	// owner sees at-a-glance which sections come from the preset
+	// ("Shared"), which they've personalised ("Overridden"), and
+	// which exist only in this product ("Local"). The labels are
+	// computed from section.source which the resolver attaches.
+	// =========================================================
+
+	function renderSectionSourceBadge( section ) {
+		const src = section.source || null;
+		if ( ! src ) return null;
+		let cls;
+		let icon;
+		let label;
+		switch ( src ) {
+			case 'shared':
+				cls   = 'shared';
+				icon  = '🔗';
+				label = section.preset_name ? 'Shared from ' + section.preset_name : 'Shared';
+				break;
+			case 'overridden':
+				cls   = 'overridden';
+				icon  = '✏️';
+				label = 'Overridden';
+				break;
+			case 'local':
+			default:
+				cls   = 'local';
+				icon  = '📍';
+				label = 'Local';
+		}
+		const overrideCount = ( section.overridden_paths || [] ).length;
+		const title = src === 'overridden'
+			? overrideCount + ' override' + ( overrideCount === 1 ? '' : 's' ) + ' active'
+			: '';
+		return el( 'span', {
+			class: 'configkit-cb__source-pill configkit-cb__source-pill--' + cls,
+			title: title,
+		}, icon + ' ' + label );
 	}
 
 	// =========================================================
@@ -433,6 +746,8 @@
 			el( 'span', { class: 'configkit-cb__type-badge' }, type.label ),
 			el( 'h3', { class: 'configkit-cb__section-title' }, section.label || type.label )
 		);
+		const sourceBadge = renderSectionSourceBadge( section );
+		if ( sourceBadge ) titleRow.appendChild( sourceBadge );
 		const pill = renderSectionStatusPill( section.id );
 		if ( pill ) titleRow.appendChild( pill );
 		main.appendChild( titleRow );

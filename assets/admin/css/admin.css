@@ -4104,6 +4104,73 @@
 	max-width: 560px;
 }
 
+.configkit-cb__source-field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-bottom: 10px;
+}
+
+.configkit-cb__source-field-label {
+	font-size: 12px;
+	color: #50575e;
+	font-weight: 500;
+}
+
+.configkit-cb__source-textarea {
+	width: 100%;
+	padding: 4px 6px;
+	font-size: 13px;
+}
+
+.configkit-cb__source-select {
+	width: 100%;
+	padding: 4px 6px;
+}
+
+.configkit-cb__source-lookup {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: 13px;
+}
+
+.configkit-cb__source-list {
+	margin: 0;
+	padding-left: 18px;
+}
+
+/* Section source badges (Shared / Overridden / Local). */
+.configkit-cb__source-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 500;
+	padding: 1px 8px;
+	margin-left: 8px;
+	white-space: nowrap;
+}
+
+.configkit-cb__source-pill--shared {
+	background: #eef5fb;
+	color: #1e6f9c;
+	border: 1px solid #b3d2e6;
+}
+
+.configkit-cb__source-pill--overridden {
+	background: #fff5e6;
+	color: #8a5a00;
+	border: 1px solid #f0c97a;
+}
+
+.configkit-cb__source-pill--local {
+	background: #f0f0f1;
+	color: #50575e;
+	border: 1px solid #c3c4c7;
+}
+
 /* Phase 4.3 — Product Builder auto-managed badge in admin lists. */
 .configkit-auto-managed-badge {
 	display: inline-flex;
