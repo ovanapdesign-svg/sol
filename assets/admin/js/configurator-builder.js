@@ -52,7 +52,8 @@
 		message:      null,
 		sections:     [],
 		sectionTypes: [],
-		modal:        null, // { sectionId, tab }
+		modal:        null, // { sectionId, tab, ranges?, rangeDiagnostics? }
+		bulkPaste:    null, // { sectionId, text, errors }
 		// drag-drop bookkeeping
 		dragId:       null,
 	};
@@ -359,9 +360,31 @@
 	// land in chunks 4-7.
 	// =========================================================
 
-	function openSectionModal( sectionId ) {
-		state.modal = { sectionId, tab: 'basics' };
+	async function openSectionModal( sectionId ) {
+		const section = findSection( sectionId );
+		state.modal = { sectionId, tab: 'choices' };
 		render();
+		if ( section && section.type === 'size_pricing' ) {
+			await loadRanges( sectionId );
+			render();
+		}
+	}
+
+	async function loadRanges( sectionId ) {
+		try {
+			const data = await window.ConfigKit.request(
+				'/configurator/' + productId + '/sections/' + encodeURIComponent( sectionId ) + '/ranges'
+			);
+			if ( ! state.modal || state.modal.sectionId !== sectionId ) return;
+			state.modal.ranges = ( data && data.rows ) || [];
+			if ( state.modal.ranges.length === 0 ) state.modal.ranges = [ blankRange() ];
+		} catch ( err ) {
+			showMessage( 'error', explainError( err ) );
+		}
+	}
+
+	function blankRange() {
+		return { width_from: '', width_to: '', height_from: '', height_to: '', price: '', price_group_key: '' };
 	}
 
 	function closeSectionModal() {
@@ -405,10 +428,10 @@
 			}, '✕' )
 		) );
 
-		// Tab strip — choices/visibility/pricing tabs come online in
-		// later chunks. Always offer Basics + Visibility now.
+		// Tab strip — Choices is the per-type editor, Visibility
+		// builder lands in chunk 7.
 		const tabs = [
-			{ id: 'basics',     label: 'Basics' },
+			{ id: 'choices',    label: tabLabelFor( section.type ) },
 			{ id: 'visibility', label: 'Visibility' },
 		];
 		const tabBar = el( 'div', { class: 'configkit-cb__modal-tabs', role: 'tablist' } );
@@ -424,13 +447,10 @@
 		} );
 		modal.appendChild( tabBar );
 
-		// Body — placeholder per tab; editors fill in chunks 4-7.
 		const body = el( 'div', { class: 'configkit-cb__modal-body' } );
-		if ( state.modal.tab === 'basics' ) {
-			body.appendChild( el( 'p', { class: 'description' },
-				'Editor for ' + ( type.label || section.type ) + ' lands in upcoming chunks. The section card and modal shell are wired here so the rest of the surface can be built incrementally.'
-			) );
-		} else {
+		if ( state.modal.tab === 'choices' ) {
+			body.appendChild( renderChoicesTab( section ) );
+		} else if ( state.modal.tab === 'visibility' ) {
 			body.appendChild( el( 'p', { class: 'description' },
 				'Visibility rule builder lands in chunk 7.'
 			) );
@@ -443,6 +463,312 @@
 		) );
 		overlay.appendChild( modal );
 		return overlay;
+	}
+
+	function tabLabelFor( type ) {
+		switch ( type ) {
+			case 'size_pricing': return 'Pricing rows';
+			default:             return 'Choices';
+		}
+	}
+
+	function renderChoicesTab( section ) {
+		if ( section.type === 'size_pricing' ) return renderRangeEditor( section );
+		return el( 'p', { class: 'description' },
+			'Editor for ' + section.type + ' lands in chunks 5-6.'
+		);
+	}
+
+	// =========================================================
+	// Size pricing — range table + bulk paste
+	// =========================================================
+
+	function renderRangeEditor( section ) {
+		const wrap = el( 'div', { class: 'configkit-cb__range-editor' } );
+		const ranges = ( state.modal && Array.isArray( state.modal.ranges ) ) ? state.modal.ranges : null;
+		if ( ranges === null ) {
+			wrap.appendChild( el( 'p', { class: 'description' }, 'Loading ranges…' ) );
+			return wrap;
+		}
+
+		// Diagnostics block — populated by the most recent save.
+		if ( state.modal.rangeDiagnostics ) {
+			wrap.appendChild( renderRangeDiagnostics( state.modal.rangeDiagnostics ) );
+		}
+
+		const table = el( 'div', { class: 'configkit-cb__range-table' } );
+		table.appendChild( el( 'div', { class: 'configkit-cb__range-row configkit-cb__range-row--head' },
+			el( 'span', null, 'Width from' ),
+			el( 'span', null, 'Width to' ),
+			el( 'span', null, 'Height from' ),
+			el( 'span', null, 'Height to' ),
+			el( 'span', null, 'Price (kr)' ),
+			el( 'span', null, 'Group' ),
+			el( 'span', null, '' )
+		) );
+		ranges.forEach( ( row, i ) => {
+			table.appendChild( renderRangeRow( row, i ) );
+		} );
+		wrap.appendChild( table );
+
+		wrap.appendChild( el( 'div', { class: 'configkit-cb__range-actions' },
+			el( 'button', {
+				type: 'button',
+				class: 'button',
+				onClick: () => {
+					readRangesFromDOM();
+					state.modal.ranges.push( blankRange() );
+					render();
+				},
+			}, '+ Add row' ),
+			el( 'button', {
+				type: 'button',
+				class: 'button',
+				onClick: () => openBulkPaste( section.id ),
+			}, '📋 Bulk paste rows' ),
+			el( 'button', {
+				type: 'button',
+				class: 'button button-primary',
+				disabled: state.busy,
+				onClick: saveRanges,
+			}, state.busy ? 'Saving…' : 'Save ranges' )
+		) );
+		return wrap;
+	}
+
+	function renderRangeRow( row, index ) {
+		const overlapWith = state.modal && state.modal.rangeDiagnostics
+			? overlapsForRow( index, state.modal.rangeDiagnostics )
+			: [];
+		const cls = 'configkit-cb__range-row' + ( overlapWith.length > 0 ? ' is-overlap' : '' );
+		const node = el( 'div', { class: cls, 'data-range-row': String( index ) },
+			rangeInput( row.width_from,  'width_from' ),
+			rangeInput( row.width_to,    'width_to' ),
+			rangeInput( row.height_from, 'height_from' ),
+			rangeInput( row.height_to,   'height_to' ),
+			rangeInput( row.price,       'price', 'number', '0.01' ),
+			rangeInput( row.price_group_key, 'price_group_key', 'text' ),
+			el( 'button', {
+				type: 'button',
+				class: 'configkit-cb__row-remove',
+				'aria-label': 'Remove row',
+				onClick: () => {
+					readRangesFromDOM();
+					state.modal.ranges.splice( index, 1 );
+					if ( state.modal.ranges.length === 0 ) state.modal.ranges.push( blankRange() );
+					render();
+				},
+			}, '✕' )
+		);
+		if ( overlapWith.length > 0 ) {
+			node.title = 'Overlaps with row ' + overlapWith.map( ( i ) => i + 1 ).join( ', ' );
+		}
+		return node;
+	}
+
+	function rangeInput( value, field, type, step ) {
+		return el( 'input', {
+			type: type || 'number',
+			class: 'configkit-cb__range-input',
+			'data-field': field,
+			value: value !== null && value !== undefined && value !== '' ? String( value ) : '',
+			step: step,
+		} );
+	}
+
+	function readRangesFromDOM() {
+		if ( ! state.modal || ! Array.isArray( state.modal.ranges ) ) return;
+		const rows = root.querySelectorAll( '[data-range-row]' );
+		const out = [];
+		rows.forEach( ( row ) => {
+			out.push( {
+				width_from:      pickNumber( row, 'width_from' ),
+				width_to:        pickNumber( row, 'width_to' ),
+				height_from:     pickNumber( row, 'height_from' ),
+				height_to:       pickNumber( row, 'height_to' ),
+				price:           pickNumber( row, 'price' ),
+				price_group_key: pickString( row, 'price_group_key' ),
+			} );
+		} );
+		state.modal.ranges = out;
+	}
+
+	function pickNumber( row, field ) {
+		const node = row.querySelector( '[data-field="' + field + '"]' );
+		if ( ! node ) return '';
+		const raw = String( node.value || '' ).trim();
+		if ( raw === '' ) return '';
+		const n = Number( raw );
+		return Number.isFinite( n ) ? n : '';
+	}
+
+	function pickString( row, field ) {
+		const node = row.querySelector( '[data-field="' + field + '"]' );
+		return node ? String( node.value || '' ).trim() : '';
+	}
+
+	function overlapsForRow( index, diag ) {
+		const out = [];
+		( diag.overlaps || [] ).forEach( ( pair ) => {
+			if ( pair.a === index ) out.push( pair.b );
+			if ( pair.b === index ) out.push( pair.a );
+		} );
+		return out;
+	}
+
+	function renderRangeDiagnostics( diag ) {
+		const wrap = el( 'div', { class: 'configkit-cb__range-diag' } );
+		if ( ( diag.overlaps || [] ).length === 0 && ( diag.gaps || [] ).length === 0 ) {
+			wrap.appendChild( el( 'p', { class: 'configkit-cb__range-diag-ok' }, '✓ No overlaps or gaps detected.' ) );
+			return wrap;
+		}
+		( diag.overlaps || [] ).forEach( ( o ) => {
+			wrap.appendChild( el( 'p', { class: 'configkit-cb__range-diag-warn' }, '⚠ ' + o.message ) );
+		} );
+		( diag.gaps || [] ).forEach( ( g ) => {
+			wrap.appendChild( el( 'p', { class: 'configkit-cb__range-diag-info' }, 'ⓘ ' + g ) );
+		} );
+		return wrap;
+	}
+
+	async function saveRanges() {
+		if ( ! state.modal ) return;
+		readRangesFromDOM();
+		const rows = ( state.modal.ranges || [] ).filter( ( r ) =>
+			r.width_to !== '' && r.height_to !== '' && r.price !== ''
+		);
+		try {
+			const result = await cbRequest(
+				'/sections/' + encodeURIComponent( state.modal.sectionId ) + '/ranges',
+				{ method: 'POST', body: { rows } }
+			);
+			showMessage( 'success', result.message || 'Ranges saved.' );
+			state.modal.rangeDiagnostics = result.diagnostics || null;
+			await loadRanges( state.modal.sectionId );
+			render();
+		} catch ( err ) {
+			showMessage( 'error', explainError( err ) );
+			render();
+		}
+	}
+
+	// =========================================================
+	// Bulk paste — shared modal for section types that support it
+	// =========================================================
+
+	function openBulkPaste( sectionId ) {
+		state.bulkPaste = { sectionId, text: '', errors: [] };
+		render();
+	}
+
+	function closeBulkPaste() {
+		state.bulkPaste = null;
+		render();
+	}
+
+	function renderBulkPasteOverlay() {
+		if ( ! state.bulkPaste ) return null;
+		const section = findSection( state.bulkPaste.sectionId );
+		if ( ! section ) return null;
+		const type    = findType( section.type ) || {};
+		const columns = ( type.bulk_paste_columns || [] ).join( ' \\t ' );
+
+		const overlay = el( 'div', {
+			class: 'configkit-cb__modal-overlay',
+			onClick: ( ev ) => { if ( ev.target === overlay ) closeBulkPaste(); },
+		} );
+		const modal = el( 'div', { class: 'configkit-cb__modal configkit-cb__modal--bulk', role: 'dialog' } );
+		modal.appendChild( el( 'div', { class: 'configkit-cb__modal-header' },
+			el( 'div', { class: 'configkit-cb__modal-title' },
+				el( 'h3', null, 'Bulk paste rows' )
+			),
+			el( 'span', null, '' ),
+			el( 'button', {
+				type: 'button',
+				class: 'configkit-cb__modal-close',
+				'aria-label': 'Close',
+				onClick: closeBulkPaste,
+			}, '✕' )
+		) );
+		modal.appendChild( el( 'div', { class: 'configkit-cb__modal-body' },
+			el( 'p', { class: 'description' },
+				'Paste tab-separated rows from Excel. Expected columns: ',
+				el( 'code', null, columns )
+			),
+			el( 'textarea', {
+				class: 'configkit-cb__bulk-textarea',
+				rows: 10,
+				placeholder: '1000\t2100\t1000\t2000\t10000\tI',
+				value: state.bulkPaste.text,
+				onInput: ( ev ) => { state.bulkPaste.text = ev.target.value; },
+			} ),
+			...( state.bulkPaste.errors || [] ).map( ( m ) => el( 'p', { class: 'configkit-cb__range-diag-warn' }, m ) )
+		) );
+		modal.appendChild( el( 'div', { class: 'configkit-cb__modal-footer' },
+			el( 'button', { type: 'button', class: 'button', onClick: closeBulkPaste }, 'Cancel' ),
+			el( 'button', {
+				type: 'button',
+				class: 'button button-primary',
+				onClick: applyBulkPaste,
+			}, 'Add rows' )
+		) );
+		overlay.appendChild( modal );
+		return overlay;
+	}
+
+	function applyBulkPaste() {
+		if ( ! state.bulkPaste || ! state.modal ) return;
+		const section = findSection( state.bulkPaste.sectionId );
+		if ( ! section ) return;
+		if ( section.type !== 'size_pricing' ) {
+			showMessage( 'error', 'Bulk paste for this section type lands in a later chunk.' );
+			closeBulkPaste();
+			return;
+		}
+		const text = String( state.bulkPaste.text || '' ).trim();
+		if ( text === '' ) {
+			closeBulkPaste();
+			return;
+		}
+		const lines = text.split( /\r?\n/ ).map( ( l ) => l.trim() ).filter( Boolean );
+		const errors = [];
+		const parsed = [];
+		lines.forEach( ( line, i ) => {
+			const parts = line.split( /\t|\s{2,}|,/ ).map( ( p ) => p.trim() );
+			if ( parts.length < 5 ) {
+				errors.push( 'Row ' + ( i + 1 ) + ': expected at least 5 values (got ' + parts.length + ').' );
+				return;
+			}
+			const wf = Number( parts[0] ), wt = Number( parts[1] );
+			const hf = Number( parts[2] ), ht = Number( parts[3] );
+			const price = Number( parts[4] );
+			if ( ! Number.isFinite( wf ) || ! Number.isFinite( wt ) || ! Number.isFinite( hf ) || ! Number.isFinite( ht ) ) {
+				errors.push( 'Row ' + ( i + 1 ) + ': width/height values must be numeric.' );
+				return;
+			}
+			if ( ! Number.isFinite( price ) ) {
+				errors.push( 'Row ' + ( i + 1 ) + ': price must be a number.' );
+				return;
+			}
+			parsed.push( {
+				width_from:      wf,
+				width_to:        wt,
+				height_from:     hf,
+				height_to:       ht,
+				price:           price,
+				price_group_key: parts[5] || '',
+			} );
+		} );
+		if ( errors.length > 0 ) {
+			state.bulkPaste.errors = errors;
+			render();
+			return;
+		}
+		readRangesFromDOM();
+		// Drop the trailing blank row that renderRangeEditor seeds.
+		const existing = ( state.modal.ranges || [] ).filter( ( r ) => r.width_to !== '' );
+		state.modal.ranges = existing.concat( parsed );
+		closeBulkPaste();
 	}
 
 	function renderEditableLabel( section ) {
@@ -497,6 +823,9 @@
 
 		const modal = renderModal();
 		if ( modal ) root.appendChild( modal );
+
+		const bulk = renderBulkPasteOverlay();
+		if ( bulk ) root.appendChild( bulk );
 	}
 
 	init();

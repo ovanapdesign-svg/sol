@@ -3605,6 +3605,107 @@
 	background: #f6f7f7;
 }
 
+.configkit-cb__modal--bulk {
+	width: min( 720px, 100% );
+}
+
+.configkit-cb__bulk-textarea {
+	width: 100%;
+	box-sizing: border-box;
+	font-family: monospace;
+	font-size: 12px;
+	padding: 8px;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+}
+
+/* Range editor */
+.configkit-cb__range-editor {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.configkit-cb__range-table {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.configkit-cb__range-row {
+	display: grid;
+	grid-template-columns: repeat( 5, 1fr ) 80px auto;
+	gap: 6px;
+	align-items: center;
+}
+
+.configkit-cb__range-row--head {
+	font-size: 11px;
+	text-transform: uppercase;
+	color: #646970;
+	letter-spacing: 0.4px;
+	padding: 0 4px;
+}
+
+.configkit-cb__range-row.is-overlap {
+	background: #fce4e4;
+	border-radius: 4px;
+	padding: 2px;
+}
+
+.configkit-cb__range-input {
+	box-sizing: border-box;
+	width: 100%;
+	padding: 4px 6px;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	font-size: 12px;
+}
+
+.configkit-cb__range-input:focus {
+	border-color: #2271b1;
+	box-shadow: 0 0 0 1px #2271b1;
+	outline: none;
+}
+
+.configkit-cb__row-remove {
+	border: 0;
+	background: transparent;
+	color: #646970;
+	cursor: pointer;
+	font-size: 14px;
+	padding: 4px 6px;
+	border-radius: 3px;
+}
+
+.configkit-cb__row-remove:hover, .configkit-cb__row-remove:focus {
+	color: #d63638;
+	background: #f6f7f7;
+	outline: none;
+}
+
+.configkit-cb__range-actions {
+	display: flex;
+	gap: 8px;
+	margin-top: 8px;
+	flex-wrap: wrap;
+}
+
+.configkit-cb__range-diag {
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	padding: 8px 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: 13px;
+}
+
+.configkit-cb__range-diag-ok   { color: #1e4f24; margin: 0; }
+.configkit-cb__range-diag-warn { color: #b32d2e; margin: 0; }
+.configkit-cb__range-diag-info { color: #8a5a00; margin: 0; }
+
 /* Phase 4.3 — Product Builder auto-managed badge in admin lists. */
 .configkit-auto-managed-badge {
 	display: inline-flex;
