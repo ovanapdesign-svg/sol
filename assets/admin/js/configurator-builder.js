@@ -1290,7 +1290,9 @@
 
 		// Field grid.
 		const grid = el( 'div', { class: 'configkit-cb__option-grid' } );
-		grid.appendChild( labelled( 'Name',         textInput( opt.label,        'label',        '', 'e.g. Dickson U171' ), { required: true } ) );
+		const nameError = ( state.modal && state.modal.optionErrors && state.modal.optionErrors[ String( index ) ] && state.modal.optionErrors[ String( index ) ].label ) || '';
+		grid.appendChild( labelled( 'Name',         textInput( opt.label,        'label',        '', 'e.g. Dickson U171' ),
+			{ required: true, helper: nameError ? null : undefined, error: nameError } ) );
 		grid.appendChild( labelled( 'SKU',          textInput( opt.sku,          'sku',          '', 'e.g. DICK-U171' ) ) );
 		grid.appendChild( labelled( 'Brand',        textInput( opt.brand,        'brand',        '', 'e.g. Dickson' ) ) );
 		grid.appendChild( labelled( 'Collection',   textInput( opt.collection,   'collection',   '', 'e.g. Orchestra' ) ) );
@@ -1359,21 +1361,25 @@
 		} );
 	}
 
-	// Phase 4.4b — labelled() learns about required + helper text.
-	// `opts.required`  → renders a red asterisk + a `data-required`
-	//                    attribute that submit-time validation reads.
-	// `opts.helper`    → small description below the field.
+	// Phase 4.4b — labelled() learns about required, helper, error.
+	// `opts.required` → red asterisk on the label + .is-required class.
+	// `opts.helper`   → small description below the field.
+	// `opts.error`    → inline validation message + .is-invalid class.
 	function labelled( label, child, opts ) {
 		opts = opts || {};
 		const labelNode = el( 'span', { class: 'configkit-cb__option-field-label' }, label );
 		if ( opts.required ) {
 			labelNode.appendChild( el( 'span', { class: 'configkit-cb__required-mark', 'aria-hidden': 'true' }, ' *' ) );
 		}
-		const wrap = el( 'label', {
-			class: 'configkit-cb__option-field' + ( opts.required ? ' is-required' : '' ),
-		}, labelNode, child );
+		const cls = 'configkit-cb__option-field'
+			+ ( opts.required ? ' is-required' : '' )
+			+ ( opts.error    ? ' is-invalid'  : '' );
+		const wrap = el( 'label', { class: cls }, labelNode, child );
 		if ( opts.helper ) {
 			wrap.appendChild( el( 'span', { class: 'configkit-cb__field-helper' }, opts.helper ) );
+		}
+		if ( opts.error ) {
+			wrap.appendChild( el( 'span', { class: 'configkit-cb__field-error' }, opts.error ) );
 		}
 		return wrap;
 	}
@@ -1401,6 +1407,17 @@
 	async function saveOptions() {
 		if ( ! state.modal ) return;
 		readOptionDraftsFromDOM();
+		// Phase 4.4b — required-field check. An option that has any
+		// non-name content (sku / price / image / etc.) but no name
+		// is treated as a blocking error rather than silently
+		// dropped.
+		const errors = validateOptionRequiredFields( state.modal.options );
+		state.modal.optionErrors = errors;
+		if ( Object.keys( errors ).length > 0 ) {
+			showMessage( 'error', 'Add a name to every option you want to save.' );
+			render();
+			return;
+		}
 		const payload = ( state.modal.options || [] )
 			.filter( ( o ) => ( o.label || '' ).trim() !== '' )
 			.map( ( o ) => ( {
@@ -1421,6 +1438,7 @@
 			);
 			showMessage( 'success', result.message || 'Options saved.' );
 			state.optionCounts[ state.modal.sectionId ] = payload.length;
+			state.modal.optionErrors = {};
 			await loadOptions( state.modal.sectionId );
 			render();
 			loadDiagnostics();
@@ -1428,6 +1446,22 @@
 			showMessage( 'error', explainError( err ) );
 			render();
 		}
+	}
+
+	function validateOptionRequiredFields( options ) {
+		const errors = {};
+		( options || [] ).forEach( ( o, i ) => {
+			const hasContent = ( o.sku && o.sku.trim() ) ||
+				( o.price !== '' && o.price !== null && o.price !== undefined ) ||
+				( o.image_url && o.image_url.trim() ) ||
+				( o.brand && o.brand.trim() ) ||
+				( o.collection && o.collection.trim() );
+			const blankLabel = ! o.label || ! o.label.trim();
+			if ( blankLabel && hasContent ) {
+				errors[ String( i ) ] = { label: 'Name is required.' };
+			}
+		} );
+		return errors;
 	}
 
 	// wp.media bridge — falls back to a prompt() when wp.media isn't
@@ -1658,8 +1692,10 @@
 		card.appendChild( typeRow );
 
 		// Common header — name + sku + active.
+		const motorNameError = ( state.modal && state.modal.optionErrors && state.modal.optionErrors[ String( index ) ] && state.modal.optionErrors[ String( index ) ].label ) || '';
 		const header = el( 'div', { class: 'configkit-cb__option-grid' } );
-		header.appendChild( labelled( 'Name', textInput( opt.label, 'label', '', 'e.g. Somfy IO motor' ), { required: true } ) );
+		header.appendChild( labelled( 'Name', textInput( opt.label, 'label', '', 'e.g. Somfy IO motor' ),
+			{ required: true, error: motorNameError } ) );
 		header.appendChild( labelled( 'SKU',  textInput( opt.sku,   'sku',   '', 'e.g. SOMFY-IO-MOTOR' ) ) );
 		card.appendChild( header );
 
@@ -1875,6 +1911,13 @@
 	async function saveMotorOptions() {
 		if ( ! state.modal ) return;
 		readMotorDraftsFromDOM();
+		const errors = validateOptionRequiredFields( state.modal.options );
+		state.modal.optionErrors = errors;
+		if ( Object.keys( errors ).length > 0 ) {
+			showMessage( 'error', 'Add a name to every motor row you want to save.' );
+			render();
+			return;
+		}
 		const payload = ( state.modal.options || [] )
 			.filter( ( o ) => ( o.label || '' ).trim() !== '' )
 			.map( ( o ) => {
@@ -2084,6 +2127,21 @@
 	async function saveRanges() {
 		if ( ! state.modal ) return;
 		readRangesFromDOM();
+		// Phase 4.4b — surface "row N is incomplete" inline rather
+		// than silently dropping rows that lack required values.
+		const incomplete = [];
+		( state.modal.ranges || [] ).forEach( ( r, i ) => {
+			const hasAny = r.width_from !== '' || r.width_to !== '' || r.height_from !== '' || r.height_to !== '' || r.price !== '';
+			if ( ! hasAny ) return;
+			if ( r.width_to === '' || r.height_to === '' || r.price === '' ) {
+				incomplete.push( i + 1 );
+			}
+		} );
+		if ( incomplete.length > 0 ) {
+			showMessage( 'error', 'Fill width_to, height_to and price on row(s) ' + incomplete.join( ', ' ) + ' before saving.' );
+			render();
+			return;
+		}
 		const rows = ( state.modal.ranges || [] ).filter( ( r ) =>
 			r.width_to !== '' && r.height_to !== '' && r.price !== ''
 		);
