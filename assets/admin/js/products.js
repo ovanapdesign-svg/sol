@@ -194,19 +194,19 @@
 				null,
 				el(
 					'td',
-					null,
+					{ 'data-label': 'Product' },
 					el( 'a', { href: p.edit_url }, p.name || '(untitled)' ),
 					p.post_status && p.post_status !== 'publish'
 						? el( 'span', { class: 'configkit-products__poststatus' }, ' [' + p.post_status + ']' )
 						: null
 				),
-				el( 'td', null, p.sku ? el( 'code', null, p.sku ) : '—' ),
-				el( 'td', null, p.family_key ? el( 'code', null, p.family_key ) : '—' ),
-				el( 'td', null, p.template_key ? el( 'code', null, p.template_key ) : '—' ),
-				el( 'td', null, p.lookup_table_key ? el( 'code', null, p.lookup_table_key ) : '—' ),
+				el( 'td', { 'data-label': 'SKU' }, p.sku ? el( 'code', null, p.sku ) : '—' ),
+				el( 'td', { 'data-label': 'Family' }, p.family_key ? el( 'code', null, p.family_key ) : '—' ),
+				el( 'td', { 'data-label': 'Template' }, p.template_key ? el( 'code', null, p.template_key ) : '—' ),
+				el( 'td', { 'data-label': 'Lookup table' }, p.lookup_table_key ? el( 'code', null, p.lookup_table_key ) : '—' ),
 				el(
 					'td',
-					null,
+					{ 'data-label': 'Status' },
 					el(
 						'span',
 						{ class: 'configkit-badge configkit-badge--' + ( p.enabled ? 'active' : 'inactive' ) },

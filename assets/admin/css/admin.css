@@ -880,3 +880,330 @@
 	color: #b32d2e;
 	border: 1px solid #e3b3b3;
 }
+
+/* ============================================================
+   Phase 3.5 — Admin UX polish
+   ============================================================ */
+
+/* ---- Mobile responsive tables → stacked cards (≤768px) ---- */
+
+@media ( max-width: 768px ) {
+	.configkit-app table.wp-list-table,
+	.configkit-app table.wp-list-table thead,
+	.configkit-app table.wp-list-table tbody,
+	.configkit-app table.wp-list-table tr,
+	.configkit-app table.wp-list-table th,
+	.configkit-app table.wp-list-table td {
+		display: block;
+		width: auto;
+	}
+
+	.configkit-app table.wp-list-table thead {
+		display: none;
+	}
+
+	.configkit-app table.wp-list-table tr {
+		border: 1px solid #dcdcde;
+		border-radius: 4px;
+		background: #fff;
+		padding: 12px 14px;
+		margin: 0 0 10px;
+		box-shadow: 0 1px 1px rgba( 0, 0, 0, 0.04 );
+	}
+
+	.configkit-app table.wp-list-table td {
+		border: 0;
+		padding: 4px 0;
+		font-size: 13px;
+	}
+
+	.configkit-app table.wp-list-table td[ data-label ]::before {
+		content: attr( data-label ) ":";
+		display: inline-block;
+		font-weight: 600;
+		color: #50575e;
+		margin-right: 8px;
+		min-width: 95px;
+	}
+
+	.configkit-app table.wp-list-table td[ data-label="Name" ]::before,
+	.configkit-app table.wp-list-table td[ data-label="Product" ]::before,
+	.configkit-app table.wp-list-table td[ data-label="Title" ]::before,
+	.configkit-app table.wp-list-table td[ data-label="Template" ]::before {
+		display: none;
+	}
+
+	.configkit-app table.wp-list-table td[ data-label="Name" ],
+	.configkit-app table.wp-list-table td[ data-label="Product" ],
+	.configkit-app table.wp-list-table td[ data-label="Title" ],
+	.configkit-app table.wp-list-table td[ data-label="Template" ] {
+		font-size: 15px;
+		font-weight: 600;
+		margin-bottom: 4px;
+	}
+
+	.configkit-app table.wp-list-table td.configkit-actions {
+		margin-top: 8px;
+		padding-top: 8px;
+		border-top: 1px solid #ececec;
+	}
+
+	.configkit-app table.wp-list-table td.configkit-actions::before {
+		display: none;
+	}
+
+	.configkit-app table.wp-list-table td.configkit-actions .button {
+		display: block;
+		width: 100%;
+		text-align: center;
+		margin-bottom: 4px;
+	}
+
+	/* Diagnostics list cards already stack — just tighten the actions row. */
+	.configkit-diagnostics__issue-actions .button {
+		flex: 1;
+		text-align: center;
+	}
+
+	/* Form polish: single column, full-width inputs, label above. */
+	.configkit-form .configkit-field input[ type="text" ],
+	.configkit-form .configkit-field input[ type="number" ],
+	.configkit-form .configkit-field select,
+	.configkit-form .configkit-field textarea {
+		width: 100%;
+		box-sizing: border-box;
+	}
+
+	.configkit-form .configkit-fieldset {
+		padding: 12px;
+	}
+
+	.configkit-form__footer,
+	.configkit-binding__savebar {
+		position: sticky;
+		bottom: 0;
+		background: #fff;
+		padding: 10px 12px;
+		border-top: 1px solid #dcdcde;
+		box-shadow: 0 -2px 6px rgba( 0, 0, 0, 0.06 );
+		z-index: 10;
+		flex-wrap: wrap;
+	}
+
+	.configkit-form__footer .button,
+	.configkit-binding__savebar .button {
+		flex: 1;
+		min-width: 120px;
+	}
+
+	.configkit-products__filters {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.configkit-diagnostics__toolbar {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.configkit-diagnostics__counts {
+		margin-left: 0;
+	}
+}
+
+/* ---- Helper tooltips (?) ---- */
+
+.configkit-help {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	background: #dcdcde;
+	color: #2c3338;
+	font-size: 11px;
+	font-weight: 700;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	margin-left: 6px;
+	cursor: help;
+	border: 1px solid #c3c4c7;
+	user-select: none;
+	flex-shrink: 0;
+	position: relative;
+	vertical-align: text-bottom;
+}
+
+.configkit-help:hover,
+.configkit-help:focus {
+	background: #2271b1;
+	color: #fff;
+	border-color: #2271b1;
+	outline: none;
+}
+
+.configkit-help::before {
+	content: "?";
+}
+
+/* Tap/click expanded form (used by JS toggle on touch devices). */
+.configkit-help-popout {
+	display: block;
+	margin: 4px 0 0;
+	padding: 8px 10px;
+	background: #fffbe6;
+	border-left: 3px solid #ffc107;
+	border-radius: 2px;
+	font-size: 12px;
+	color: #333;
+	line-height: 1.4;
+}
+
+/* ---- Collapsible fieldset ---- */
+
+.configkit-fieldset--collapsible > legend {
+	cursor: pointer;
+	user-select: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.configkit-fieldset--collapsible > legend::before {
+	content: "▾";
+	display: inline-block;
+	font-size: 10px;
+	width: 12px;
+	color: #2271b1;
+	transition: transform 0.15s ease;
+}
+
+.configkit-fieldset--collapsible[ data-collapsed="true" ] > legend::before {
+	transform: rotate( -90deg );
+}
+
+.configkit-fieldset--collapsible[ data-collapsed="true" ] .configkit-fieldset__body {
+	display: none;
+}
+
+.configkit-fieldset__body {
+	margin-top: 8px;
+}
+
+/* ---- Empty state with CTA ---- */
+
+.configkit-empty-cta {
+	text-align: center;
+	padding: 24px 16px;
+	border: 1px dashed #c3c4c7;
+	border-radius: 4px;
+	background: #fafafa;
+	margin: 12px 0;
+}
+
+.configkit-empty-cta__icon {
+	font-size: 32px;
+	color: #8c8f94;
+	margin-bottom: 8px;
+}
+
+.configkit-empty-cta__title {
+	font-size: 15px;
+	font-weight: 600;
+	margin: 0 0 4px;
+	color: #1d2327;
+}
+
+.configkit-empty-cta__message {
+	color: #50575e;
+	font-size: 13px;
+	margin: 0 0 12px;
+}
+
+.configkit-empty-cta__primary {
+	margin: 0 4px;
+}
+
+.configkit-empty-cta__secondary {
+	margin-left: 8px;
+	font-size: 13px;
+}
+
+/* ---- Soft warnings (yellow, non-blocking) ---- */
+
+.configkit-soft-warnings {
+	list-style: none;
+	margin: 4px 0 0;
+	padding: 6px 10px;
+	background: #fffbe6;
+	border-left: 3px solid #ffc107;
+	border-radius: 2px;
+}
+
+.configkit-soft-warnings li {
+	color: #614500;
+	font-size: 12px;
+	margin: 2px 0;
+}
+
+/* ---- Module type preset cards ---- */
+
+.configkit-preset-grid {
+	display: grid;
+	grid-template-columns: repeat( auto-fit, minmax( 200px, 1fr ) );
+	gap: 12px;
+	margin: 12px 0;
+}
+
+.configkit-preset-card {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	padding: 16px;
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+	background: #fff;
+	cursor: pointer;
+	transition: border-color 0.15s, box-shadow 0.15s, transform 0.05s;
+	text-align: left;
+	font: inherit;
+	color: inherit;
+}
+
+.configkit-preset-card:hover,
+.configkit-preset-card:focus {
+	border-color: #2271b1;
+	box-shadow: 0 2px 6px rgba( 34, 113, 177, 0.15 );
+	outline: none;
+}
+
+.configkit-preset-card:active {
+	transform: translateY( 1px );
+}
+
+.configkit-preset-card__icon {
+	font-size: 22px;
+	margin-bottom: 8px;
+}
+
+.configkit-preset-card__title {
+	font-weight: 600;
+	font-size: 14px;
+	color: #1d2327;
+	margin-bottom: 4px;
+}
+
+.configkit-preset-card__caps {
+	color: #2271b1;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	margin-top: 8px;
+}
+
+.configkit-preset-card__desc {
+	color: #50575e;
+	font-size: 12px;
+	line-height: 1.4;
+}

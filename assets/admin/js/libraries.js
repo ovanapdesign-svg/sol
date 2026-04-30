@@ -525,7 +525,7 @@
 					null,
 					el(
 						'td',
-						null,
+						{ 'data-label': 'Name' },
 						el(
 							'a',
 							{
@@ -538,12 +538,12 @@
 							lib.name
 						)
 					),
-					el( 'td', null, el( 'code', null, lib.library_key ) ),
-					el( 'td', null, lib.brand || '—' ),
-					el( 'td', null, lib.collection || '—' ),
+					el( 'td', { 'data-label': 'library_key' }, el( 'code', null, lib.library_key ) ),
+					el( 'td', { 'data-label': 'Brand' }, lib.brand || '—' ),
+					el( 'td', { 'data-label': 'Collection' }, lib.collection || '—' ),
 					el(
 						'td',
-						null,
+						{ 'data-label': 'Status' },
 						el(
 							'span',
 							{ class: 'configkit-badge configkit-badge--' + ( lib.is_active ? 'active' : 'inactive' ) },
@@ -793,7 +793,7 @@
 				const cells = [
 					el(
 						'td',
-						null,
+						{ 'data-label': 'Title' },
 						el(
 							'a',
 							{
@@ -806,19 +806,19 @@
 							it.label
 						)
 					),
-					el( 'td', null, el( 'code', null, it.item_key ) ),
+					el( 'td', { 'data-label': 'item_key' }, el( 'code', null, it.item_key ) ),
 				];
-				if ( module.supports_sku ) cells.push( el( 'td', null, it.sku || '—' ) );
+				if ( module.supports_sku ) cells.push( el( 'td', { 'data-label': 'SKU' }, it.sku || '—' ) );
 				if ( module.supports_price ) {
-					cells.push( el( 'td', null, it.price === null ? '—' : String( it.price ) ) );
+					cells.push( el( 'td', { 'data-label': 'Price' }, it.price === null ? '—' : String( it.price ) ) );
 				}
 				if ( module.supports_price_group ) {
-					cells.push( el( 'td', null, it.price_group_key || '—' ) );
+					cells.push( el( 'td', { 'data-label': 'Price group' }, it.price_group_key || '—' ) );
 				}
 				cells.push(
 					el(
 						'td',
-						null,
+						{ 'data-label': 'Status' },
 						el(
 							'span',
 							{ class: 'configkit-badge configkit-badge--' + ( it.is_active ? 'active' : 'inactive' ) },

@@ -923,7 +923,7 @@
 				null,
 				el(
 					'td',
-					null,
+					{ 'data-label': 'Name' },
 					el(
 						'a',
 						{
@@ -936,20 +936,20 @@
 						t.name
 					)
 				),
-				el( 'td', null, el( 'code', null, t.template_key ) ),
-				el( 'td', null, t.family_key || '—' ),
+				el( 'td', { 'data-label': 'template_key' }, el( 'code', null, t.template_key ) ),
+				el( 'td', { 'data-label': 'Family' }, t.family_key || '—' ),
 				el(
 					'td',
-					null,
+					{ 'data-label': 'Status' },
 					el(
 						'span',
 						{ class: 'configkit-badge configkit-badge--' + statusBadge( t.status ) },
 						t.status
 					)
 				),
-				el( 'td', null, t.published_version_id ? 'v' + t.published_version_id : '—' ),
-				el( 'td', null, '0' ), // bindings not implemented yet
-				el( 'td', null, t.updated_at || '—' ),
+				el( 'td', { 'data-label': 'Published version' }, t.published_version_id ? 'v' + t.published_version_id : '—' ),
+				el( 'td', { 'data-label': 'Used by' }, '0' ),
+				el( 'td', { 'data-label': 'Last edited' }, t.updated_at || '—' ),
 				el(
 					'td',
 					{ class: 'configkit-actions' },

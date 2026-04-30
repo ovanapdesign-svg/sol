@@ -449,7 +449,7 @@
 				null,
 				el(
 					'td',
-					null,
+					{ 'data-label': 'Name' },
 					el(
 						'a',
 						{
@@ -462,13 +462,13 @@
 						t.name
 					)
 				),
-				el( 'td', null, el( 'code', null, t.lookup_table_key ) ),
-				el( 'td', null, t.family_key || '—' ),
-				el( 'td', null, t.match_mode ),
-				el( 'td', null, t.unit ),
+				el( 'td', { 'data-label': 'lookup_table_key' }, el( 'code', null, t.lookup_table_key ) ),
+				el( 'td', { 'data-label': 'Family' }, t.family_key || '—' ),
+				el( 'td', { 'data-label': 'Match mode' }, t.match_mode ),
+				el( 'td', { 'data-label': 'Unit' }, t.unit ),
 				el(
 					'td',
-					null,
+					{ 'data-label': 'Status' },
 					el(
 						'span',
 						{ class: 'configkit-badge configkit-badge--' + ( t.is_active ? 'active' : 'inactive' ) },
@@ -706,7 +706,7 @@
 				const row = el( 'tr' );
 				row.appendChild( el(
 					'td',
-					null,
+					{ 'data-label': 'Width' },
 					el(
 						'a',
 						{
@@ -719,11 +719,11 @@
 						String( c.width )
 					)
 				) );
-				row.appendChild( el( 'td', null, String( c.height ) ) );
+				row.appendChild( el( 'td', { 'data-label': 'Height' }, String( c.height ) ) );
 				if ( t.supports_price_group ) {
-					row.appendChild( el( 'td', null, c.price_group_key || '—' ) );
+					row.appendChild( el( 'td', { 'data-label': 'Price group' }, c.price_group_key || '—' ) );
 				}
-				row.appendChild( el( 'td', null, c.price.toFixed( 2 ) ) );
+				row.appendChild( el( 'td', { 'data-label': 'Price' }, c.price.toFixed( 2 ) ) );
 				row.appendChild( el(
 					'td',
 					{ class: 'configkit-actions' },

@@ -284,7 +284,7 @@
 				null,
 				el(
 					'td',
-					null,
+					{ 'data-label': 'Name' },
 					el(
 						'a',
 						{
@@ -297,10 +297,10 @@
 						f.name
 					)
 				),
-				el( 'td', null, el( 'code', null, f.family_key ) ),
+				el( 'td', { 'data-label': 'family_key' }, el( 'code', null, f.family_key ) ),
 				el(
 					'td',
-					null,
+					{ 'data-label': 'Status' },
 					el(
 						'span',
 						{ class: 'configkit-badge configkit-badge--' + ( f.is_active ? 'active' : 'inactive' ) },

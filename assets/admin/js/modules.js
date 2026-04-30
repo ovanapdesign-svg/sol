@@ -364,7 +364,7 @@
 					null,
 					el(
 						'td',
-						null,
+						{ 'data-label': 'Name' },
 						el(
 							'a',
 							{
@@ -377,16 +377,16 @@
 							m.name
 						)
 					),
-					el( 'td', null, el( 'code', null, m.module_key ) ),
-					el( 'td', null, capCount + ' / ' + CAPABILITY_FLAGS.length ),
+					el( 'td', { 'data-label': 'module_key' }, el( 'code', null, m.module_key ) ),
+					el( 'td', { 'data-label': 'Capabilities' }, capCount + ' / ' + CAPABILITY_FLAGS.length ),
 					el(
 						'td',
-						null,
+						{ 'data-label': 'Field kinds' },
 						( m.allowed_field_kinds || [] ).join( ', ' ) || '—'
 					),
 					el(
 						'td',
-						null,
+						{ 'data-label': 'Status' },
 						el(
 							'span',
 							{ class: 'configkit-badge configkit-badge--' + status },
