@@ -784,6 +784,70 @@ applier path-routing, resolver per-mode behavior with stable
 ids and cycle protection, copy / link / detach flows, override
 write/reset validation).
 
+**Phase 4.4b** — Product Builder UI polish from owner's
+mobile + desktop test pass on 2026-05-01. The architecture from
+4.4 + 4.3b is sound, but the day-one owner workflow had ten
+specific blockers; this chunk closes them all without touching
+DB schema, engines, cart, or the frontend renderer.
+
+Section modals now ship with placeholders, required markers,
+and helper text on every editable field. Each editor knows
+which fields are required (Name on options + motors;
+Width to / Height to / Price on size_pricing rows) and renders
+red-bordered .is-invalid + an inline error span when an owner
+clicks Save without filling them. saveOptions /
+saveMotorOptions / saveRanges no longer silently drop
+incomplete rows — they refuse with a useful toast naming the
+exact rows or fields. Element ID display compactified into a
+small chip + explicit Copy button + tooltip explaining the
+purpose, removing the cropped-technical-text cue.
+
+Default product tab is the Yith builder ONLY. The "Show
+advanced settings" toggle now hides BOTH legacy mounts (Phase
+4.3 dalis 2 product-builder.js + 8-section binding admin) at
+once and replaces the Yith UI with a clear warning banner +
+"← Back to product builder" button — the owner never sees the
+double UI again. Save-as-preset disables (with helper title)
+until at least one section exists, and the empty-section state
+explains "Add size pricing and at least one option section to
+test a price." so readiness criteria are visible up front.
+
+Bulk paste modals grew a per-section-type cheat sheet
+(columns + example) and a live "Parsed N row(s). M error(s)"
+counter that disables submit when invalid, so the owner sees
+format requirements + parse status before clicking Add. The
+button label updates to "Add 12 rows" so the count is itself
+one more confirmation.
+
+Copy from product replaces the raw "Source product ID" input
+with a typeahead picker that hits the existing /woo-products
+endpoint (debounced 280ms). Title — SKU · #ID rows are
+clickable; a selected card sits above the search with a Clear
+button, so owners can find and confirm a source without ever
+seeing a numeric id.
+
+A single 768px media query polishes every modal for mobile:
+modal width = calc(100vw - 24px), max-height = calc(100vh -
+80px), header collapses to title+close+id rows, footer
+becomes sticky, option grids / motor cards / bundle rows all
+single-column, range editor head row hides (placeholders carry
+the labels). Desktop layouts are byte-identical.
+
+Terminology pass: header reads "Product setup" (not "Setup
+configurator"), the option_group tab is now "Choices" (not
+"Options"), the Copy modal's lookup radio is labelled "Size
+pricing table" (not "Lookup table"), and the Libraries admin
+page's menu + title rename to "Catalog" / "ConfigKit Catalog".
+Slugs / controllers / DB tables are unchanged.
+
+Engine purity audit (`grep -rE "wp_|get_option|WP_Query|\$wpdb"
+src/Engines/`) returns zero matches — no new infrastructure
+leaked into the engine layer during the polish pass.
+
+Suite 641 / 1761 stays green (no new tests in this chunk; the
+Half B unit coverage already exercises the resolver / applier
+flows the polish layer renders).
+
 Awaiting Phase 4.2b.3 cart wiring + bundle reconciliation
 across child cart lines + full snapshot pricing for the test
 panel, real-data Sologtak migration test of the new
