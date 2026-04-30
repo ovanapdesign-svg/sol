@@ -15,7 +15,144 @@ namespace ConfigKit\Engines;
  */
 final class PricingEngine {
 
-	public function __construct( private LookupEngine $lookup_engine ) {}
+	private PriceProvider $price_provider;
+
+	/**
+	 * @param PriceProvider|null $price_provider  PRICING_SOURCE_MODEL §5
+	 *   adapter. Optional for backwards compatibility with the Phase 2
+	 *   constructor signature; when omitted, the engine falls back to a
+	 *   null-shaped provider so resolveLibraryItemPrice() with
+	 *   `price_source = 'woo'` returns null instead of fatal-erroring.
+	 *   Production code in `src/Plugin.php` always injects
+	 *   `WooPriceProvider`; tests inject `StubPriceProvider`.
+	 */
+	public function __construct(
+		private LookupEngine $lookup_engine,
+		?PriceProvider $price_provider = null,
+	) {
+		$this->price_provider = $price_provider ?? new class implements PriceProvider {
+			public function fetchWooProductPrice( int $woo_product_id ): ?float { return null; }
+			public function hasWooStockManagement( int $woo_product_id ): bool { return false; }
+		};
+	}
+
+	/**
+	 * Resolve a library item's effective base price by walking the
+	 * `price_source` ladder in PRICING_SOURCE_MODEL §3.
+	 *
+	 * @param array<string,mixed>                          $library_item
+	 * @param array<string,array{price?:float|int|string}> $product_overrides
+	 *        Map keyed by "library_key:item_key" → override entry from
+	 *        `_configkit_item_price_overrides` post meta on the bound
+	 *        Woo product (PRODUCT_BINDING_SPEC §18). Empty when no
+	 *        binding-level overrides apply.
+	 *
+	 * @return float|null  Base price in store currency, or null when
+	 *                     the configured source can't resolve.
+	 */
+	public function resolveLibraryItemPrice( array $library_item, array $product_overrides = [] ): ?float {
+		// 1. Per-product binding override always wins
+		//    (PRICING_SOURCE_MODEL §3 step 1).
+		$override_key = ( $library_item['library_key'] ?? '' ) . ':' . ( $library_item['item_key'] ?? '' );
+		if ( isset( $product_overrides[ $override_key ] ) ) {
+			$entry = $product_overrides[ $override_key ];
+			if ( isset( $entry['price'] ) && is_numeric( $entry['price'] ) ) {
+				return (float) $entry['price'];
+			}
+			// An override with no usable price falls through to the
+			// item's own resolution rather than nuking the price.
+		}
+
+		$source = (string) ( $library_item['price_source'] ?? 'configkit' );
+
+		switch ( $source ) {
+			case 'configkit':
+				return isset( $library_item['price'] ) && is_numeric( $library_item['price'] )
+					? (float) $library_item['price']
+					: null;
+
+			case 'woo':
+				$woo_id = (int) ( $library_item['woo_product_id'] ?? 0 );
+				return $this->price_provider->fetchWooProductPrice( $woo_id );
+
+			case 'fixed_bundle':
+				return isset( $library_item['bundle_fixed_price'] ) && is_numeric( $library_item['bundle_fixed_price'] )
+					? (float) $library_item['bundle_fixed_price']
+					: null;
+
+			case 'bundle_sum':
+				return $this->resolveBundleSumPrice( $library_item, $product_overrides );
+
+			case 'product_override':
+				// product_override should always come in via the override
+				// map at step 1; arriving here means the library item
+				// was authored with the value directly (not allowed per
+				// PRICING_SOURCE_MODEL §2 validation, but let's be
+				// robust). Fall back to the configkit-stored price.
+				return isset( $library_item['price'] ) && is_numeric( $library_item['price'] )
+					? (float) $library_item['price']
+					: null;
+		}
+
+		return null;
+	}
+
+	/**
+	 * Sum the resolved prices of every component in a `bundle_sum`
+	 * library item (BUNDLE_MODEL §4 + decision §10.4 — each component
+	 * resolves its own `price_source` independently).
+	 *
+	 * Returns null when ANY component fails to resolve so the caller
+	 * can decide whether to surface a warning. The caller (PricingEngine
+	 * line item builder) is responsible for the spec §3 step 3
+	 * sale / surcharge / discount / floor layering.
+	 *
+	 * @param array<string,mixed> $library_item
+	 * @param array<string,array{price?:float|int|string}> $product_overrides
+	 */
+	private function resolveBundleSumPrice( array $library_item, array $product_overrides ): ?float {
+		$json = $library_item['bundle_components_json'] ?? null;
+		if ( ! is_string( $json ) || $json === '' ) return null;
+		$components = json_decode( $json, true );
+		if ( ! is_array( $components ) || count( $components ) === 0 ) return null;
+
+		$total = 0.0;
+		foreach ( $components as $component ) {
+			if ( ! is_array( $component ) ) return null;
+			$qty = (int) ( $component['qty'] ?? 1 );
+			if ( $qty <= 0 ) $qty = 1;
+
+			$component_price = $this->resolveComponentPrice( $component );
+			if ( $component_price === null ) return null;
+
+			$total += $component_price * $qty;
+		}
+		return $total;
+	}
+
+	/**
+	 * Resolve one bundle component's contribution. Components carry a
+	 * subset of the price_source enum: 'woo', 'configkit', 'fixed_bundle'.
+	 * 'bundle_sum' / 'product_override' are not legal at the component
+	 * level (BUNDLE_MODEL §3 validation).
+	 *
+	 * @param array<string,mixed> $component
+	 */
+	private function resolveComponentPrice( array $component ): ?float {
+		$source = (string) ( $component['price_source'] ?? 'woo' );
+		switch ( $source ) {
+			case 'woo':
+				$woo_id = (int) ( $component['woo_product_id'] ?? 0 );
+				return $this->price_provider->fetchWooProductPrice( $woo_id );
+			case 'configkit':
+				$price = $component['configkit_price'] ?? $component['price'] ?? null;
+				return is_numeric( $price ) ? (float) $price : null;
+			case 'fixed_bundle':
+				$price = $component['fixed_price'] ?? null;
+				return is_numeric( $price ) ? (float) $price : null;
+		}
+		return null;
+	}
 
 	/**
 	 * @param array<string,mixed> $input
