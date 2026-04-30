@@ -723,13 +723,25 @@
 					: ( c.severity === 'warning'
 						? 'configkit-binding__check configkit-binding__check--warn'
 						: 'configkit-binding__check configkit-binding__check--fail' );
-				list.appendChild( el(
+				const icon = c.passed ? '✓' : ( c.severity === 'warning' ? '⚠' : '✗' );
+				const title = c.title || c.id;
+				const item = el(
 					'li',
 					{ class: cls },
-					el( 'strong', null, ( c.passed ? '✓' : ( c.severity === 'warning' ? '⚠' : '✗' ) ) + '  ' + c.id ),
-					' — ',
-					c.message
-				) );
+					el( 'div', { class: 'configkit-binding__check-head' },
+						el( 'strong', null, icon + '  ' + title )
+					),
+					el( 'p', { class: 'configkit-binding__check-message' }, c.message )
+				);
+				if ( ! c.passed && c.suggested_fix ) {
+					item.appendChild( el(
+						'p',
+						{ class: 'configkit-binding__check-fix' },
+						el( 'span', { class: 'configkit-binding__check-fix-label' }, 'Suggested fix: ' ),
+						c.suggested_fix
+					) );
+				}
+				list.appendChild( item );
 			} );
 			children.push( list );
 		} else {

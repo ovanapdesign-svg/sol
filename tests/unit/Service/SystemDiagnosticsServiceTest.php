@@ -66,6 +66,11 @@ final class SystemDiagnosticsServiceTest extends TestCase {
 		$issue = $this->find_issue( $result['issues'], 'products_missing_template', 1001 );
 		$this->assertSame( 'critical', $issue['severity'] );
 		$this->assertSame( 'product', $issue['object_type'] );
+		// Phase 3.6: title + suggested_fix + fix_link surfaced.
+		$this->assertSame( 'Product without template', $issue['title'] );
+		$this->assertNotNull( $issue['suggested_fix'] );
+		$this->assertArrayHasKey( 'fix_link', $issue );
+		$this->assertSame( $issue['fix_url'], $issue['fix_link'] );
 	}
 
 	public function test_disabled_product_skipped(): void {

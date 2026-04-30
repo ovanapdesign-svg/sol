@@ -34,6 +34,21 @@ final class SystemDiagnosticsService {
 	public const SEVERITY_CRITICAL = 'critical';
 	public const SEVERITY_WARNING  = 'warning';
 
+	/**
+	 * Owner-friendly suggested next action keyed by issue id. Used to
+	 * tell the owner what to actually do — vs. what's wrong.
+	 */
+	private const SUGGESTED_FIXES = [
+		'products_missing_template'      => "Open the product's ConfigKit tab and pick a template.",
+		'products_missing_lookup_table'  => "Open the product's ConfigKit tab and pick a lookup table.",
+		'templates_no_published_version' => 'Open the template, fix any validation errors, and click Publish.',
+		'templates_no_steps'             => 'Add at least one step to the template.',
+		'lookup_tables_empty'            => 'Add cells to the lookup table (Excel import comes in Phase 4).',
+		'library_items_orphaned'         => 'Reactivate the library or move the items into an active library.',
+		'modules_no_field_kinds'         => 'Pick at least one allowed field kind on the module, or deactivate it.',
+		'rules_broken_targets'           => 'Open the template and fix rules that reference deleted fields, steps, or options.',
+	];
+
 	public const TYPE_PRODUCT      = 'product';
 	public const TYPE_TEMPLATE     = 'template';
 	public const TYPE_LIBRARY_ITEM = 'library_item';
@@ -495,14 +510,16 @@ final class SystemDiagnosticsService {
 		?string $fix_url
 	): array {
 		return [
-			'id'          => $id,
-			'severity'    => $severity,
-			'title'       => $title,
-			'object_type' => $object_type,
-			'object_id'   => $object_id,
-			'object_name' => $object_name,
-			'message'     => $message,
-			'fix_url'     => $fix_url,
+			'id'             => $id,
+			'severity'       => $severity,
+			'title'          => $title,
+			'object_type'    => $object_type,
+			'object_id'      => $object_id,
+			'object_name'    => $object_name,
+			'message'        => $message,
+			'suggested_fix'  => self::SUGGESTED_FIXES[ $id ] ?? null,
+			'fix_url'        => $fix_url,
+			'fix_link'       => $fix_url,
 		];
 	}
 

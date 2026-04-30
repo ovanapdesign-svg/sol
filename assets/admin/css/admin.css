@@ -1447,3 +1447,27 @@
 .configkit-intro__dismiss:focus {
 	text-decoration: underline;
 }
+
+/* ---- Diagnostics suggested-fix lines ---- */
+
+.configkit-diagnostics__issue-fix,
+.configkit-binding__check-fix {
+	margin: 4px 0 6px;
+	padding: 4px 8px;
+	border-left: 3px solid #2271b1;
+	background: #f0f6fc;
+	color: #2c3338;
+	font-size: 12px;
+	line-height: 1.5;
+}
+
+.configkit-diagnostics__fix-label,
+.configkit-binding__check-fix-label {
+	font-weight: 600;
+	color: #135e96;
+}
+
+.configkit-binding__check-message {
+	margin: 4px 0 0;
+	color: #2c3338;
+}

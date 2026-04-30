@@ -279,11 +279,17 @@
 					: null
 			),
 			el( 'p', { class: 'configkit-diagnostics__issue-message' }, issue.message ),
+			issue.suggested_fix
+				? el( 'p', { class: 'configkit-diagnostics__issue-fix' },
+					el( 'span', { class: 'configkit-diagnostics__fix-label' }, 'Suggested fix: ' ),
+					issue.suggested_fix
+				)
+				: null,
 			el(
 				'div',
 				{ class: 'configkit-diagnostics__issue-actions' },
-				issue.fix_url
-					? el( 'a', { href: issue.fix_url, class: 'button button-primary' }, 'Fix' )
+				( issue.fix_link || issue.fix_url )
+					? el( 'a', { href: issue.fix_link || issue.fix_url, class: 'button button-primary' }, 'Fix' )
 					: null,
 				issue.acknowledged
 					? null

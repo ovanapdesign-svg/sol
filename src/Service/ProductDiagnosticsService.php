@@ -20,6 +20,41 @@ use ConfigKit\Repository\TemplateRepository;
  */
 final class ProductDiagnosticsService {
 
+	/**
+	 * Owner-readable title per check id (rendered as the label on
+	 * the check row, instead of the technical id).
+	 */
+	private const TITLES = [
+		'template_selected'           => 'Template selected',
+		'template_version_published'  => 'Template has a published version',
+		'lookup_table_selected'       => 'Lookup table selected',
+		'lookup_table_has_cells'      => 'Lookup table has price cells',
+		'allowed_libraries_exist'     => 'Allowed libraries exist',
+		'excluded_items_format'       => 'Excluded items format is correct',
+		'defaults_valid'              => 'Default values are valid',
+		'price_resolvable'            => 'Default price resolves',
+		'rules_targets_valid'         => 'Template rules target valid entities',
+		'locked_values_valid'         => 'Locked field values are valid',
+		'frontend_mode_selected'      => 'Frontend mode set',
+	];
+
+	/**
+	 * Owner-friendly suggested next action when a check fails.
+	 */
+	private const SUGGESTED_FIXES = [
+		'template_selected'           => "Pick a template from the 'Base setup' section above.",
+		'template_version_published'  => 'Open the template and click Publish.',
+		'lookup_table_selected'       => "Pick a lookup table from the 'Base setup' section above.",
+		'lookup_table_has_cells'      => 'Open the lookup table and add cells (Excel import lands in Phase 4).',
+		'allowed_libraries_exist'     => "Check the 'Allowed sources' section — one or more libraries are missing or inactive.",
+		'excluded_items_format'       => "Excluded items must use library_key:item_key format. Edit the 'Allowed sources' section.",
+		'defaults_valid'              => "Open 'Product defaults' and re-pick — some entries reference deleted fields or items.",
+		'price_resolvable'            => "Set width/height defaults in 'Product defaults' so the engine can resolve a price.",
+		'rules_targets_valid'         => 'Open the template and fix rules that reference deleted fields or steps.',
+		'locked_values_valid'         => "Update 'Visibility & locking' — a locked field references a deleted option.",
+		'frontend_mode_selected'      => "Pick stepper or accordion in the 'Base setup' section above.",
+	];
+
 	public function __construct(
 		private ProductBindingRepository $bindings,
 		private TemplateRepository $templates,
@@ -372,15 +407,22 @@ final class ProductDiagnosticsService {
 	}
 
 	/**
-	 * @return array{id:string, passed:bool, severity:string, message:string, fix_url:?string}
+	 * @return array{id:string, title:string, passed:bool, severity:string, message:string, suggested_fix:?string, fix_url:?string, fix_link:?string}
 	 */
 	private function check( string $id, bool $passed, string $severity, string $message, ?string $fix_url ): array {
+		$title = self::TITLES[ $id ] ?? $id;
+		$suggested = $passed ? null : ( self::SUGGESTED_FIXES[ $id ] ?? null );
 		return [
-			'id'        => $id,
-			'passed'    => $passed,
-			'severity'  => $severity,
-			'message'   => $message,
-			'fix_url'   => $fix_url,
+			'id'             => $id,
+			'title'          => $title,
+			'passed'         => $passed,
+			'severity'       => $severity,
+			'message'        => $message,
+			'suggested_fix'  => $suggested,
+			'fix_url'        => $fix_url,
+			// `fix_link` is an alias for fix_url so JS code can prefer
+			// either name without surprises.
+			'fix_link'       => $fix_url,
 		];
 	}
 }

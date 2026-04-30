@@ -156,6 +156,29 @@ final class ProductDiagnosticsServiceTest extends TestCase {
 		$this->assertSame( 'missing_template', $result['status'] );
 		$check = $this->find_check( $result['checks'], 'template_selected' );
 		$this->assertFalse( $check['passed'] );
+		// Phase 3.6: owner-readable title + suggested fix.
+		$this->assertSame( 'Template selected', $check['title'] );
+		$this->assertNotNull( $check['suggested_fix'] );
+		$this->assertStringContainsString( 'template', strtolower( $check['suggested_fix'] ) );
+		$this->assertArrayHasKey( 'fix_link', $check, 'fix_link alias must exist' );
+	}
+
+	public function test_passed_check_has_title_but_no_suggested_fix(): void {
+		// Build a fully clean binding so most checks pass.
+		$this->build_clean_template();
+		$this->build_lookup_table();
+		$this->bindings->save( self::PRODUCT_ID, [
+			'enabled'          => true,
+			'template_key'     => 'markise_motorisert',
+			'lookup_table_key' => 'markise_2d_v1',
+			'frontend_mode'    => 'stepper',
+			'defaults'         => [ 'control_type' => 'manual' ],
+		] );
+		$result = $this->diagnostics->run( self::PRODUCT_ID );
+		$check  = $this->find_check( $result['checks'], 'template_selected' );
+		$this->assertTrue( $check['passed'] );
+		$this->assertSame( 'Template selected', $check['title'] );
+		$this->assertNull( $check['suggested_fix'], 'passed checks have no suggested fix' );
 	}
 
 	public function test_unpublished_template_reports_missing_template(): void {
