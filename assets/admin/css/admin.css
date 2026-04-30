@@ -1662,3 +1662,10 @@
 	display: block;
 	margin: 0 0 6px;
 }
+
+/* Match-mode cell: icon + label inline. */
+.configkit-mode-cell {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}

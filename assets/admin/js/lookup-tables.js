@@ -11,9 +11,29 @@
 		[ 'nearest', 'Closest size' ],
 	];
 
+	const MATCH_MODE_ICONS = {
+		exact:    'yes',
+		round_up: 'arrow-up-alt',
+		nearest:  'marker',
+	};
+
 	function friendlyMatchMode( id ) {
 		const found = MATCH_MODES.find( ( pair ) => pair[ 0 ] === id );
 		return found ? found[ 1 ] : ( id || '—' );
+	}
+
+	function matchModeCell( id ) {
+		const icon = MATCH_MODE_ICONS[ id ];
+		const label = friendlyMatchMode( id );
+		const wrap = el( 'span', { class: 'configkit-mode-cell' } );
+		if ( icon ) {
+			wrap.appendChild( el( 'span', {
+				class: 'dashicons dashicons-' + icon + ' configkit-cap-icon configkit-cap-icon--checked',
+				'aria-hidden': 'true',
+			} ) );
+		}
+		wrap.appendChild( document.createTextNode( label ) );
+		return wrap;
 	}
 
 	const UNITS = [
@@ -498,7 +518,7 @@
 				),
 				el( 'td', { 'data-label': 'Technical key' }, el( 'code', null, t.lookup_table_key ) ),
 				el( 'td', { 'data-label': 'Family' }, t.family_key || '—' ),
-				el( 'td', { 'data-label': 'Match mode' }, friendlyMatchMode( t.match_mode ) ),
+				el( 'td', { 'data-label': 'Match mode' }, matchModeCell( t.match_mode ) ),
 				el( 'td', { 'data-label': 'Unit' }, t.unit ),
 				el(
 					'td',
@@ -658,7 +678,7 @@
 					'li',
 					null,
 					el( 'span', { class: 'configkit-counts__label' }, 'Match mode' ),
-					el( 'span', { class: 'configkit-counts__value' }, t.match_mode )
+					el( 'span', { class: 'configkit-counts__value' }, matchModeCell( t.match_mode ) )
 				),
 				el(
 					'li',
