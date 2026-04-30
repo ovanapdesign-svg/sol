@@ -203,7 +203,7 @@
 		const wrap = el( 'header', { class: 'configkit-cb__header' } );
 		const status = deriveStatus();
 		wrap.appendChild( el( 'div', { class: 'configkit-cb__title-block' },
-			el( 'h2', { class: 'configkit-cb__title' }, 'Setup configurator' ),
+			el( 'h2', { class: 'configkit-cb__title' }, 'Product setup' ),
 			el( 'span', { class: 'configkit-cb__status configkit-cb__status--' + status.cls }, status.text )
 		) );
 		const headerActions = el( 'div', { class: 'configkit-cb__header-actions' } );
@@ -524,7 +524,7 @@
 				document.createTextNode( ' ' + pair[1] )
 			) );
 		} );
-		body.appendChild( labelledField( 'Lookup table', lookupRow ) );
+		body.appendChild( labelledField( 'Size pricing table', lookupRow ) );
 		if ( m.payload.lookup_table_choice === 'reuse' ) {
 			body.appendChild( labelledField( 'Reuse table key', el( 'input', {
 				type: 'text',
@@ -1204,7 +1204,7 @@
 	function tabLabelFor( type ) {
 		switch ( type ) {
 			case 'size_pricing':     return 'Pricing rows';
-			case 'option_group':     return 'Options';
+			case 'option_group':     return 'Choices';
 			case 'motor':            return 'Motors';
 			case 'manual_operation': return 'Operation types';
 			case 'controls':         return 'Controls';

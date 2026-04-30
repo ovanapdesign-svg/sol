@@ -26,11 +26,11 @@ final class LibrariesPage extends AbstractPage {
 	}
 
 	public function page_title(): string {
-		return \__( 'ConfigKit Libraries', 'configkit' );
+		return \__( 'ConfigKit Catalog', 'configkit' );
 	}
 
 	public function menu_title(): string {
-		return \__( 'Libraries', 'configkit' );
+		return \__( 'Catalog', 'configkit' );
 	}
 
 	public function render(): void {
