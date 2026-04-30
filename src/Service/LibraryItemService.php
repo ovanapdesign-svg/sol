@@ -191,6 +191,62 @@ final class LibraryItemService {
 			$errors[] = [ 'field' => 'sale_price', 'code' => 'invalid_type', 'message' => 'sale_price must be numeric.' ];
 		}
 
+		// Phase 4.2 — pricing source / item type / bundle composition
+		// validation per PRICING_SOURCE_MODEL §2 + BUNDLE_MODEL §3.
+		$item_type      = isset( $input['item_type'] ) ? (string) $input['item_type'] : 'simple_option';
+		$price_source   = isset( $input['price_source'] ) ? (string) $input['price_source'] : 'configkit';
+		$valid_types    = [ 'simple_option', 'bundle' ];
+		$valid_sources_simple = [ 'configkit', 'woo', 'product_override' ];
+		$valid_sources_bundle = [ 'bundle_sum', 'fixed_bundle' ];
+
+		if ( ! in_array( $item_type, $valid_types, true ) ) {
+			$errors[] = [ 'field' => 'item_type', 'code' => 'invalid_value', 'message' => 'item_type must be simple_option or bundle.' ];
+		} elseif ( $item_type === 'bundle' ) {
+			if ( ! in_array( $price_source, $valid_sources_bundle, true ) ) {
+				$errors[] = [ 'field' => 'price_source', 'code' => 'invalid_for_bundle', 'message' => 'Bundle items must use bundle_sum or fixed_bundle as price_source.' ];
+			}
+			$components = is_array( $input['bundle_components'] ?? null ) ? $input['bundle_components'] : [];
+			if ( count( $components ) === 0 ) {
+				$errors[] = [ 'field' => 'bundle_components', 'code' => 'empty', 'message' => 'A bundle must have at least one component.' ];
+			} else {
+				foreach ( $components as $i => $component ) {
+					if ( ! is_array( $component ) ) {
+						$errors[] = [ 'field' => 'bundle_components', 'code' => 'invalid_shape', 'message' => sprintf( 'Component #%d is not an object.', $i + 1 ) ];
+						continue;
+					}
+					$cwp = (int) ( $component['woo_product_id'] ?? 0 );
+					if ( $cwp <= 0 ) {
+						$errors[] = [ 'field' => 'bundle_components', 'code' => 'missing_woo_product_id', 'message' => sprintf( 'Component #%d must reference a WooCommerce product.', $i + 1 ) ];
+					}
+					$cqty = $component['qty'] ?? 1;
+					if ( ! is_numeric( $cqty ) || (int) $cqty < 1 ) {
+						$errors[] = [ 'field' => 'bundle_components', 'code' => 'invalid_qty', 'message' => sprintf( 'Component #%d quantity must be a positive integer.', $i + 1 ) ];
+					}
+					$csource = (string) ( $component['price_source'] ?? 'woo' );
+					if ( ! in_array( $csource, [ 'woo', 'configkit', 'fixed_bundle' ], true ) ) {
+						$errors[] = [ 'field' => 'bundle_components', 'code' => 'invalid_component_source', 'message' => sprintf( 'Component #%d price_source must be woo, configkit, or fixed_bundle.', $i + 1 ) ];
+					}
+				}
+			}
+			if ( $price_source === 'fixed_bundle' ) {
+				$bfp = $input['bundle_fixed_price'] ?? null;
+				if ( $bfp === null || $bfp === '' || ! is_numeric( $bfp ) || (float) $bfp < 0 ) {
+					$errors[] = [ 'field' => 'bundle_fixed_price', 'code' => 'required', 'message' => 'fixed_bundle price_source requires a non-negative bundle_fixed_price.' ];
+				}
+			}
+		} else {
+			// simple_option
+			if ( ! in_array( $price_source, $valid_sources_simple, true ) ) {
+				$errors[] = [ 'field' => 'price_source', 'code' => 'invalid_for_simple', 'message' => 'Simple items must use configkit, woo, or product_override as price_source.' ];
+			}
+			if ( $price_source === 'woo' ) {
+				$wpid = isset( $input['woo_product_id'] ) ? (int) $input['woo_product_id'] : 0;
+				if ( $wpid <= 0 ) {
+					$errors[] = [ 'field' => 'woo_product_id', 'code' => 'required', 'message' => 'price_source = woo requires woo_product_id.' ];
+				}
+			}
+		}
+
 		// Attribute schema validation
 		$schema = is_array( $module['attribute_schema'] ?? null ) ? $module['attribute_schema'] : [];
 		$attrs  = is_array( $input['attributes'] ?? null ) ? $input['attributes'] : [];
@@ -280,6 +336,59 @@ final class LibraryItemService {
 				$input['compatibility'],
 				static fn( $v ): bool => is_string( $v ) && $v !== ''
 			) );
+		}
+
+		// Phase 4.2 — Pricing Source + Bundle fields. Bundle-only
+		// fields are nulled out for simple items so toggling Package
+		// off cleans up the row.
+		$item_type    = isset( $input['item_type'] ) ? (string) $input['item_type'] : 'simple_option';
+		$price_source = isset( $input['price_source'] ) ? (string) $input['price_source'] : 'configkit';
+		$out['item_type']            = $item_type === 'bundle' ? 'bundle' : 'simple_option';
+		$out['price_source']         = $price_source !== '' ? $price_source : 'configkit';
+		$out['bundle_fixed_price']   = null;
+		$out['bundle_components']    = null;
+		$out['cart_behavior']        = null;
+		$out['admin_order_display']  = null;
+		if ( $out['item_type'] === 'bundle' ) {
+			if ( isset( $input['bundle_fixed_price'] )
+				&& $input['bundle_fixed_price'] !== ''
+				&& $input['bundle_fixed_price'] !== null
+				&& is_numeric( $input['bundle_fixed_price'] )
+			) {
+				$out['bundle_fixed_price'] = (float) $input['bundle_fixed_price'];
+			}
+			$components = is_array( $input['bundle_components'] ?? null ) ? $input['bundle_components'] : [];
+			$out['bundle_components'] = array_values( array_map(
+				static function ( $c ): array {
+					$component = is_array( $c ) ? $c : [];
+					$normalized = [
+						'component_key'   => isset( $component['component_key'] ) ? (string) $component['component_key'] : '',
+						'woo_product_id'  => (int) ( $component['woo_product_id'] ?? 0 ),
+						'qty'             => max( 1, (int) ( $component['qty'] ?? 1 ) ),
+						'price_source'    => isset( $component['price_source'] ) ? (string) $component['price_source'] : 'woo',
+						'stock_behavior'  => isset( $component['stock_behavior'] ) ? (string) $component['stock_behavior'] : 'check_components',
+						'label_in_cart'   => isset( $component['label_in_cart'] ) ? (string) $component['label_in_cart'] : '',
+					];
+					if ( isset( $component['configkit_price'] ) && is_numeric( $component['configkit_price'] ) ) {
+						$normalized['configkit_price'] = (float) $component['configkit_price'];
+					}
+					if ( isset( $component['fixed_price'] ) && is_numeric( $component['fixed_price'] ) ) {
+						$normalized['fixed_price'] = (float) $component['fixed_price'];
+					}
+					return $normalized;
+				},
+				$components
+			) );
+			if ( ! empty( $input['cart_behavior'] ) && in_array( (string) $input['cart_behavior'], [ 'price_inside_main', 'add_child_lines' ], true ) ) {
+				$out['cart_behavior'] = (string) $input['cart_behavior'];
+			} else {
+				$out['cart_behavior'] = 'price_inside_main';
+			}
+			if ( ! empty( $input['admin_order_display'] ) && in_array( (string) $input['admin_order_display'], [ 'expanded', 'collapsed' ], true ) ) {
+				$out['admin_order_display'] = (string) $input['admin_order_display'];
+			} else {
+				$out['admin_order_display'] = 'expanded';
+			}
 		}
 
 		return $out;

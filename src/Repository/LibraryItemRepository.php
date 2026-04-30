@@ -156,6 +156,14 @@ class LibraryItemRepository {
 			'main_image_url'  => $this->null_or_string( $row['main_image_url'] ?? null ),
 			'description'     => $this->null_or_string( $row['description'] ?? null ),
 			'price'           => $this->null_or_float( $row['price'] ?? null ),
+			// Phase 4.2 — see PRICING_SOURCE_MODEL §2 / §4 for the
+			// columns introduced in migration 0017.
+			'price_source'         => (string) ( $row['price_source'] ?? 'configkit' ),
+			'bundle_fixed_price'   => $this->null_or_float( $row['bundle_fixed_price'] ?? null ),
+			'item_type'            => (string) ( $row['item_type'] ?? 'simple_option' ),
+			'bundle_components'    => $this->decode_array( $row['bundle_components_json'] ?? '' ),
+			'cart_behavior'        => $this->null_or_string( $row['cart_behavior'] ?? null ),
+			'admin_order_display'  => $this->null_or_string( $row['admin_order_display'] ?? null ),
 			'sale_price'      => $this->null_or_float( $row['sale_price'] ?? null ),
 			'price_group_key' => (string) ( $row['price_group_key'] ?? '' ),
 			'color_family'    => $this->null_or_string( $row['color_family'] ?? null ),
@@ -178,6 +186,22 @@ class LibraryItemRepository {
 	 * @return array<string,mixed>
 	 */
 	private function dehydrate( array $data ): array {
+		// Phase 4.2 — normalise the new columns. Bundle-only fields
+		// (bundle_components_json / cart_behavior / admin_order_display
+		// / bundle_fixed_price) are forced to null when item_type is
+		// 'simple_option' so toggling Package off cleans up the row
+		// instead of leaving stale state behind.
+		$item_type      = (string) ( $data['item_type'] ?? 'simple_option' );
+		$is_bundle      = $item_type === 'bundle';
+		$price_source   = (string) ( $data['price_source'] ?? 'configkit' );
+
+		$components = $is_bundle && is_array( $data['bundle_components'] ?? null )
+			? array_values( $data['bundle_components'] )
+			: null;
+		$bundle_components_json = $components === null
+			? null
+			: (string) wp_json_encode( $components );
+
 		return [
 			'library_key'        => (string) ( $data['library_key'] ?? '' ),
 			'item_key'           => (string) ( $data['item_key'] ?? '' ),
@@ -189,6 +213,20 @@ class LibraryItemRepository {
 			'description'        => $data['description'] ?? null,
 			'price'              => isset( $data['price'] ) && $data['price'] !== '' && $data['price'] !== null
 				? (float) $data['price']
+				: null,
+			// Phase 4.2 columns ↓
+			'price_source'           => $price_source,
+			'bundle_fixed_price'     => $is_bundle && isset( $data['bundle_fixed_price'] )
+				&& $data['bundle_fixed_price'] !== '' && $data['bundle_fixed_price'] !== null
+					? (float) $data['bundle_fixed_price']
+					: null,
+			'item_type'              => $item_type,
+			'bundle_components_json' => $bundle_components_json,
+			'cart_behavior'          => $is_bundle && ! empty( $data['cart_behavior'] )
+				? (string) $data['cart_behavior']
+				: null,
+			'admin_order_display'    => $is_bundle && ! empty( $data['admin_order_display'] )
+				? (string) $data['admin_order_display']
 				: null,
 			'sale_price'         => isset( $data['sale_price'] ) && $data['sale_price'] !== '' && $data['sale_price'] !== null
 				? (float) $data['sale_price']

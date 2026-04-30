@@ -6,6 +6,7 @@ declare(strict_types=1);
 
 namespace ConfigKit;
 
+use ConfigKit\Adapters\WooPriceProvider;
 use ConfigKit\Admin\AssetLoader;
 use ConfigKit\Admin\Menu;
 use ConfigKit\Admin\Pages\AbstractPage;
@@ -104,6 +105,17 @@ final class Plugin {
 		}
 
 		$this->build_rest_router()->init();
+	}
+
+	/**
+	 * Phase 4.2b.1 — production binding of the PriceProvider port that
+	 * the engine consumes for `price_source = 'woo'` resolution. The
+	 * PricingEngine itself is instantiated by future cart-event wiring;
+	 * this helper exists so that wiring has one obvious place to grab
+	 * the adapter from instead of re-creating it ad hoc.
+	 */
+	public function build_price_provider(): WooPriceProvider {
+		return new WooPriceProvider();
 	}
 
 	private function build_product_renderer(): ProductRenderer {
