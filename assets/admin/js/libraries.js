@@ -1117,6 +1117,17 @@
 			wrap.appendChild( fieldset( 'Properties', props ) );
 		}
 
+		// Phase 4.2b.2 — bundle composition editor. Visible only for
+		// packages. Spec: UI_LABELS_MAPPING.md §4 (no JSON shown to
+		// owner; per-component picker + qty + price source + optional
+		// stock toggle and cart label).
+		if ( isBundle ) {
+			wrap.appendChild( fieldset(
+				'Package contents',
+				[ renderBundleComponents( rec ) ]
+			) );
+		}
+
 		// Phase 4.2b.2 — bundle-only behavior toggles. Hidden entirely
 		// for simple items; the saved value stays at default until the
 		// owner toggles the item to a package. Specs: UI_LABELS_MAPPING
@@ -1357,6 +1368,289 @@
 				},
 			} )
 		);
+	}
+
+	// Phase 4.2b.2 — cache of resolved Woo product rows keyed by id,
+	// so re-renders don't re-hit /woo-products/{id} for the same id.
+	// Hydrated lazily per row. Cleared on view change implicitly
+	// because libraries.js is a single-page app instance per page load.
+	const wooMetaCache = {};
+
+	function ensureWooMeta( id, onReady ) {
+		if ( ! id || id <= 0 ) return null;
+		if ( wooMetaCache[ id ] ) return wooMetaCache[ id ];
+		// Mark as in-flight so concurrent re-renders don't refetch.
+		wooMetaCache[ id ] = wooMetaCache[ id ] || { id, name: '', sku: '', price: null, thumbnail_url: null, _loading: true };
+		ConfigKit.request( '/woo-products/' + id ).then( ( data ) => {
+			if ( data && data.record ) {
+				wooMetaCache[ id ] = Object.assign( {}, data.record, { _loading: false } );
+				onReady && onReady();
+			}
+		} ).catch( () => {
+			wooMetaCache[ id ] = { id, name: '#' + id + ' (unavailable)', sku: '', price: null, thumbnail_url: null, _loading: false, _error: true };
+			onReady && onReady();
+		} );
+		return wooMetaCache[ id ];
+	}
+
+	/**
+	 * Phase 4.2b.2 — bundle composition editor (UI_LABELS_MAPPING §4).
+	 * Each row exposes:
+	 *   - WooCommerce product picker (reusable JS module)
+	 *   - Quantity (positive integer)
+	 *   - Per-component price source dropdown (woo / configkit / fixed_bundle)
+	 *   - Resolved-price preview (live)
+	 *   - Optional "Display name in cart" small input
+	 *   - Optional "Check stock for this component" toggle
+	 * Plus a single "+ Add component" button at the bottom and a
+	 * leading helper paragraph that explains stock semantics.
+	 */
+	function renderBundleComponents( rec ) {
+		const wrap = el( 'div', { class: 'configkit-bundle-editor' } );
+
+		wrap.appendChild( el(
+			'p',
+			{ class: 'description' },
+			'Stock is checked only when WooCommerce stock management is enabled for that component product. ' +
+			'If a component has stock management off, its stock is not blocking — the order proceeds.'
+		) );
+
+		const list = Array.isArray( rec.bundle_components ) ? rec.bundle_components : [];
+		if ( list.length === 0 ) {
+			wrap.appendChild( el(
+				'p',
+				{ class: 'configkit-bundle-editor__empty' },
+				'No components yet. Pick the WooCommerce products this package combines.'
+			) );
+		}
+
+		list.forEach( ( component, index ) => {
+			wrap.appendChild( renderBundleComponentRow( rec, component, index ) );
+		} );
+
+		wrap.appendChild( el(
+			'button',
+			{
+				type: 'button',
+				class: 'button button-secondary configkit-bundle-editor__add',
+				onClick: () => {
+					rec.bundle_components = list.concat( [ blankBundleComponent() ] );
+					state.dirty = true;
+					render();
+				},
+			},
+			'+ Add component'
+		) );
+
+		return wrap;
+	}
+
+	function blankBundleComponent() {
+		return {
+			component_key: '',
+			woo_product_id: 0,
+			qty: 1,
+			price_source: 'woo',
+			price: null,
+			stock_behavior: 'check_components',
+			label_in_cart: '',
+		};
+	}
+
+	function renderBundleComponentRow( rec, component, index ) {
+		const row = el( 'div', { class: 'configkit-bundle-component-row' } );
+		const top = el( 'div', { class: 'configkit-bundle-component-row__top' } );
+
+		// Woo product picker (mounts via window.ConfigKit.createWooProductPicker
+		// on the host node). The host stays empty until after-mount; after
+		// the picker injects its DOM the row layout aligns.
+		const pickerHost = el( 'div', { class: 'configkit-bundle-component-row__picker' } );
+		top.appendChild( pickerHost );
+
+		// Hydrate initial selection from the row's stored woo_product_id.
+		let initial = null;
+		if ( component.woo_product_id && component.woo_product_id > 0 ) {
+			const meta = ensureWooMeta( component.woo_product_id, () => render() );
+			if ( meta && ! meta._loading ) initial = meta;
+			else initial = { id: component.woo_product_id, name: 'Loading…', sku: '', price: null, thumbnail_url: null };
+		}
+
+		if ( window.ConfigKit && window.ConfigKit.createWooProductPicker ) {
+			const picker = window.ConfigKit.createWooProductPicker( {
+				mount: pickerHost,
+				initial,
+				placeholder: 'Search WooCommerce product…',
+				onChange: ( selection ) => {
+					if ( selection ) {
+						component.woo_product_id = selection.id;
+						wooMetaCache[ selection.id ] = Object.assign( {}, selection, { _loading: false } );
+						if ( ! component.component_key ) {
+							component.component_key = generateComponentKey( rec, selection.name || ( '#' + selection.id ) );
+						}
+					} else {
+						component.woo_product_id = 0;
+					}
+					state.dirty = true;
+					render();
+				},
+			} );
+			// Keep linter happy.
+			void picker;
+		} else {
+			pickerHost.appendChild( el( 'em', null, 'Picker unavailable (asset not loaded).' ) );
+		}
+
+		// Qty stepper.
+		top.appendChild( el(
+			'div',
+			{ class: 'configkit-bundle-component-row__qty' },
+			el( 'label', null, 'Quantity' ),
+			el( 'input', {
+				type: 'number',
+				min: 1,
+				step: 1,
+				value: String( component.qty || 1 ),
+				onInput: ( ev ) => {
+					const n = parseInt( ev.target.value, 10 );
+					component.qty = Number.isFinite( n ) && n > 0 ? n : 1;
+					state.dirty = true;
+				},
+			} )
+		) );
+
+		// Per-component price source dropdown. Owner sees labels;
+		// the option's value is the backend enum.
+		top.appendChild( el(
+			'div',
+			{ class: 'configkit-bundle-component-row__source' },
+			el( 'label', null, 'Price source for this component' ),
+			selectField(
+				component.price_source || 'woo',
+				[
+					[ 'woo',          PRICE_SOURCE_LABELS.woo.label ],
+					[ 'configkit',    PRICE_SOURCE_LABELS.configkit.label ],
+					[ 'fixed_bundle', 'Use the package fixed price (no separate component price)' ],
+				],
+				( v ) => {
+					component.price_source = v;
+					if ( v !== 'configkit' ) component.price = null;
+					state.dirty = true;
+					render();
+				}
+			)
+		) );
+
+		// Resolved preview chip (best-effort live; the full
+		// breakdown panel — CHUNK 4 — does the authoritative compute).
+		top.appendChild( el(
+			'div',
+			{ class: 'configkit-bundle-component-row__resolved' },
+			el( 'span', { class: 'configkit-bundle-component-row__resolved-label' }, 'Resolved' ),
+			el( 'span', { class: 'configkit-bundle-component-row__resolved-value' }, formatComponentResolved( rec, component ) )
+		) );
+
+		// Remove button.
+		top.appendChild( el(
+			'button',
+			{
+				type: 'button',
+				class: 'configkit-bundle-component-row__remove',
+				'aria-label': 'Remove component',
+				onClick: () => {
+					rec.bundle_components = rec.bundle_components.filter( ( _, i ) => i !== index );
+					state.dirty = true;
+					render();
+				},
+			},
+			'✕'
+		) );
+
+		row.appendChild( top );
+
+		// Bottom row: optional configkit price input (when source = configkit),
+		// label_in_cart small input, stock toggle.
+		const bottom = el( 'div', { class: 'configkit-bundle-component-row__bottom' } );
+
+		if ( component.price_source === 'configkit' ) {
+			bottom.appendChild( el(
+				'div',
+				{ class: 'configkit-bundle-component-row__price' },
+				el( 'label', null, 'Price (kr)' ),
+				el( 'input', {
+					type: 'number',
+					step: '0.01',
+					value: String( component.price === null || component.price === undefined ? '' : component.price ),
+					onInput: ( ev ) => {
+						const raw = ev.target.value;
+						component.price = raw === '' ? null : parseFloat( raw );
+						state.dirty = true;
+					},
+				} )
+			) );
+		}
+
+		bottom.appendChild( el(
+			'div',
+			{ class: 'configkit-bundle-component-row__cart-label' },
+			el( 'label', null, 'Display name in cart (optional)' ),
+			el( 'input', {
+				type: 'text',
+				class: 'regular-text',
+				value: component.label_in_cart || '',
+				onInput: ( ev ) => {
+					component.label_in_cart = ev.target.value;
+					state.dirty = true;
+				},
+			} )
+		) );
+
+		bottom.appendChild( el(
+			'label',
+			{ class: 'configkit-bundle-component-row__stock' },
+			el( 'input', {
+				type: 'checkbox',
+				checked: ( component.stock_behavior || 'check_components' ) === 'check_components',
+				onChange: ( ev ) => {
+					component.stock_behavior = ev.target.checked ? 'check_components' : 'ignore';
+					state.dirty = true;
+				},
+			} ),
+			' Check stock for this component'
+		) );
+
+		row.appendChild( bottom );
+		return row;
+	}
+
+	function generateComponentKey( rec, productName ) {
+		const base = slugify( productName ) || 'component';
+		const taken = ( rec.bundle_components || [] ).map( ( c ) => c.component_key );
+		if ( ! taken.includes( base ) ) return base;
+		let i = 2;
+		while ( taken.includes( base + '_' + i ) ) i++;
+		return base + '_' + i;
+	}
+
+	function formatComponentResolved( rec, component ) {
+		if ( rec.price_source === 'fixed_bundle' ) return '— (fixed package)';
+		const qty = component.qty || 1;
+		if ( component.price_source === 'configkit' ) {
+			if ( component.price === null || component.price === undefined || component.price === '' ) return '—';
+			return formatKr( Number( component.price ) * qty );
+		}
+		if ( component.price_source === 'woo' ) {
+			const meta = wooMetaCache[ component.woo_product_id ];
+			if ( ! meta || meta._loading ) return 'loading…';
+			if ( meta.price === null || meta.price === undefined ) return '—';
+			return formatKr( meta.price * qty );
+		}
+		// fixed_bundle component — accounted for in the package fixed price.
+		return '— (in fixed price)';
+	}
+
+	function formatKr( num ) {
+		if ( ! Number.isFinite( num ) ) return '—';
+		return num.toLocaleString( undefined, { maximumFractionDigits: 0 } ) + ' kr';
 	}
 
 	/**

@@ -2165,3 +2165,118 @@
 	padding: 8px 10px;
 	margin: 8px 0 0;
 }
+
+/* ================================================================
+ * Phase 4.2b.2 — bundle composition editor (UI_LABELS_MAPPING §4).
+ * ================================================================ */
+
+.configkit-bundle-editor {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.configkit-bundle-editor__empty {
+	color: #50575e;
+	font-style: italic;
+	margin: 0;
+}
+
+.configkit-bundle-editor__add {
+	align-self: flex-start;
+}
+
+.configkit-bundle-component-row {
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	padding: 12px;
+	background: #fff;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.configkit-bundle-component-row__top {
+	display: grid;
+	grid-template-columns: minmax( 200px, 2fr ) 90px minmax( 220px, 1fr ) auto auto;
+	gap: 10px;
+	align-items: end;
+}
+
+.configkit-bundle-component-row__top label {
+	display: block;
+	font-size: 12px;
+	color: #50575e;
+	margin-bottom: 4px;
+}
+
+.configkit-bundle-component-row__qty input,
+.configkit-bundle-component-row__source select,
+.configkit-bundle-component-row__price input {
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.configkit-bundle-component-row__resolved {
+	display: flex;
+	flex-direction: column;
+	min-width: 110px;
+	align-items: flex-end;
+}
+
+.configkit-bundle-component-row__resolved-label {
+	font-size: 11px;
+	text-transform: uppercase;
+	color: #646970;
+	letter-spacing: 0.5px;
+}
+
+.configkit-bundle-component-row__resolved-value {
+	font-weight: 500;
+	color: #1d2327;
+}
+
+.configkit-bundle-component-row__remove {
+	border: 0;
+	background: transparent;
+	color: #646970;
+	cursor: pointer;
+	font-size: 16px;
+	padding: 6px 8px;
+	border-radius: 3px;
+}
+
+.configkit-bundle-component-row__remove:hover,
+.configkit-bundle-component-row__remove:focus {
+	color: #d63638;
+	background: #f6f7f7;
+	outline: none;
+}
+
+.configkit-bundle-component-row__bottom {
+	display: grid;
+	grid-template-columns: minmax( 140px, 1fr ) 2fr auto;
+	gap: 10px;
+	align-items: end;
+	border-top: 1px dashed #f0f0f1;
+	padding-top: 10px;
+}
+
+.configkit-bundle-component-row__bottom label {
+	font-size: 12px;
+	color: #50575e;
+}
+
+.configkit-bundle-component-row__stock {
+	font-size: 13px;
+	color: #1d2327;
+	white-space: nowrap;
+}
+
+@media ( max-width: 960px ) {
+
+	.configkit-bundle-component-row__top,
+	.configkit-bundle-component-row__bottom {
+		grid-template-columns: 1fr;
+	}
+}
