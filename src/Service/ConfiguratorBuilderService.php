@@ -49,19 +49,69 @@ final class ConfiguratorBuilderService {
 		private ?LibraryItemRepository $item_repo = null,
 		private ?ModuleRepository $module_repo = null,
 		private ?WooSkuResolver $woo_sku_resolver = null,
+		private ?SetupSourceResolver $source_resolver = null,
+		private ?SetupSourceState $setup_source_state = null,
 	) {}
 
 	/**
 	 * @return array<string,mixed>
 	 */
 	public function list_sections( int $product_id ): array {
+		// Half B: route through SetupSourceResolver when wired so
+		// use_preset / link_to_setup products get their effective
+		// view (with source / overridden_paths / option_overrides
+		// annotations) instead of the raw local section list. When
+		// no resolver is supplied (Half A test wiring) we keep the
+		// pre-resolver behavior so existing tests stay green.
+		if ( $this->source_resolver !== null ) {
+			$resolved = $this->source_resolver->resolve( $product_id );
+			return [
+				'ok'                => true,
+				'sections'          => $resolved['sections'],
+				'setup_source'      => $resolved['setup_source'],
+				'preset_id'         => $resolved['preset_id'],
+				'source_product_id' => $resolved['source_product_id'],
+				'preset'            => $resolved['preset'] !== null ? [
+					'id'           => (int) ( $resolved['preset']['id'] ?? 0 ),
+					'preset_key'   => (string) ( $resolved['preset']['preset_key'] ?? '' ),
+					'name'         => (string) ( $resolved['preset']['name'] ?? '' ),
+					'product_type' => $resolved['preset']['product_type'] ?? null,
+				] : null,
+			];
+		}
 		return [ 'ok' => true, 'sections' => $this->sections->list( $product_id ) ];
+	}
+
+	/**
+	 * Half B section-CRUD guard: builder operations that mutate the
+	 * local section list (create / delete / reorder / save_options /
+	 * save_ranges) must be refused when the product is not in
+	 * start_blank mode — preset and link products inherit their
+	 * structure and should be edited via overrides or by detaching
+	 * first.
+	 *
+	 * Returns null when the operation is allowed; otherwise an
+	 * array<string,mixed> the caller can return verbatim.
+	 *
+	 * @return array{ok:bool,message:string}|null
+	 */
+	private function guard_local_writes( int $product_id, string $verb = 'modify sections' ): ?array {
+		if ( $this->setup_source_state === null ) return null;
+		$ss = $this->setup_source_state->get( $product_id );
+		if ( $ss['setup_source'] === SetupSourceState::SOURCE_BLANK ) return null;
+		$readable = $ss['setup_source'] === SetupSourceState::SOURCE_PRESET ? 'preset' : 'linked source';
+		return [
+			'ok'      => false,
+			'message' => sprintf( 'This product inherits from a %s. Detach first to %s directly.', $readable, $verb ),
+		];
 	}
 
 	/**
 	 * @return array<string,mixed>
 	 */
 	public function create_section( int $product_id, string $type, ?string $label = null ): array {
+		$blocked = $this->guard_local_writes( $product_id, 'add sections' );
+		if ( $blocked !== null ) return $blocked;
 		$registry_entry = SectionTypeRegistry::find( $type );
 		if ( $registry_entry === null ) {
 			return [ 'ok' => false, 'message' => sprintf( 'Unknown section type "%s".', $type ) ];
@@ -130,6 +180,8 @@ final class ConfiguratorBuilderService {
 	 * @param array<string,mixed> $patch
 	 */
 	public function update_section( int $product_id, string $section_id, array $patch ): array {
+		$blocked = $this->guard_local_writes( $product_id, 'rename or change visibility on sections' );
+		if ( $blocked !== null ) return $blocked;
 		// Owners may only update the label and visibility through this
 		// endpoint — entity keys + type stay immutable to keep the
 		// auto-managed downstream entities stable.
@@ -153,6 +205,8 @@ final class ConfiguratorBuilderService {
 	}
 
 	public function delete_section( int $product_id, string $section_id ): array {
+		$blocked = $this->guard_local_writes( $product_id, 'remove sections' );
+		if ( $blocked !== null ) return $blocked;
 		$existing = $this->sections->find( $product_id, $section_id );
 		if ( $existing === null ) {
 			return [ 'ok' => false, 'message' => 'Section not found.' ];
@@ -179,6 +233,8 @@ final class ConfiguratorBuilderService {
 	 * @param list<string> $ordered_ids
 	 */
 	public function reorder_sections( int $product_id, array $ordered_ids ): array {
+		$blocked = $this->guard_local_writes( $product_id, 'reorder sections' );
+		if ( $blocked !== null ) return $blocked;
 		$ids = [];
 		foreach ( $ordered_ids as $id ) {
 			if ( is_string( $id ) && $id !== '' ) $ids[] = $id;
@@ -210,6 +266,8 @@ final class ConfiguratorBuilderService {
 	 * @return array{ok:bool, message?:string, errors?:list<array<string,mixed>>, section?:array<string,mixed>}
 	 */
 	public function save_range_rows( int $product_id, string $section_id, array $rows ): array {
+		$blocked = $this->guard_local_writes( $product_id, 'edit ranges' );
+		if ( $blocked !== null ) return $blocked;
 		if ( $this->lookup_cells === null || $this->lookup_cell_repo === null ) {
 			return [ 'ok' => false, 'message' => 'Range pricing is not wired in this environment.' ];
 		}
@@ -294,7 +352,7 @@ final class ConfiguratorBuilderService {
 	 * @return list<array<string,mixed>>
 	 */
 	public function read_range_rows( int $product_id, string $section_id ): array {
-		$section = $this->sections->find( $product_id, $section_id );
+		$section = $this->resolve_section_for_read( $product_id, $section_id );
 		if ( $section === null ) return [];
 		if ( is_array( $section['range_rows'] ?? null ) ) {
 			return $section['range_rows'];
@@ -328,6 +386,8 @@ final class ConfiguratorBuilderService {
 	 * @return array{ok:bool, message?:string, errors?:list<array<string,mixed>>, section?:array<string,mixed>}
 	 */
 	public function save_section_options( int $product_id, string $section_id, array $options ): array {
+		$blocked = $this->guard_local_writes( $product_id, 'edit options' );
+		if ( $blocked !== null ) return $blocked;
 		if ( $this->items === null || $this->item_repo === null || $this->library_repo === null ) {
 			return [ 'ok' => false, 'message' => 'Options are not wired in this environment.' ];
 		}
@@ -391,11 +451,46 @@ final class ConfiguratorBuilderService {
 	 */
 	public function read_section_options( int $product_id, string $section_id ): array {
 		if ( $this->item_repo === null ) return [];
-		$section = $this->sections->find( $product_id, $section_id );
+		$section = $this->resolve_section_for_read( $product_id, $section_id );
 		if ( $section === null ) return [];
 		$lib_key = (string) ( $section['library_key'] ?? '' );
 		if ( $lib_key === '' ) return [];
-		return $this->item_repo->list_in_library( $lib_key, 1, 1000 )['items'] ?? [];
+		$items = $this->item_repo->list_in_library( $lib_key, 1, 1000 )['items'] ?? [];
+		// In use_preset / link mode the resolver attached
+		// option_overrides for hidden + price overrides; surface them
+		// inline so the UI can render the per-option indicator + the
+		// effective (overridden) price without a second resolve.
+		$option_overrides = is_array( $section['option_overrides'] ?? null ) ? $section['option_overrides'] : [];
+		if ( count( $option_overrides ) > 0 ) {
+			foreach ( $items as $i => $item ) {
+				$key = (string) ( $item['item_key'] ?? '' );
+				if ( $key !== '' && isset( $option_overrides[ $key ] ) ) {
+					$o = $option_overrides[ $key ];
+					if ( ! empty( $o['is_hidden'] ) ) $items[ $i ]['is_hidden_by_override'] = true;
+					if ( isset( $o['price'] ) )      $items[ $i ]['overridden_price'] = (float) $o['price'];
+				}
+			}
+		}
+		return $items;
+	}
+
+	/**
+	 * Find a section regardless of whether it lives in the local
+	 * SectionListState (start_blank) or is synthesized by the
+	 * SetupSourceResolver (use_preset / link). Used by the read
+	 * paths so the Phase 4.4 modal editors keep working in every
+	 * mode.
+	 *
+	 * @return array<string,mixed>|null
+	 */
+	private function resolve_section_for_read( int $product_id, string $section_id ): ?array {
+		if ( $this->source_resolver !== null ) {
+			$resolved = $this->source_resolver->resolve_sections( $product_id );
+			foreach ( $resolved as $row ) {
+				if ( ( $row['id'] ?? '' ) === $section_id ) return $row;
+			}
+		}
+		return $this->sections->find( $product_id, $section_id );
 	}
 
 	/**

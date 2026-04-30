@@ -398,25 +398,13 @@ final class Plugin {
 		$pb_registry = new AutoManagedRegistry();
 		$pb_state    = new ProductBuilderState();
 		$section_state = new SectionListState();
-		$router->add( new ConfiguratorBuilderController( new ConfiguratorBuilderService(
-			$section_state,
-			$pb_state,
-			$pb_registry,
-			new LookupTableService( $lookup_repo, $cell_repo ),
-			$lookup_repo,
-			new ModuleService( $module_repo ),
-			new LibraryService( $library_repo, $module_repo ),
-			$library_repo,
-			new LookupCellService( $cell_repo, $lookup_repo ),
-			$cell_repo,
-			new LibraryItemService( $item_repo, $library_repo, $module_repo ),
-			$item_repo,
-			$module_repo,
-			new WooSkuResolverImpl()
-		) ) );
-		$preset_repo     = new PresetRepository( $wpdb );
-		$setup_source_state = new SetupSourceState();
-		$override_applier   = new OverrideApplier();
+
+		// Phase 4.3b — preset entity + setup-source resolver wired up
+		// FIRST so the Phase 4.4 ConfiguratorBuilderService can take
+		// the resolver as a dependency.
+		$preset_repo           = new PresetRepository( $wpdb );
+		$setup_source_state    = new SetupSourceState();
+		$override_applier      = new OverrideApplier();
 		$setup_source_resolver = new SetupSourceResolver(
 			$setup_source_state,
 			$section_state,
@@ -437,6 +425,25 @@ final class Plugin {
 			new LookupTableService( $lookup_repo, $cell_repo ),
 			$lookup_repo,
 		);
+
+		$router->add( new ConfiguratorBuilderController( new ConfiguratorBuilderService(
+			$section_state,
+			$pb_state,
+			$pb_registry,
+			new LookupTableService( $lookup_repo, $cell_repo ),
+			$lookup_repo,
+			new ModuleService( $module_repo ),
+			new LibraryService( $library_repo, $module_repo ),
+			$library_repo,
+			new LookupCellService( $cell_repo, $lookup_repo ),
+			$cell_repo,
+			new LibraryItemService( $item_repo, $library_repo, $module_repo ),
+			$item_repo,
+			$module_repo,
+			new WooSkuResolverImpl(),
+			$setup_source_resolver,
+			$setup_source_state
+		) ) );
 		$router->add( new PresetsController( $preset_service ) );
 		$router->add( new ProductBuilderController(
 			new ProductBuilderService(
