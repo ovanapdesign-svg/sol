@@ -74,6 +74,14 @@ final class AssetLoader {
 				$this->version,
 				true
 			);
+			// Phase 4.4 — Yith-style Configurator Builder (primary).
+			\wp_enqueue_script(
+				'configkit-configurator-builder',
+				$this->plugin_url . 'assets/admin/js/configurator-builder.js',
+				[ 'configkit-admin', 'configkit-woo-product-picker' ],
+				$this->version,
+				true
+			);
 			// WordPress media picker for fabric / control / motor
 			// images — only loaded on the product edit screen.
 			if ( function_exists( 'wp_enqueue_media' ) ) {

@@ -55,17 +55,29 @@ final class WooIntegration {
 			[ 'label' => 'ConfigKit' ],
 		] );
 
-		// Phase 4.3 dalis 2 — Simple Mode Product Builder mounts here
-		// by default. Owners click "Show advanced settings" inside
-		// the builder header to swap to the existing binding view.
-		echo '<div id="configkit-product-builder-app" class="configkit-app configkit-product-builder" data-loading="true" data-product-id="'
+		// Phase 4.4 — Yith-style Configurator Builder is the primary
+		// view. Owners click "Show advanced settings" inside the
+		// builder header to swap to the legacy binding view (which
+		// still mounts below, hidden by default).
+		echo '<div id="configkit-configurator-builder-app" class="configkit-app configkit-configurator-builder" data-loading="true" data-product-id="'
 			. \esc_attr( (string) $product_id ) . '">';
+		echo '<noscript><p>' . \esc_html__( 'JavaScript is required to use the Configurator Builder.', 'configkit' ) . '</p></noscript>';
+		echo '<p class="configkit-app__loading">' . \esc_html__( 'Loading configurator…', 'configkit' ) . '</p>';
+		echo '</div>';
+
+		// Phase 4.3 dalis 2 — Simple Mode Product Builder kept as a
+		// secondary view for backward compat. The Yith-style builder
+		// above supersedes it; we leave the mount in place so the
+		// previous JS bundle still has somewhere to attach if older
+		// browsers cache it. Hidden by default.
+		echo '<div id="configkit-product-builder-app" class="configkit-app configkit-product-builder" data-loading="true" data-product-id="'
+			. \esc_attr( (string) $product_id ) . '" hidden>';
 		echo '<noscript><p>' . \esc_html__( 'JavaScript is required to use Product Builder.', 'configkit' ) . '</p></noscript>';
 		echo '<p class="configkit-app__loading">' . \esc_html__( 'Loading product builder…', 'configkit' ) . '</p>';
 		echo '</div>';
 
 		// Existing 8-section advanced mode — hidden by default;
-		// product-builder.js toggles visibility.
+		// configurator-builder.js toggles visibility.
 		echo '<div id="configkit-product-binding-app" class="configkit-app configkit-app--advanced" data-loading="true" data-product-id="'
 			. \esc_attr( (string) $product_id ) . '" hidden>';
 		echo '<noscript><p>' . \esc_html__( 'JavaScript is required to manage ConfigKit binding.', 'configkit' ) . '</p></noscript>';
