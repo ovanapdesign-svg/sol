@@ -51,6 +51,7 @@ use ConfigKit\Repository\LogRepository;
 use ConfigKit\Repository\LookupCellRepository;
 use ConfigKit\Repository\LookupTableRepository;
 use ConfigKit\Repository\ModuleRepository;
+use ConfigKit\Repository\PresetRepository;
 use ConfigKit\Repository\ProductBindingRepository;
 use ConfigKit\Repository\RuleRepository;
 use ConfigKit\Repository\StepRepository;
@@ -70,6 +71,7 @@ use ConfigKit\Rest\Controllers\ProductsController;
 use ConfigKit\Rest\Controllers\RulesController;
 use ConfigKit\Rest\Controllers\StepsController;
 use ConfigKit\Rest\Controllers\ConfiguratorBuilderController;
+use ConfigKit\Rest\Controllers\PresetsController;
 use ConfigKit\Rest\Controllers\ProductBuilderController;
 use ConfigKit\Rest\Controllers\TemplatesController;
 use ConfigKit\Rest\Controllers\TemplateVersionsController;
@@ -91,6 +93,7 @@ use ConfigKit\Service\RuleService;
 use ConfigKit\Service\StepService;
 use ConfigKit\Service\AutoManagedRegistry;
 use ConfigKit\Service\ConfiguratorBuilderService;
+use ConfigKit\Service\PresetService;
 use ConfigKit\Service\ProductBuilderService;
 use ConfigKit\Service\ProductBuilderState;
 use ConfigKit\Service\SectionListState;
@@ -406,6 +409,13 @@ final class Plugin {
 			$item_repo,
 			$module_repo,
 			new WooSkuResolverImpl()
+		) ) );
+		$preset_repo = new PresetRepository( $wpdb );
+		$router->add( new PresetsController( new PresetService(
+			$preset_repo,
+			$section_state,
+			$library_repo,
+			$lookup_repo,
 		) ) );
 		$router->add( new ProductBuilderController(
 			new ProductBuilderService(
