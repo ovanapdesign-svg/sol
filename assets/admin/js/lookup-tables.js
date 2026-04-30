@@ -6,10 +6,15 @@
 	if ( ! root ) return;
 
 	const MATCH_MODES = [
-		[ 'exact', 'exact' ],
-		[ 'round_up', 'round_up (default)' ],
-		[ 'nearest', 'nearest' ],
+		[ 'exact', 'Exact match (must equal)' ],
+		[ 'round_up', 'Round up to next size (recommended)' ],
+		[ 'nearest', 'Closest size' ],
 	];
+
+	function friendlyMatchMode( id ) {
+		const found = MATCH_MODES.find( ( pair ) => pair[ 0 ] === id );
+		return found ? found[ 1 ] : ( id || '—' );
+	}
 
 	const UNITS = [
 		[ 'mm', 'mm' ],
@@ -462,7 +467,7 @@
 					'tr',
 					null,
 					el( 'th', null, 'Name' ),
-					el( 'th', null, 'lookup_table_key' ),
+					el( 'th', null, 'Technical key' ),
 					el( 'th', null, 'Family' ),
 					el( 'th', null, 'Match mode' ),
 					el( 'th', null, 'Unit' ),
@@ -491,9 +496,9 @@
 						t.name
 					)
 				),
-				el( 'td', { 'data-label': 'lookup_table_key' }, el( 'code', null, t.lookup_table_key ) ),
+				el( 'td', { 'data-label': 'Technical key' }, el( 'code', null, t.lookup_table_key ) ),
 				el( 'td', { 'data-label': 'Family' }, t.family_key || '—' ),
-				el( 'td', { 'data-label': 'Match mode' }, t.match_mode ),
+				el( 'td', { 'data-label': 'Match mode' }, friendlyMatchMode( t.match_mode ) ),
 				el( 'td', { 'data-label': 'Unit' }, t.unit ),
 				el(
 					'td',
@@ -532,14 +537,14 @@
 					render();
 				}
 			} ),
-			textField( 'lookup_table_key', 'lookup_table_key', rec.lookup_table_key, ( v ) => {
+			textField( 'Technical key', 'lookup_table_key', rec.lookup_table_key, ( v ) => {
 				rec.lookup_table_key = v;
 				state.dirty = true;
 			}, {
 				mono: true,
 				help: isNew
-					? 'Lowercase, snake_case, max 64 chars. Locked after save.'
-					: 'lookup_table_key is immutable after a table is saved.',
+					? 'Used internally to reference this table from products and rules. Lowercase, snake_case, max 64 chars. Locked after save.'
+					: 'Technical key is immutable after a table is saved.',
 				warnings: ( isNew && window.ConfigKit && window.ConfigKit.softKeyWarnings )
 					? window.ConfigKit.softKeyWarnings( rec.lookup_table_key, {
 						hint: 'try {product}_{dimensions}_v{n}, e.g. markise_2d_v1',
@@ -548,7 +553,7 @@
 					: [],
 			} ),
 			isNew ? null : el( 'p', { class: 'description' }, 'lookup_table_key cannot be changed.' ),
-			textField( 'Family key (optional)', 'family_key', rec.family_key || '', ( v ) => {
+			textField( 'Family (optional)', 'family_key', rec.family_key || '', ( v ) => {
 				rec.family_key = v;
 				state.dirty = true;
 			} ),
@@ -563,7 +568,7 @@
 				rec.match_mode = v;
 				state.dirty = true;
 			}, 'How the engine picks a cell:\n• exact — width and height must match a row exactly.\n• round_up — pick the smallest cell that is ≥ both dimensions.\n• nearest — pick the closest cell by absolute distance.' ),
-			checkboxField( 'Supports price group', 'supports_price_group', !! rec.supports_price_group, ( v ) => {
+			checkboxField( 'Uses price groups', 'supports_price_group', !! rec.supports_price_group, ( v ) => {
 				rec.supports_price_group = v;
 				state.dirty = true;
 			}, 'Enables a third axis (e.g. fabric grade I / II / III) so the same width/height can resolve to different prices.' ),
@@ -676,7 +681,7 @@
 				editForm.name = v;
 				state.dirty = true;
 			} ),
-			textField( 'Family key', 'family_key', editForm.family_key || '', ( v ) => {
+			textField( 'Family', 'family_key', editForm.family_key || '', ( v ) => {
 				editForm.family_key = v;
 				state.dirty = true;
 			} ),
@@ -690,7 +695,7 @@
 				editForm.match_mode = v;
 				state.dirty = true;
 			}, 'How the engine picks a cell:\n• exact — width and height must match a row exactly.\n• round_up — pick the smallest cell that is ≥ both dimensions.\n• nearest — pick the closest cell by absolute distance.' ),
-			checkboxField( 'Supports price group', 'supports_price_group', !! editForm.supports_price_group, ( v ) => {
+			checkboxField( 'Uses price groups', 'supports_price_group', !! editForm.supports_price_group, ( v ) => {
 				editForm.supports_price_group = v;
 				state.dirty = true;
 			}, 'Enables a third axis (e.g. fabric grade I / II / III) so the same width/height can resolve to different prices.' ),

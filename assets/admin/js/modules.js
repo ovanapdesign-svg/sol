@@ -8,18 +8,18 @@
 	}
 
 	const CAPABILITY_FLAGS = [
-		[ 'supports_sku', 'SKU', 'Each item has a unique product code (e.g. DICK-U171).' ],
-		[ 'supports_image', 'Thumbnail image', 'Items can have a small thumbnail image.' ],
-		[ 'supports_main_image', 'Hero / main image', 'Items can have a large hero/main image for detail views.' ],
-		[ 'supports_price', 'Price', 'Items have a base price (numeric).' ],
-		[ 'supports_sale_price', 'Sale price', 'Items can have a discounted sale price alongside the base price.' ],
-		[ 'supports_filters', 'Filter tags', 'Items can be filtered by tags such as "blackout" or "waterproof".' ],
-		[ 'supports_compatibility', 'Compatibility tags', 'Items have compatibility tags (e.g. "io_protocol", "z_wave").' ],
-		[ 'supports_price_group', 'Price group', 'Items belong to a price group (e.g. I, II, III) used by lookup tables.' ],
-		[ 'supports_brand', 'Brand', 'Items have a brand label (e.g. "Dickson").' ],
-		[ 'supports_collection', 'Collection', 'Items belong to a collection (e.g. "Orchestra Max").' ],
-		[ 'supports_color_family', 'Color family', 'Items have a color family (e.g. "blue", "green") for grouping in pickers.' ],
-		[ 'supports_woo_product_link', 'Linked Woo product', 'Each item links to an existing WooCommerce product.' ],
+		[ 'supports_sku', 'Item has a unique code (SKU)', 'A short identifier such as DICK-U171.' ],
+		[ 'supports_image', 'Item has a thumbnail image', 'Small image shown in pickers and carts.' ],
+		[ 'supports_main_image', 'Item has a large hero image', 'Big image shown in the detail view.' ],
+		[ 'supports_price', 'Item has a price', 'Base price stored on the item.' ],
+		[ 'supports_sale_price', 'Item can have a sale price', 'Discounted price alongside the base price.' ],
+		[ 'supports_filters', 'Items can be filtered by tags', 'Tags like "blackout" or "waterproof" used by frontend filters.' ],
+		[ 'supports_compatibility', 'Items have compatibility/rule tags', 'Tags like "io_protocol" used by rules.' ],
+		[ 'supports_price_group', 'Items belong to price groups (I, II, III)', 'Bucket key used by lookup tables to pick a row.' ],
+		[ 'supports_brand', 'Item has a brand name', 'Brand label like "Dickson".' ],
+		[ 'supports_collection', 'Item has a collection name', 'Collection label like "Orchestra Max".' ],
+		[ 'supports_color_family', 'Item has a color family', 'Group label like "blue" or "green" for color filtering.' ],
+		[ 'supports_woo_product_link', 'Item links to a WooCommerce product', 'Used to map items to existing Woo product IDs.' ],
 	];
 
 	const FIELD_KINDS = [
@@ -491,7 +491,7 @@
 					'tr',
 					null,
 					el( 'th', null, 'Name' ),
-					el( 'th', null, 'module_key' ),
+					el( 'th', null, 'Technical key' ),
 					el( 'th', null, 'Capabilities' ),
 					el( 'th', null, 'Field kinds' ),
 					el( 'th', null, 'Status' ),
@@ -526,7 +526,7 @@
 							m.name
 						)
 					),
-					el( 'td', { 'data-label': 'module_key' }, el( 'code', null, m.module_key ) ),
+					el( 'td', { 'data-label': 'Technical key' }, el( 'code', null, m.module_key ) ),
 					el( 'td', { 'data-label': 'Capabilities' }, capCount + ' / ' + CAPABILITY_FLAGS.length ),
 					el(
 						'td',
@@ -603,12 +603,12 @@
 					render();
 				}
 			} ),
-			textField( 'module_key', 'module_key', rec.module_key, ( v ) => {
+			textField( 'Technical key', 'module_key', rec.module_key, ( v ) => {
 				rec.module_key = v;
 				state.dirty = true;
 			}, {
 				mono: true,
-				help: 'Lowercase, snake_case, max 64 chars. Once saved this is the stable identity for libraries and rules.',
+				help: 'Used internally to reference this module from libraries and rules. Lowercase, snake_case, max 64 chars.',
 				warnings: window.ConfigKit && window.ConfigKit.softKeyWarnings
 					? window.ConfigKit.softKeyWarnings( rec.module_key, {
 						hint: 'try {brand}_{kind} format, e.g. textiles_dickson',
@@ -629,7 +629,7 @@
 				state.dirty = true;
 			}, help )
 		);
-		wrap.appendChild( fieldset( 'Capabilities', [
+		wrap.appendChild( fieldset( 'What items in this module can store', [
 			el(
 				'div',
 				{ class: 'configkit-grid configkit-grid--3' },
@@ -652,7 +652,7 @@
 				help
 			)
 		);
-		wrap.appendChild( fieldset( 'Allowed field kinds', [
+		wrap.appendChild( fieldset( 'Where this module can be used', [
 			el(
 				'div',
 				{ class: 'configkit-grid configkit-grid--5' },

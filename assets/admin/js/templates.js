@@ -933,7 +933,7 @@
 					'tr',
 					null,
 					el( 'th', null, 'Name' ),
-					el( 'th', null, 'template_key' ),
+					el( 'th', null, 'Technical key' ),
 					el( 'th', null, 'Family' ),
 					el( 'th', null, 'Status' ),
 					el( 'th', null, 'Published version' ),
@@ -963,7 +963,7 @@
 						t.name
 					)
 				),
-				el( 'td', { 'data-label': 'template_key' }, el( 'code', null, t.template_key ) ),
+				el( 'td', { 'data-label': 'Technical key' }, el( 'code', null, t.template_key ) ),
 				el( 'td', { 'data-label': 'Family' }, t.family_key || '—' ),
 				el(
 					'td',
@@ -1011,15 +1011,15 @@
 					render();
 				}
 			} ),
-			textField( 'template_key', 'template_key', rec.template_key, ( v ) => {
+			textField( 'Technical key', 'template_key', rec.template_key, ( v ) => {
 				rec.template_key = v;
 				state.dirty = true;
 			}, {
 				mono: true,
 				disabled: ! isNew,
 				help: isNew
-					? 'Lowercase, snake_case, 3–64 chars. Locked after save.'
-					: 'template_key is immutable after a template is saved.',
+					? 'Used internally by rules and bindings. Lowercase, snake_case, 3–64 chars. Locked after save.'
+					: 'Technical key is immutable after a template is saved.',
 				warnings: ( isNew && window.ConfigKit && window.ConfigKit.softKeyWarnings )
 					? window.ConfigKit.softKeyWarnings( rec.template_key, {
 						hint: 'try {product}_{variant}, e.g. markise_motorisert',

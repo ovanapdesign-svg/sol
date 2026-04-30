@@ -286,7 +286,7 @@
 					'tr',
 					null,
 					el( 'th', null, 'Name' ),
-					el( 'th', null, 'family_key' ),
+					el( 'th', null, 'Technical key' ),
 					el( 'th', null, 'Status' ),
 					el( 'th', { class: 'configkit-actions' }, '' )
 				)
@@ -312,7 +312,7 @@
 						f.name
 					)
 				),
-				el( 'td', { 'data-label': 'family_key' }, el( 'code', null, f.family_key ) ),
+				el( 'td', { 'data-label': 'Technical key' }, el( 'code', null, f.family_key ) ),
 				el(
 					'td',
 					{ 'data-label': 'Status' },
@@ -350,15 +350,15 @@
 					render();
 				}
 			} ),
-			textField( 'family_key', 'family_key', rec.family_key, ( v ) => {
+			textField( 'Technical key', 'family_key', rec.family_key, ( v ) => {
 				rec.family_key = v;
 				state.dirty = true;
 			}, {
 				mono: true,
 				disabled: ! isNew,
 				help: isNew
-					? 'Lowercase, snake_case, 3–64 chars. Locked after save.'
-					: 'family_key is immutable after a family is saved.',
+					? 'Used internally to reference this family from templates and products. Lowercase, snake_case, 3–64 chars. Locked after save.'
+					: 'Technical key is immutable after a family is saved.',
 				warnings: ( isNew && window.ConfigKit && window.ConfigKit.softKeyWarnings )
 					? window.ConfigKit.softKeyWarnings( rec.family_key, {
 						hint: 'try a noun specific to the product family, e.g. markiser_motor',

@@ -538,7 +538,7 @@
 						'tr',
 						null,
 						el( 'th', null, 'Name' ),
-						el( 'th', null, 'library_key' ),
+						el( 'th', null, 'Technical key' ),
 						el( 'th', null, 'Brand' ),
 						el( 'th', null, 'Collection' ),
 						el( 'th', null, 'Status' ),
@@ -566,7 +566,7 @@
 							lib.name
 						)
 					),
-					el( 'td', { 'data-label': 'library_key' }, el( 'code', null, lib.library_key ) ),
+					el( 'td', { 'data-label': 'Technical key' }, el( 'code', null, lib.library_key ) ),
 					el( 'td', { 'data-label': 'Brand' }, lib.brand || '—' ),
 					el( 'td', { 'data-label': 'Collection' }, lib.collection || '—' ),
 					el(
@@ -658,11 +658,12 @@
 					render();
 				}
 			} ),
-			textField( 'library_key', 'library_key', rec.library_key, ( v ) => {
+			textField( 'Technical key', 'library_key', rec.library_key, ( v ) => {
 				rec.library_key = v;
 				state.dirty = true;
 			}, {
 				mono: true,
+				help: 'Used internally to reference this library from items and rules. Lowercase, snake_case.',
 				warnings: ( isNew && window.ConfigKit && window.ConfigKit.softKeyWarnings )
 					? window.ConfigKit.softKeyWarnings( rec.library_key, {
 						hint: 'try {module}_{brand}, e.g. textiles_dickson',
@@ -922,7 +923,7 @@
 		// for owners who don't think in technical capabilities.
 		const props = [];
 		if ( module.supports_sku ) {
-			props.push( textField( 'SKU', 'sku', rec.sku || '', ( v ) => {
+			props.push( textField( 'Unique code (SKU)', 'sku', rec.sku || '', ( v ) => {
 				rec.sku = v;
 				state.dirty = true;
 			}, { mono: true, tooltip: 'Unique product code, e.g. DICK-U171.' } ) );
@@ -952,7 +953,7 @@
 			}, { allowFloat: true, tooltip: 'Discounted price. Leave 0 / blank for no sale.' } ) );
 		}
 		if ( module.supports_price_group ) {
-			props.push( textField( 'Price group key', 'price_group_key', rec.price_group_key || '', ( v ) => {
+			props.push( textField( 'Price group (I, II, III…)', 'price_group_key', rec.price_group_key || '', ( v ) => {
 				rec.price_group_key = v;
 				state.dirty = true;
 			}, { mono: true, tooltip: 'Bucket key (I, II, III…) used by lookup tables to pick a row.' } ) );
@@ -976,7 +977,7 @@
 		// Tags
 		const tagFields = [];
 		if ( module.supports_filters ) {
-			tagFields.push( tagsField( 'Filter tags', 'filters', rec.filters || [], ( arr ) => {
+			tagFields.push( tagsField( 'Filter tags (comma-separated)', 'filters', rec.filters || [], ( arr ) => {
 				rec.filters = arr;
 				state.dirty = true;
 			} ) );
