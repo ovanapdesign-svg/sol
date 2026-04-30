@@ -787,6 +787,495 @@
 	}
 
 	// =========================================================
+	// Block 5 — Operation mode
+	// =========================================================
+
+	function renderBlockOperation() {
+		const block = blockShell( 'operation', '5. How is the product operated?', 'Pick once. The customer-facing flow shows the right options.' );
+		const current = state.snapshot.state.operation_mode || '';
+		const options = [
+			{ id: 'manual_only',    label: 'Manual only',     hint: 'Customer only sees stang / sveiv options.' },
+			{ id: 'motorized_only', label: 'Motorized only',  hint: 'Customer only sees motor options.' },
+			{ id: 'both',           label: 'Both — customer chooses', hint: 'Customer picks between manual and motorized; we render the matching options.' },
+		];
+		const grid = el( 'div', { class: 'configkit-pb__operation-grid' } );
+		options.forEach( ( opt ) => {
+			const card = el( 'button', {
+				type:  'button',
+				class: 'configkit-pb__operation-card' + ( opt.id === current ? ' is-selected' : '' ),
+				disabled: state.busy,
+				onClick: () => saveOperationMode( opt.id ),
+			} );
+			card.appendChild( el( 'span', { class: 'configkit-pb__operation-label' }, opt.label ) );
+			card.appendChild( el( 'span', { class: 'configkit-pb__operation-hint' }, opt.hint ) );
+			grid.appendChild( card );
+		} );
+		block.appendChild( grid );
+		if ( current === 'both' ) {
+			block.appendChild( el( 'p', { class: 'description configkit-pb__form-hint' },
+				'When the customer picks "Manual" we hide motor options; when they pick "Motorized" we hide stang options. The orchestrator manages those rules silently.'
+			) );
+		}
+		return block;
+	}
+
+	async function saveOperationMode( mode ) {
+		try {
+			const result = await pbRequest( '/operation-mode', { method: 'POST', body: { mode } } );
+			showMessage( 'success', ( result && result.message ) || 'Operation mode saved.' );
+			await loadSnapshot();
+			render();
+		} catch ( err ) {
+			showMessage( 'error', explainError( err ) );
+			render();
+		}
+	}
+
+	// =========================================================
+	// Block 6 — Stang options (manual operation)
+	// =========================================================
+
+	function renderBlockStang() {
+		const block = blockShell( 'stang', '6. Stang / sveiv options', 'Manual cranks the customer can pick from.' );
+
+		if ( ! Array.isArray( state.drafts.stangs ) ) {
+			state.drafts.stangs = ( state.snapshot.stangs || [] ).map( ( s ) => ( {
+				name:      s.label || '',
+				code:      s.sku || '',
+				length_cm: ( s.attributes && s.attributes.length_cm ) || '',
+				price:     s.price || '',
+				image_url: s.image_url || '',
+				active:    !! s.is_active,
+			} ) );
+			if ( state.drafts.stangs.length === 0 ) state.drafts.stangs.push( blankStang() );
+		}
+
+		const list = el( 'div', { class: 'configkit-pb__card-list' } );
+		state.drafts.stangs.forEach( ( s, i ) => list.appendChild( renderStangCard( s, i ) ) );
+
+		const footer = el( 'div', { class: 'configkit-pb__row-actions' },
+			el( 'button', {
+				type: 'button',
+				class: 'button',
+				onClick: () => {
+					readStangDraftFromDOM();
+					state.drafts.stangs.push( blankStang() );
+					render();
+				},
+			}, '+ Add stang' ),
+			el( 'button', {
+				type: 'button',
+				class: 'button button-primary',
+				disabled: state.busy,
+				onClick: saveStangs,
+			}, state.busy ? 'Saving…' : 'Save stang options' )
+		);
+		block.appendChild( list );
+		block.appendChild( footer );
+
+		const count = state.snapshot.stangs.length;
+		block.appendChild( el( 'p', { class: 'configkit-pb__count' }, count + ' stang option' + ( count === 1 ? '' : 's' ) + ' configured.' ) );
+		return block;
+	}
+
+	function blankStang() {
+		return { name: '', code: '', length_cm: '', price: '', image_url: '', active: true };
+	}
+
+	function renderStangCard( stang, index ) {
+		const card = el( 'div', { class: 'configkit-pb__card', 'data-block-card': 'stang' } );
+		card.appendChild( imageCellFor( stang, () => render() ) );
+
+		const fields = el( 'div', { class: 'configkit-pb__card-fields' } );
+		fields.appendChild( labelled( 'Name',          inputField( 'Standard 150', stang.name,      { field: 'name' } ) ) );
+		fields.appendChild( labelled( 'Code',          inputField( 'STG-150',      stang.code,      { field: 'code', cls: 'configkit-pb__input code' } ) ) );
+		fields.appendChild( labelled( 'Length (cm)',   inputField( '150',          stang.length_cm, { type: 'number', field: 'length_cm' } ) ) );
+		fields.appendChild( labelled( 'Price (kr)',    inputField( '800',          stang.price,     { type: 'number', step: '0.01', field: 'price' } ) ) );
+		card.appendChild( fields );
+
+		card.appendChild( deleteCell( () => {
+			readStangDraftFromDOM();
+			state.drafts.stangs.splice( index, 1 );
+			if ( state.drafts.stangs.length === 0 ) state.drafts.stangs.push( blankStang() );
+			render();
+		}, stang.active ) );
+		return card;
+	}
+
+	function readStangDraftFromDOM() {
+		const cards = root.querySelectorAll( '[data-block-card="stang"]' );
+		const out = [];
+		cards.forEach( ( card ) => {
+			out.push( {
+				name:      readStringFromCell( card, 'name' ),
+				code:      readStringFromCell( card, 'code' ),
+				length_cm: readNumberFromCell( card, 'length_cm' ),
+				price:     readNumberFromCell( card, 'price' ),
+				image_url: readStringFromCell( card, 'image_url' ),
+				active:    readCheckedFromCell( card, 'active' ),
+			} );
+		} );
+		state.drafts.stangs = out;
+	}
+
+	async function saveStangs() {
+		readStangDraftFromDOM();
+		const stangs = ( state.drafts.stangs || [] )
+			.filter( ( s ) => ( s.name || '' ).trim() !== '' )
+			.map( ( s ) => ( {
+				name:   s.name,
+				code:   s.code,
+				price:  s.price,
+				image_url: s.image_url,
+				active: s.active,
+				attributes: s.length_cm ? { length_cm: s.length_cm } : {},
+			} ) );
+		try {
+			const result = await pbRequest( '/stangs', { method: 'POST', body: { stangs } } );
+			showMessage( 'success', ( result && result.message ) || 'Stang options saved.' );
+			state.drafts.stangs = null;
+			await loadSnapshot();
+			render();
+		} catch ( err ) {
+			showMessage( 'error', explainError( err ) );
+			render();
+		}
+	}
+
+	// =========================================================
+	// Block 7 — Motor options (single + bundle)
+	// =========================================================
+
+	function renderBlockMotor() {
+		const block = blockShell( 'motor', '7. Motor options', 'Single motors and motor packages (bundles).' );
+		block.appendChild( tabBar( 'motors', [
+			{ id: 'single', label: 'Single motor' },
+			{ id: 'bundle', label: 'Motor package' },
+		] ) );
+
+		// Drafts hold both kinds; render filters by tab.
+		if ( ! Array.isArray( state.drafts.motors ) ) {
+			state.drafts.motors = ( state.snapshot.motors || [] ).map( motorRecordToDraft );
+			if ( state.drafts.motors.filter( ( m ) => ! m._bundle ).length === 0 ) {
+				state.drafts.motors.push( blankMotorSingle() );
+			}
+			if ( state.drafts.motors.filter( ( m ) => m._bundle ).length === 0 ) {
+				state.drafts.motors.push( blankMotorBundle() );
+			}
+		}
+
+		const tab = activeTab( 'motors', 'single' );
+		const filtered = state.drafts.motors.filter( ( m ) => ( !! m._bundle ) === ( tab === 'bundle' ) );
+		const list = el( 'div', { class: 'configkit-pb__card-list' } );
+		filtered.forEach( ( m ) => list.appendChild( tab === 'bundle' ? renderMotorBundleCard( m ) : renderMotorSingleCard( m ) ) );
+
+		const footer = el( 'div', { class: 'configkit-pb__row-actions' },
+			el( 'button', {
+				type: 'button',
+				class: 'button',
+				onClick: () => {
+					readMotorDraftFromDOM();
+					state.drafts.motors.push( tab === 'bundle' ? blankMotorBundle() : blankMotorSingle() );
+					render();
+				},
+			}, tab === 'bundle' ? '+ Add package' : '+ Add motor' ),
+			el( 'button', {
+				type: 'button',
+				class: 'button button-primary',
+				disabled: state.busy,
+				onClick: saveMotors,
+			}, state.busy ? 'Saving…' : ( tab === 'bundle' ? 'Save motor packages' : 'Save motors' ) )
+		);
+		block.appendChild( list );
+		block.appendChild( footer );
+
+		const count = state.snapshot.motors.length;
+		block.appendChild( el( 'p', { class: 'configkit-pb__count' }, count + ' motor option' + ( count === 1 ? '' : 's' ) + ' configured.' ) );
+		return block;
+	}
+
+	function motorRecordToDraft( m ) {
+		const isBundle = ( m.item_type === 'bundle' );
+		return {
+			_bundle:        isBundle,
+			_id:            m.id || null,
+			name:           m.label || '',
+			code:           m.sku || '',
+			price:          m.price || '',
+			image_url:      m.image_url || '',
+			active:         !! m.is_active,
+			woo_product_id: m.woo_product_id || 0,
+			price_source:   m.price_source || 'configkit',
+			components:     ( m.bundle_components || [] ).map( ( c ) => ( {
+				woo_product_id: c.woo_product_id || 0,
+				qty:            c.qty || 1,
+			} ) ),
+			fixed_price:    m.bundle_fixed_price || '',
+		};
+	}
+
+	function blankMotorSingle() {
+		return { _bundle: false, _id: null, name: '', code: '', price: '', image_url: '', active: true, woo_product_id: 0, price_source: 'woo', components: [], fixed_price: '' };
+	}
+
+	function blankMotorBundle() {
+		return { _bundle: true, _id: null, name: '', code: '', price: '', image_url: '', active: true, woo_product_id: 0, price_source: 'bundle_sum', components: [], fixed_price: '' };
+	}
+
+	function renderMotorSingleCard( motor ) {
+		const card = el( 'div', { class: 'configkit-pb__card', 'data-block-card': 'motor-single' } );
+		card.appendChild( imageCellFor( motor, () => render() ) );
+
+		const fields = el( 'div', { class: 'configkit-pb__card-fields' } );
+		fields.appendChild( labelled( 'Name', inputField( 'Sonesse 30 IO', motor.name, { field: 'name' } ) ) );
+		fields.appendChild( labelled( 'Code', inputField( 'SO30',          motor.code, { field: 'code', cls: 'configkit-pb__input code' } ) ) );
+
+		// Linked Woo product picker.
+		const pickerLabel = el( 'span', { class: 'configkit-pb__field-label' }, 'Linked Woo product' );
+		const pickerHost  = el( 'div', { class: 'configkit-pb__woo-picker' } );
+		fields.appendChild( el( 'label', { class: 'configkit-pb__field configkit-pb__field--wide' }, pickerLabel, pickerHost ) );
+		mountWooPicker( pickerHost, motor );
+
+		const sourceWrap = el( 'span', { class: 'configkit-pb__source-radio' } );
+		[ 'woo', 'configkit' ].forEach( ( v ) => {
+			const id = 'cf_motor_src_' + Math.random().toString( 36 ).slice( 2, 8 );
+			sourceWrap.appendChild( el( 'label', { class: 'configkit-pb__source-option' },
+				el( 'input', {
+					type: 'radio',
+					name: id,
+					value: v,
+					checked: ( motor.price_source || 'woo' ) === v,
+					'data-pb-field': 'price_source',
+					onChange: ( ev ) => {
+						motor.price_source = ev.target.value;
+						render();
+					},
+				} ),
+				v === 'woo' ? ' Use Woo product price' : ' Use custom price',
+			) );
+		} );
+		fields.appendChild( labelled( 'Price source', sourceWrap ) );
+
+		if ( motor.price_source === 'configkit' ) {
+			fields.appendChild( labelled( 'Custom price (kr)', inputField( '4500', motor.price, { type: 'number', step: '0.01', field: 'price' } ) ) );
+		}
+
+		// Hidden mirror so readMotorDraft picks up image + woo id.
+		card.appendChild( el( 'input', { type: 'hidden', 'data-pb-field': '_bundle', value: '0' } ) );
+
+		card.appendChild( fields );
+		card.appendChild( deleteCell( () => removeMotor( motor ), motor.active ) );
+		return card;
+	}
+
+	function renderMotorBundleCard( motor ) {
+		const card = el( 'div', { class: 'configkit-pb__card configkit-pb__card--bundle', 'data-block-card': 'motor-bundle' } );
+		card.appendChild( imageCellFor( motor, () => render() ) );
+
+		const fields = el( 'div', { class: 'configkit-pb__card-fields' } );
+		fields.appendChild( labelled( 'Package name', inputField( 'Premium pack', motor.name, { field: 'name' } ) ) );
+		fields.appendChild( labelled( 'Code',         inputField( 'PKG-PREM',     motor.code, { field: 'code', cls: 'configkit-pb__input code' } ) ) );
+
+		const sourceWrap = el( 'span', { class: 'configkit-pb__source-radio' } );
+		[ 'bundle_sum', 'fixed_bundle' ].forEach( ( v ) => {
+			const name = 'cf_pkg_src_' + Math.random().toString( 36 ).slice( 2, 8 );
+			sourceWrap.appendChild( el( 'label', { class: 'configkit-pb__source-option' },
+				el( 'input', {
+					type: 'radio',
+					name,
+					value: v,
+					checked: motor.price_source === v,
+					onChange: ( ev ) => { motor.price_source = ev.target.value; render(); },
+				} ),
+				v === 'bundle_sum' ? ' Sum of components' : ' Custom package price',
+			) );
+		} );
+		fields.appendChild( labelled( 'Price strategy', sourceWrap ) );
+
+		if ( motor.price_source === 'fixed_bundle' ) {
+			fields.appendChild( labelled( 'Fixed package price (kr)', inputField( '8990', motor.fixed_price, { type: 'number', step: '0.01', field: 'fixed_price' } ) ) );
+		}
+		card.appendChild( fields );
+
+		// Components rows.
+		const compsWrap = el( 'div', { class: 'configkit-pb__components' } );
+		compsWrap.appendChild( el( 'p', { class: 'configkit-pb__field-label' }, 'Components' ) );
+		motor.components.forEach( ( comp, ci ) => {
+			const row = el( 'div', { class: 'configkit-pb__component-row' } );
+			const pickerHost = el( 'div', { class: 'configkit-pb__woo-picker' } );
+			mountWooPicker( pickerHost, comp );
+			row.appendChild( pickerHost );
+			row.appendChild( inputField( '1', comp.qty, { type: 'number', field: 'qty', cls: 'configkit-pb__input configkit-pb__input--qty' } ) );
+			row.appendChild( el( 'button', {
+				type: 'button',
+				class: 'configkit-pb__row-remove',
+				'aria-label': 'Remove component',
+				onClick: () => {
+					readMotorDraftFromDOM();
+					motor.components.splice( ci, 1 );
+					render();
+				},
+			}, '✕' ) );
+			compsWrap.appendChild( row );
+		} );
+		compsWrap.appendChild( el( 'button', {
+			type: 'button',
+			class: 'button-link',
+			onClick: () => {
+				readMotorDraftFromDOM();
+				motor.components.push( { woo_product_id: 0, qty: 1 } );
+				render();
+			},
+		}, '+ Add component' ) );
+		card.appendChild( compsWrap );
+
+		card.appendChild( deleteCell( () => removeMotor( motor ), motor.active, 'Delete package' ) );
+		return card;
+	}
+
+	function removeMotor( motor ) {
+		readMotorDraftFromDOM();
+		const idx = state.drafts.motors.indexOf( motor );
+		if ( idx >= 0 ) state.drafts.motors.splice( idx, 1 );
+		if ( state.drafts.motors.filter( ( m ) => ! m._bundle ).length === 0 ) state.drafts.motors.push( blankMotorSingle() );
+		if ( state.drafts.motors.filter( ( m ) => m._bundle ).length === 0 )   state.drafts.motors.push( blankMotorBundle() );
+		render();
+	}
+
+	function readMotorDraftFromDOM() {
+		// Single motors.
+		const single = root.querySelectorAll( '[data-block-card="motor-single"]' );
+		const bundle = root.querySelectorAll( '[data-block-card="motor-bundle"]' );
+
+		// Reuse object identities from existing drafts so we don't lose
+		// woo picker selections that live on the JS object directly.
+		const existingSingle = state.drafts.motors.filter( ( m ) => ! m._bundle );
+		const existingBundle = state.drafts.motors.filter( ( m ) => m._bundle );
+		single.forEach( ( card, i ) => {
+			const m = existingSingle[ i ] || ( existingSingle[ i ] = blankMotorSingle() );
+			m.name        = readStringFromCell( card, 'name' );
+			m.code        = readStringFromCell( card, 'code' );
+			m.image_url   = readStringFromCell( card, 'image_url' );
+			m.active      = readCheckedFromCell( card, 'active' );
+			m.price       = readNumberFromCell( card, 'price' );
+			// price_source already updated by radio onChange handler.
+		} );
+		bundle.forEach( ( card, i ) => {
+			const m = existingBundle[ i ] || ( existingBundle[ i ] = blankMotorBundle() );
+			m.name        = readStringFromCell( card, 'name' );
+			m.code        = readStringFromCell( card, 'code' );
+			m.image_url   = readStringFromCell( card, 'image_url' );
+			m.active      = readCheckedFromCell( card, 'active' );
+			m.fixed_price = readNumberFromCell( card, 'fixed_price' );
+			// Read component qtys back into objects.
+			const rows = card.querySelectorAll( '.configkit-pb__component-row' );
+			rows.forEach( ( row, ci ) => {
+				if ( m.components[ ci ] ) {
+					m.components[ ci ].qty = readNumberFromCell( row, 'qty' ) || 1;
+				}
+			} );
+		} );
+		state.drafts.motors = existingSingle.concat( existingBundle );
+	}
+
+	async function saveMotors() {
+		readMotorDraftFromDOM();
+		const motors = ( state.drafts.motors || [] )
+			.filter( ( m ) => ( m.name || '' ).trim() !== '' )
+			.map( ( m ) => {
+				if ( m._bundle ) {
+					return {
+						name:        m.name,
+						code:        m.code,
+						active:      m.active,
+						image_url:   m.image_url,
+						components:  ( m.components || [] ).filter( ( c ) => c.woo_product_id > 0 ),
+						fixed_price: m.price_source === 'fixed_bundle' ? m.fixed_price : '',
+					};
+				}
+				return {
+					name:           m.name,
+					code:           m.code,
+					active:         m.active,
+					image_url:      m.image_url,
+					woo_product_id: m.woo_product_id,
+					price_source:   m.price_source,
+					price:          m.price_source === 'configkit' ? m.price : '',
+				};
+			} );
+		try {
+			const result = await pbRequest( '/motors', { method: 'POST', body: { motors } } );
+			showMessage( 'success', ( result && result.message ) || 'Motors saved.' );
+			state.drafts.motors = null;
+			await loadSnapshot();
+			render();
+		} catch ( err ) {
+			showMessage( 'error', explainError( err ) );
+			render();
+		}
+	}
+
+	// =========================================================
+	// Shared UI bits — image cell, delete cell, Woo picker mount
+	// =========================================================
+
+	function imageCellFor( target, onChange ) {
+		const wrap = el( 'div', { class: 'configkit-pb__card-image' } );
+		if ( target.image_url ) {
+			wrap.appendChild( el( 'img', { src: target.image_url, alt: '' } ) );
+		} else {
+			wrap.appendChild( el( 'span', { class: 'configkit-pb__image-placeholder' }, '🖼' ) );
+		}
+		wrap.appendChild( el( 'button', {
+			type: 'button',
+			class: 'button button-small',
+			onClick: () => pickImageInto( target, 'image_url', onChange ),
+		}, target.image_url ? 'Change image' : 'Set image' ) );
+		wrap.appendChild( el( 'input', {
+			type: 'hidden',
+			'data-pb-field': 'image_url',
+			value: target.image_url || '',
+		} ) );
+		return wrap;
+	}
+
+	function deleteCell( onDelete, isActive, label ) {
+		const meta = el( 'div', { class: 'configkit-pb__card-meta' } );
+		meta.appendChild( el( 'label', null,
+			el( 'input', { type: 'checkbox', 'data-pb-field': 'active', checked: !! isActive } ),
+			' Active'
+		) );
+		meta.appendChild( el( 'button', {
+			type: 'button',
+			class: 'button-link configkit-pb__card-remove',
+			onClick: onDelete,
+		}, label || 'Delete' ) );
+		return meta;
+	}
+
+	function mountWooPicker( host, target ) {
+		if ( ! window.ConfigKit || ! window.ConfigKit.createWooProductPicker ) {
+			host.appendChild( el( 'em', null, 'Picker unavailable.' ) );
+			return;
+		}
+		// If the target already has a woo_product_id we'd ideally pass
+		// initial = { id, name, ... } but we don't have the name yet;
+		// the picker self-hydrates via /woo-products/{id} in a future
+		// chunk. For now we just display "#id" as the placeholder.
+		const initial = target.woo_product_id && target.woo_product_id > 0
+			? { id: target.woo_product_id, name: '#' + target.woo_product_id }
+			: null;
+		window.ConfigKit.createWooProductPicker( {
+			mount: host,
+			initial,
+			placeholder: 'Search WooCommerce product…',
+			onChange: ( selection ) => {
+				target.woo_product_id = selection ? selection.id : 0;
+			},
+		} );
+	}
+
+	// =========================================================
 	// Image picker — wp.media bridge
 	// =========================================================
 
@@ -835,8 +1324,15 @@
 		const recipe = currentRecipe();
 		if ( ! recipe ) return;
 
-		if ( recipe.blocks.indexOf( 'pricing' ) >= 0 ) root.appendChild( renderBlockPricing() );
-		if ( recipe.blocks.indexOf( 'fabrics' ) >= 0 ) root.appendChild( renderBlockFabrics() );
+		if ( recipe.blocks.indexOf( 'pricing' )    >= 0 ) root.appendChild( renderBlockPricing() );
+		if ( recipe.blocks.indexOf( 'fabrics' )    >= 0 ) root.appendChild( renderBlockFabrics() );
+		if ( recipe.blocks.indexOf( 'operation' )  >= 0 ) root.appendChild( renderBlockOperation() );
+
+		const mode = state.snapshot.state.operation_mode || '';
+		const showStang = recipe.blocks.indexOf( 'stang' ) >= 0 && ( mode === 'manual_only' || mode === 'both' );
+		const showMotor = recipe.blocks.indexOf( 'motor' ) >= 0 && ( mode === 'motorized_only' || mode === 'both' );
+		if ( showStang ) root.appendChild( renderBlockStang() );
+		if ( showMotor ) root.appendChild( renderBlockMotor() );
 	}
 
 	function currentRecipe() {

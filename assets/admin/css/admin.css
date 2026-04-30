@@ -3111,6 +3111,91 @@
 	color: #d63638 !important;
 }
 
+/* Operation mode cards (Block 5) */
+.configkit-pb__operation-grid {
+	display: grid;
+	grid-template-columns: repeat( auto-fit, minmax( 220px, 1fr ) );
+	gap: 10px;
+}
+
+.configkit-pb__operation-card {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 12px 14px;
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+	background: #fff;
+	cursor: pointer;
+	text-align: left;
+}
+
+.configkit-pb__operation-card:hover, .configkit-pb__operation-card:focus {
+	border-color: #2271b1;
+	box-shadow: 0 0 0 1px #2271b1;
+	outline: none;
+}
+
+.configkit-pb__operation-card.is-selected {
+	background: #f0f6fc;
+	border-color: #2271b1;
+}
+
+.configkit-pb__operation-label {
+	font-weight: 600;
+	color: #1d2327;
+}
+
+.configkit-pb__operation-hint {
+	color: #50575e;
+	font-size: 12px;
+}
+
+.configkit-pb__form-hint {
+	margin: 12px 0 0 0;
+}
+
+/* Bundle components */
+.configkit-pb__components {
+	grid-column: 1 / -1;
+	margin-top: 8px;
+	padding-top: 10px;
+	border-top: 1px dashed #f0f0f1;
+}
+
+.configkit-pb__component-row {
+	display: grid;
+	grid-template-columns: 1fr 80px auto;
+	gap: 8px;
+	align-items: center;
+	margin-top: 6px;
+}
+
+.configkit-pb__input--qty {
+	max-width: 80px;
+}
+
+.configkit-pb__field--wide {
+	grid-column: span 2;
+}
+
+.configkit-pb__source-radio {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	font-size: 13px;
+}
+
+.configkit-pb__source-option {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.configkit-pb__woo-picker {
+	max-width: 100%;
+}
+
 /* Phase 4.3 — Product Builder auto-managed badge in admin lists. */
 .configkit-auto-managed-badge {
 	display: inline-flex;
