@@ -440,6 +440,7 @@
 
 	function renderForm() {
 		const rec = state.editing;
+		const isNew = ! ( rec.id > 0 );
 		const wrap = el( 'div', { class: 'configkit-form' } );
 
 		const heading = rec.id > 0 ? 'Edit module: ' + ( rec.name || rec.module_key ) : 'New module';
@@ -482,7 +483,7 @@
 				{ class: 'configkit-grid configkit-grid--3' },
 				...capChecks
 			),
-		] ) );
+		], { collapsible: true, collapsed: ! isNew } ) );
 
 		// Allowed field kinds
 		const kindChecks = FIELD_KINDS.map( ( [ kind, help ] ) =>
@@ -510,7 +511,7 @@
 				{ class: 'description' },
 				'Which field kinds (per FIELD_MODEL §2) may use libraries of this module as their value source.'
 			),
-		] ) );
+		], { collapsible: true, collapsed: ! isNew } ) );
 
 		// Status
 		wrap.appendChild( fieldset( 'Status', [
@@ -609,7 +610,21 @@
 		return wrap;
 	}
 
-	function fieldset( legend, children ) {
+	function fieldset( legend, children, opts ) {
+		opts = opts || {};
+		if ( opts.collapsible ) {
+			const body = el( 'div', { class: 'configkit-fieldset__body' }, ...children );
+			const fs = el(
+				'fieldset',
+				{ class: 'configkit-fieldset' },
+				el( 'legend', null, legend ),
+				body
+			);
+			if ( window.ConfigKit && window.ConfigKit.makeCollapsible ) {
+				window.ConfigKit.makeCollapsible( fs, { collapsed: !! opts.collapsed } );
+			}
+			return fs;
+		}
 		return el(
 			'fieldset',
 			{ class: 'configkit-fieldset' },

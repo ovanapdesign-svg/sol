@@ -952,7 +952,7 @@
 			} ) );
 		}
 		if ( tagFields.length > 0 ) {
-			wrap.appendChild( fieldset( 'Tags', tagFields ) );
+			wrap.appendChild( fieldset( 'Tags', tagFields, { collapsible: true, collapsed: true } ) );
 		}
 
 		// Custom attributes per module schema
@@ -984,7 +984,7 @@
 					state.dirty = true;
 				} );
 			} );
-			wrap.appendChild( fieldset( 'Attributes', attrFields ) );
+			wrap.appendChild( fieldset( 'Attributes', attrFields, { collapsible: true, collapsed: true } ) );
 		}
 
 		// Status
@@ -1023,7 +1023,20 @@
 
 	// ---- Form helpers ----
 
-	function fieldset( legend, children ) {
+	function fieldset( legend, children, opts ) {
+		opts = opts || {};
+		if ( opts.collapsible ) {
+			const body = el( 'div', { class: 'configkit-fieldset__body' }, ...children );
+			const fs = el( 'fieldset', { class: 'configkit-fieldset' }, el( 'legend', null, legend ), body );
+			if ( window.ConfigKit && window.ConfigKit.makeCollapsible ) {
+				window.ConfigKit.makeCollapsible( fs, { collapsed: !! opts.collapsed } );
+			}
+			return fs;
+		}
+		return _fieldset( legend, children );
+	}
+
+	function _fieldset( legend, children ) {
 		return el(
 			'fieldset',
 			{ class: 'configkit-fieldset' },

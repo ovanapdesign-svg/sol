@@ -549,7 +549,7 @@
 				rec.height_max = v;
 				state.dirty = true;
 			} ),
-		] ) );
+		], { collapsible: true, collapsed: true } ) );
 
 		wrap.appendChild( fieldset( 'Status', [
 			checkboxField( 'Active', 'is_active', !! rec.is_active, ( v ) => {
@@ -782,7 +782,16 @@
 
 	// ---- Form helpers ----
 
-	function fieldset( legend, children ) {
+	function fieldset( legend, children, opts ) {
+		opts = opts || {};
+		if ( opts.collapsible ) {
+			const body = el( 'div', { class: 'configkit-fieldset__body' }, ...children );
+			const fs = el( 'fieldset', { class: 'configkit-fieldset' }, el( 'legend', null, legend ), body );
+			if ( window.ConfigKit && window.ConfigKit.makeCollapsible ) {
+				window.ConfigKit.makeCollapsible( fs, { collapsed: !! opts.collapsed } );
+			}
+			return fs;
+		}
 		return el( 'fieldset', { class: 'configkit-fieldset' }, el( 'legend', null, legend ), ...children );
 	}
 
