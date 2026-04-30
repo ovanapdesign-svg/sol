@@ -56,6 +56,8 @@
 		bulkPaste:    null, // { sectionId, text, errors }
 		optionCounts: {},   // sectionId → number of saved options (for card meta)
 		valueCache:   {},   // sectionId → list<{value, label}> for visibility dropdowns
+		diagnostics:  null, // { summary, byId, sections } — populated lazily / after each save
+		showDiagnostics: false,
 		// drag-drop bookkeeping
 		dragId:       null,
 	};
@@ -138,6 +140,26 @@
 		state.ready = true;
 		root.dataset.loading = 'false';
 		render();
+		// Diagnostics fire after the initial render so the page paints
+		// fast even on big section lists.
+		loadDiagnostics();
+	}
+
+	async function loadDiagnostics() {
+		try {
+			const data = await window.ConfigKit.request(
+				'/configurator/' + productId + '/diagnostics'
+			);
+			state.diagnostics = {
+				summary:  ( data && data.summary ) || null,
+				sections: ( data && data.sections ) || [],
+				byId:     {},
+			};
+			( state.diagnostics.sections || [] ).forEach( ( s ) => {
+				state.diagnostics.byId[ s.id ] = s;
+			} );
+			render();
+		} catch ( e ) { /* swallow — diagnostics are advisory */ }
 	}
 
 	// =========================================================
@@ -146,9 +168,12 @@
 
 	function deriveStatus() {
 		if ( state.sections.length === 0 ) return { cls: 'is-disabled', text: 'Disabled' };
-		// Future chunks (8) compute Ready / In progress / Issues from
-		// per-section diagnostics; placeholder for now.
-		return { cls: 'is-progress', text: 'Setup in progress' };
+		const summary = state.diagnostics && state.diagnostics.summary;
+		if ( ! summary ) return { cls: 'is-progress', text: 'Setup in progress' };
+		if ( summary.overall === 'issues' )      return { cls: 'is-issues',  text: summary.issues + ' section' + ( summary.issues === 1 ? '' : 's' ) + ' need attention' };
+		if ( summary.overall === 'ready' )       return { cls: 'is-ready',   text: 'Ready' };
+		if ( summary.overall === 'in_progress' ) return { cls: 'is-progress', text: 'Setup in progress' };
+		return { cls: 'is-disabled', text: 'Disabled' };
 	}
 
 	function renderHeader() {
@@ -158,7 +183,23 @@
 			el( 'h2', { class: 'configkit-cb__title' }, 'Setup configurator' ),
 			el( 'span', { class: 'configkit-cb__status configkit-cb__status--' + status.cls }, status.text )
 		) );
-		wrap.appendChild( el( 'button', {
+		const headerActions = el( 'div', { class: 'configkit-cb__header-actions' } );
+		const summary = state.diagnostics && state.diagnostics.summary;
+		if ( summary && summary.total > 0 ) {
+			headerActions.appendChild( el( 'button', {
+				type: 'button',
+				class: 'button-link configkit-cb__diag-link',
+				onClick: () => {
+					state.showDiagnostics = true;
+					loadDiagnostics();
+					render();
+				},
+			}, summary.issues > 0
+				? '⚠ View diagnostics (' + summary.issues + ')'
+				: 'View diagnostics'
+			) );
+		}
+		headerActions.appendChild( el( 'button', {
 			type: 'button',
 			class: 'button-link configkit-cb__advanced-link',
 			onClick: () => {
@@ -167,6 +208,7 @@
 				render();
 			},
 		}, state.showAdvanced ? 'Back to configurator builder' : 'Show advanced settings' ) );
+		wrap.appendChild( headerActions );
 		return wrap;
 	}
 
@@ -234,10 +276,13 @@
 		card.appendChild( el( 'span', { class: 'configkit-cb__drag-handle', 'aria-hidden': 'true', title: 'Drag to reorder' }, '⋮⋮' ) );
 
 		const main = el( 'div', { class: 'configkit-cb__section-main' } );
-		main.appendChild( el( 'div', { class: 'configkit-cb__section-title-row' },
+		const titleRow = el( 'div', { class: 'configkit-cb__section-title-row' },
 			el( 'span', { class: 'configkit-cb__type-badge' }, type.label ),
 			el( 'h3', { class: 'configkit-cb__section-title' }, section.label || type.label )
-		) );
+		);
+		const pill = renderSectionStatusPill( section.id );
+		if ( pill ) titleRow.appendChild( pill );
+		main.appendChild( titleRow );
 		main.appendChild( el( 'p', { class: 'configkit-cb__section-meta' },
 			el( 'span', { class: 'configkit-cb__meta-pill' }, summariseSectionContent( section ) ),
 			el( 'span', { class: 'configkit-cb__meta-pill' }, summariseVisibility( section ) ),
@@ -317,6 +362,7 @@
 			} );
 			state.sections = result.sections || state.sections;
 			showMessage( 'success', result.message || 'Section added.' );
+			loadDiagnostics();
 			if ( result.section && result.section.id ) {
 				openSectionModal( result.section.id );
 			}
@@ -338,6 +384,7 @@
 			state.sections = result.sections || [];
 			showMessage( 'success', result.message || 'Section removed.' );
 			render();
+			loadDiagnostics();
 		} catch ( err ) {
 			showMessage( 'error', explainError( err ) );
 			render();
@@ -766,6 +813,7 @@
 			state.optionCounts[ state.modal.sectionId ] = payload.length;
 			await loadOptions( state.modal.sectionId );
 			render();
+			loadDiagnostics();
 		} catch ( err ) {
 			showMessage( 'error', explainError( err ) );
 			render();
@@ -1249,6 +1297,7 @@
 			state.optionCounts[ state.modal.sectionId ] = payload.length;
 			await loadOptions( state.modal.sectionId );
 			render();
+			loadDiagnostics();
 		} catch ( err ) {
 			showMessage( 'error', explainError( err ) );
 			render();
@@ -1431,6 +1480,7 @@
 			state.modal.rangeDiagnostics = result.diagnostics || null;
 			await loadRanges( state.modal.sectionId );
 			render();
+			loadDiagnostics();
 		} catch ( err ) {
 			showMessage( 'error', explainError( err ) );
 			render();
@@ -1608,6 +1658,124 @@
 		const existing = ( state.modal.options || [] ).filter( ( o ) => ( o.label || '' ).trim() !== '' );
 		state.modal.options = existing.concat( parsed );
 		closeBulkPaste();
+	}
+
+	// =========================================================
+	// Diagnostics — per-card status pills + modal listing every
+	// section's status with a quick "Open" link to its editor.
+	// =========================================================
+
+	function renderSectionStatusPill( sectionId ) {
+		if ( ! state.diagnostics || ! state.diagnostics.byId ) return null;
+		const entry = state.diagnostics.byId[ sectionId ];
+		if ( ! entry ) return null;
+		const meta = statusPillMeta( entry.status );
+		const pill = el( 'span', {
+			class: 'configkit-cb__pill configkit-cb__pill--' + meta.cls,
+			title: ( entry.issues || [] ).join( '\n' ) || meta.title,
+		}, meta.icon + ' ' + meta.label );
+		return pill;
+	}
+
+	function statusPillMeta( status ) {
+		switch ( status ) {
+			case 'ready':        return { cls: 'ready',    icon: '✓', label: 'Ready',        title: 'Section is ready.' };
+			case 'issues':       return { cls: 'issues',   icon: '⚠', label: 'Issues',       title: 'Section has detected issues.' };
+			case 'setup_needed':
+			default:             return { cls: 'progress', icon: '⏳', label: 'Needs setup', title: 'Section has no content yet.' };
+		}
+	}
+
+	function renderDiagnosticsOverlay() {
+		if ( ! state.showDiagnostics ) return null;
+		const data = state.diagnostics;
+		const overlay = el( 'div', {
+			class: 'configkit-cb__modal-overlay',
+			onClick: ( ev ) => { if ( ev.target === overlay ) closeDiagnostics(); },
+		} );
+		const modal = el( 'div', { class: 'configkit-cb__modal configkit-cb__modal--diag', role: 'dialog' } );
+
+		modal.appendChild( el( 'div', { class: 'configkit-cb__modal-header' },
+			el( 'div', { class: 'configkit-cb__modal-title' },
+				el( 'h3', null, 'Diagnostics' )
+			),
+			el( 'span', null, '' ),
+			el( 'button', {
+				type: 'button',
+				class: 'configkit-cb__modal-close',
+				'aria-label': 'Close',
+				onClick: closeDiagnostics,
+			}, '✕' )
+		) );
+
+		const body = el( 'div', { class: 'configkit-cb__modal-body' } );
+		if ( ! data || ! data.sections ) {
+			body.appendChild( el( 'p', { class: 'description' }, 'Loading diagnostics…' ) );
+			modal.appendChild( body );
+			overlay.appendChild( modal );
+			return overlay;
+		}
+		body.appendChild( renderDiagnosticsSummary( data.summary ) );
+
+		const list = el( 'div', { class: 'configkit-cb__diag-list' } );
+		( data.sections || [] ).forEach( ( s ) => {
+			list.appendChild( renderDiagnosticsRow( s ) );
+		} );
+		body.appendChild( list );
+		modal.appendChild( body );
+
+		modal.appendChild( el( 'div', { class: 'configkit-cb__modal-footer' },
+			el( 'button', {
+				type: 'button',
+				class: 'button',
+				onClick: () => loadDiagnostics(),
+			}, '↻ Re-scan' ),
+			el( 'button', {
+				type: 'button',
+				class: 'button button-primary',
+				onClick: closeDiagnostics,
+			}, 'Close' )
+		) );
+		overlay.appendChild( modal );
+		return overlay;
+	}
+
+	function closeDiagnostics() {
+		state.showDiagnostics = false;
+		render();
+	}
+
+	function renderDiagnosticsSummary( summary ) {
+		if ( ! summary ) return el( 'p', { class: 'description' }, 'No sections yet.' );
+		const text = summary.ready + ' ready · ' +
+			summary.setup_needed + ' need setup · ' +
+			summary.issues + ' with issues';
+		return el( 'p', { class: 'configkit-cb__diag-summary' }, text );
+	}
+
+	function renderDiagnosticsRow( s ) {
+		const meta = statusPillMeta( s.status );
+		const row = el( 'div', { class: 'configkit-cb__diag-row configkit-cb__diag-row--' + meta.cls } );
+		const head = el( 'div', { class: 'configkit-cb__diag-row-head' },
+			el( 'span', { class: 'configkit-cb__pill configkit-cb__pill--' + meta.cls }, meta.icon + ' ' + meta.label ),
+			el( 'span', { class: 'configkit-cb__diag-row-title' }, s.label || s.id ),
+			el( 'span', { class: 'configkit-cb__diag-row-type' }, s.type ),
+			el( 'button', {
+				type: 'button',
+				class: 'button-link configkit-cb__diag-row-open',
+				onClick: () => {
+					closeDiagnostics();
+					openSectionModal( s.id );
+				},
+			}, 'Open →' )
+		);
+		row.appendChild( head );
+		if ( ( s.issues || [] ).length > 0 ) {
+			const ul = el( 'ul', { class: 'configkit-cb__diag-issues' } );
+			s.issues.forEach( ( issue ) => ul.appendChild( el( 'li', null, issue ) ) );
+			row.appendChild( ul );
+		}
+		return row;
 	}
 
 	// =========================================================
@@ -1855,6 +2023,7 @@
 			);
 			state.sections = result.sections || state.sections;
 			showMessage( 'success', 'Visibility saved.' );
+			loadDiagnostics();
 			// Refresh the working copy from the server-sanitised version.
 			const fresh = findSection( state.modal.sectionId );
 			if ( fresh ) {
@@ -1923,6 +2092,9 @@
 
 		const bulk = renderBulkPasteOverlay();
 		if ( bulk ) root.appendChild( bulk );
+
+		const diag = renderDiagnosticsOverlay();
+		if ( diag ) root.appendChild( diag );
 	}
 
 	init();

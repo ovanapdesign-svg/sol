@@ -538,6 +538,101 @@ final class ConfiguratorBuilderService {
 	}
 
 	/**
+	 * Phase 4.4 chunk 8 — per-product readiness scan.
+	 *
+	 * Walks every section, asks each for its content count, runs the
+	 * range overlap analyser on size_pricing sections, and validates
+	 * that every visibility condition still references an existing
+	 * section. Output shape is consumed by the diagnostics modal +
+	 * the per-card status pills.
+	 *
+	 * Status taxonomy (kept tiny on purpose):
+	 *   ready         — section has content, no detected issues.
+	 *   setup_needed  — section is empty (no rows / no options).
+	 *   issues        — overlap / dangling visibility / save error.
+	 *
+	 * @return array{
+	 *   summary:array{ready:int,setup_needed:int,issues:int,total:int,overall:string},
+	 *   sections:list<array{id:string,type:string,label:string,status:string,issues:list<string>}>
+	 * }
+	 */
+	public function analyse_product( int $product_id ): array {
+		$sections = $this->sections->list( $product_id );
+		$out      = [];
+		$counts   = [ 'ready' => 0, 'setup_needed' => 0, 'issues' => 0 ];
+		$known_ids = array_column( $sections, 'id' );
+
+		foreach ( $sections as $section ) {
+			$id     = (string) ( $section['id'] ?? '' );
+			$type   = (string) ( $section['type'] ?? '' );
+			$label  = (string) ( $section['label'] ?? $id );
+			$issues = [];
+			$has_content = false;
+
+			if ( $type === SectionTypeRegistry::TYPE_SIZE_PRICING ) {
+				$rows = is_array( $section['range_rows'] ?? null ) ? $section['range_rows'] : [];
+				$has_content = count( $rows ) > 0;
+				if ( $has_content ) {
+					$diag = $this->analyse_ranges( $rows );
+					foreach ( $diag['overlaps'] ?? [] as $o ) {
+						$issues[] = (string) $o['message'];
+					}
+				}
+			} else {
+				$count = 0;
+				if ( $this->item_repo !== null && ! empty( $section['library_key'] ) ) {
+					$count = $this->item_repo->count_in_library( (string) $section['library_key'] );
+				}
+				$has_content = $count > 0;
+			}
+
+			// Dangling visibility references — flag every condition whose
+			// target section id no longer exists.
+			$vis = is_array( $section['visibility'] ?? null ) ? $section['visibility'] : [];
+			if ( ( $vis['mode'] ?? 'always' ) === 'when' ) {
+				foreach ( $vis['conditions'] ?? [] as $cond ) {
+					$ref = (string) ( $cond['section_id'] ?? '' );
+					if ( $ref === '' ) continue;
+					if ( ! in_array( $ref, $known_ids, true ) ) {
+						$issues[] = sprintf( 'Visibility condition references unknown section "%s".', $ref );
+					}
+				}
+			}
+
+			if ( count( $issues ) > 0 ) {
+				$status = 'issues';
+			} elseif ( ! $has_content ) {
+				$status = 'setup_needed';
+			} else {
+				$status = 'ready';
+			}
+			$counts[ $status ]++;
+			$out[] = [
+				'id'     => $id,
+				'type'   => $type,
+				'label'  => $label,
+				'status' => $status,
+				'issues' => $issues,
+			];
+		}
+
+		$total = count( $sections );
+		$overall = $counts['issues'] > 0 ? 'issues'
+			: ( $total === 0 ? 'empty'
+			: ( $counts['setup_needed'] > 0 ? 'in_progress' : 'ready' ) );
+		return [
+			'summary' => [
+				'ready'        => $counts['ready'],
+				'setup_needed' => $counts['setup_needed'],
+				'issues'       => $counts['issues'],
+				'total'        => $total,
+				'overall'      => $overall,
+			],
+			'sections' => $out,
+		];
+	}
+
+	/**
 	 * Compute overlap + gap diagnostics over the supplied ranges.
 	 * Pure-PHP — no DB. Used by save_range_rows so the controller
 	 * can hand the JS a ready-to-render warning list.

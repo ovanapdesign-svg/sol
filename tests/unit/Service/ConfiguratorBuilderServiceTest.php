@@ -371,6 +371,46 @@ final class ConfiguratorBuilderServiceTest extends TestCase {
 		$this->assertSame( 'configkit', $row['price_source'] );
 	}
 
+	public function test_analyse_product_reports_setup_needed_for_empty_section(): void {
+		$created = $this->service->create_section( self::PRODUCT_ID, SectionTypeRegistry::TYPE_OPTION_GROUP );
+		$report  = $this->service->analyse_product( self::PRODUCT_ID );
+		$this->assertSame( 1, $report['summary']['total'] );
+		$this->assertSame( 'in_progress', $report['summary']['overall'] );
+		$this->assertSame( 'setup_needed', $report['sections'][0]['status'] );
+		$this->assertSame( $created['section']['id'], $report['sections'][0]['id'] );
+	}
+
+	public function test_analyse_product_marks_size_pricing_with_overlap_as_issues(): void {
+		$created = $this->service->create_section( self::PRODUCT_ID, SectionTypeRegistry::TYPE_SIZE_PRICING );
+		$id      = $created['section']['id'];
+		$this->service->save_range_rows( self::PRODUCT_ID, $id, [
+			[ 'width_from' => 0, 'width_to' => 2000, 'height_from' => 0, 'height_to' => 2000, 'price' => 100 ],
+			[ 'width_from' => 1500, 'width_to' => 2500, 'height_from' => 0, 'height_to' => 2000, 'price' => 200 ],
+		] );
+		$report = $this->service->analyse_product( self::PRODUCT_ID );
+		$this->assertSame( 'issues', $report['sections'][0]['status'] );
+		$this->assertSame( 'issues', $report['summary']['overall'] );
+		$this->assertNotEmpty( $report['sections'][0]['issues'] );
+	}
+
+	public function test_analyse_product_flags_dangling_visibility_reference(): void {
+		$created = $this->service->create_section( self::PRODUCT_ID, SectionTypeRegistry::TYPE_OPTION_GROUP );
+		$id      = $created['section']['id'];
+		$this->service->save_section_options( self::PRODUCT_ID, $id, [ [ 'sku' => 'X', 'label' => 'X' ] ] );
+		$this->service->update_section( self::PRODUCT_ID, $id, [
+			'visibility' => [
+				'mode' => 'when',
+				'match' => 'all',
+				'conditions' => [
+					[ 'section_id' => 'sec_motor_dead123', 'op' => 'equals', 'value' => 'foo' ],
+				],
+			],
+		] );
+		$report = $this->service->analyse_product( self::PRODUCT_ID );
+		$this->assertSame( 'issues', $report['sections'][0]['status'] );
+		$this->assertStringContainsString( 'unknown section', $report['sections'][0]['issues'][0] );
+	}
+
 	public function test_section_type_registry_lists_documented_types(): void {
 		$ids = array_column( SectionTypeRegistry::all(), 'id' );
 		foreach ( [ 'size_pricing', 'option_group', 'motor', 'manual_operation', 'controls', 'accessories', 'custom' ] as $expected ) {

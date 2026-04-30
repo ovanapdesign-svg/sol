@@ -99,6 +99,19 @@ final class ConfiguratorBuilderController extends AbstractController {
 				'permission_callback' => $this->require_cap( self::CAP ),
 			],
 		] );
+
+		\register_rest_route( self::NAMESPACE, '/configurator/(?P<product_id>\d+)/diagnostics', [
+			[
+				'methods'             => 'GET',
+				'callback'            => [ $this, 'read_diagnostics' ],
+				'permission_callback' => $this->require_cap( self::CAP ),
+			],
+		] );
+	}
+
+	public function read_diagnostics( \WP_REST_Request $request ): \WP_REST_Response {
+		$product_id = (int) $request['product_id'];
+		return $this->ok( $this->service->analyse_product( $product_id ) );
 	}
 
 	public function list_section_types( \WP_REST_Request $request ): \WP_REST_Response {
