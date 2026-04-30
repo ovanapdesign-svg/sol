@@ -674,15 +674,122 @@ visibility id rewrite, dangling-condition drop, no-duplication
 guarantee, missing/soft-deleted preset rejection, key
 collision suffix, list filters).
 
-Awaiting owner review of Half A before Half B integrates with
-the Phase 4.4 UI. Other work still pending: Phase 4.2b.3 cart
-wiring + bundle reconciliation across child cart lines + full
-snapshot pricing for the test panel, real-data Sologtak re-test
-of the new Configurator Builder flow on demo.ovanap.dev/sol1/,
-and the optional operation-mode rule auto-wiring (creating
-show/hide rules in the template when "Both" is picked —
-currently the JS UI handles show/hide visually based on the
-recorded mode).
+Half A landed and was approved by the owner; Half B follows.
+
+**Phase 4.3b Half B** — override resolution, copy / link /
+detach, and full UI integration with Phase 4.4
+configurator-builder.js.
+
+Three new services round out the data layer:
+- `SetupSourceState` wraps `_configkit_setup_source` post meta
+  (setup_source / preset_id / source_product_id / overrides as a
+  flat-path map). We deviate from the spec's "edit
+  ProductBindingRepository" — setup_source is a builder-time
+  concern and the existing DB-backed binding feeds frontend +
+  cart, so a separate state object keeps that boundary clean.
+- `OverrideApplier` is a pure transformer that takes the
+  resolver's base sections + a flat overrides map and stamps each
+  matching section with overridden_paths, option_overrides
+  (price / is_hidden by item_key) and section_overrides
+  (default_values, min/max_dimensions). Unknown paths are
+  collected as orphan_paths so diagnostics can flag overrides
+  whose section was deleted from the preset.
+- `SetupSourceResolver` produces the effective view per
+  setup_source mode. start_blank reads from SectionListState
+  directly. use_preset synthesizes sections from
+  `preset.sections` on every read with deterministic stable ids
+  keyed by (productId, type, type_position, preset_id) so the
+  Phase 4.4 UI's section-id refs survive a preset change;
+  visibility conditions are rewritten via the snapshot's
+  old→new map. link_to_setup recursively resolves the source
+  product (cycle-protected). The applier runs on the base, then
+  every section is annotated with `source` ('shared' /
+  'overridden' / 'local') plus the preset pointer the UI badges
+  read from.
+
+`SetupSourceService` is the owner-action layer:
+- `copy_from_product` deep-clones the source's resolved sections
+  into the target's local list with fresh section_ids; library
+  references are preserved verbatim; lookup choice supports
+  inherit / reuse a named key / mint a fresh empty table.
+  Target becomes start_blank with no preset link.
+- `link_to_setup` flips into link_to_setup mode and clears
+  local sections; reads route through the recursive resolver.
+- `detach_from_preset` materializes the resolver's current view
+  back into local sections and clears setup_source. Per the
+  Half B spec, option-level overrides are cleared on detach
+  (they cannot be baked into shared library items without
+  mutating other products' data); the UI warns about this in
+  the Detach modal.
+- `reset_override` / `write_override` mutate one path in
+  overrides_json; write validates the bucket prefix.
+
+`PresetService.apply_preset` (Half A) was extended: when the
+new SetupSourceState dependency is wired (production path),
+apply now flips the product into use_preset mode and clears
+local sections — sections come from the resolver, not from a
+clone in SectionListState. Half A test wiring (no
+SetupSourceState) keeps the original clone-into-state behavior
+so the Half A snapshot+apply contract tests stay green.
+
+Six new REST routes on `ProductBuilderController`, all gated by
+`configkit_manage_products`:
+- GET  /product-builder/{id}/setup-source     — resolver view
+- POST /product-builder/{id}/copy-from-product
+- POST /product-builder/{id}/link-to-setup
+- POST /product-builder/{id}/detach-from-preset
+- POST /product-builder/{id}/reset-override
+- POST /product-builder/{id}/write-override
+
+Plus on `PresetsController`: GET /presets/{id}/products-using —
+scans post meta via WP_Query for use_preset products pointing at
+this preset.
+
+`ConfiguratorBuilderService` was wired through the resolver:
+list_sections returns the resolver's effective view (with
+setup_source / preset summary); read_range_rows /
+read_section_options resolve the section through the resolver
+so use_preset / link products see ranges + items via the
+shared library_key / lookup_table_key; read_section_options
+surfaces option_overrides inline as `is_hidden_by_override` +
+`overridden_price`. Mutating endpoints (create / update /
+delete / reorder / save_range_rows / save_section_options) are
+guarded — they refuse in use_preset / link mode with a useful
+error so the owner detaches first or uses writeOverride.
+
+UI integration in `configurator-builder.js`:
+- Configurator source panel above the section list with three
+  states (start_blank / use_preset / link_to_setup) and the
+  per-mode action set (Save as preset / Use preset / Copy from
+  product / Detach / Switch preset / Products using preset).
+- Each section card carries an inline pill: 🔗 Shared from
+  {preset_name} / ✏️ Overridden / 📍 Local — driven by the
+  resolver's section.source.
+- Action modals for the five owner flows: save-as-preset (name
+  + description + product_type), apply-preset (preset dropdown
+  lazy-loaded from /presets), copy-from-product (source product
+  id + lookup_table_choice radio inherit/reuse/new),
+  detach-from-preset (warns about cleared option overrides),
+  products-using (lists products linked to a preset).
+- Inline override controls in the option editor: shared
+  sections render the price field with an "✏️ Override price"
+  link that prompts for a price → POST /write-override; already
+  overridden options show "✏️ Overridden: N" + "↺ Reset" → POST
+  /reset-override. Both flows reload sections + options +
+  diagnostics so the badge / count / per-option indicator stay
+  in lockstep.
+
+Suite 613 / 1693 → 641 / 1761 (28 new tests cover override
+applier path-routing, resolver per-mode behavior with stable
+ids and cycle protection, copy / link / detach flows, override
+write/reset validation).
+
+Awaiting Phase 4.2b.3 cart wiring + bundle reconciliation
+across child cart lines + full snapshot pricing for the test
+panel, real-data Sologtak migration test of the new
+Configurator Builder + presets flow on
+demo.ovanap.dev/sol1/, and the optional operation-mode rule
+auto-wiring.
 
 ---
 
