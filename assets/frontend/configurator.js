@@ -273,9 +273,7 @@
 					type: 'button',
 					class: 'configkit-c__nav-btn configkit-c__nav-btn--primary',
 					onClick: function () {
-						if ( window.ConfigKitFrontend && typeof window.ConfigKitFrontend.addToCart === 'function' ) {
-							window.ConfigKitFrontend.addToCart();
-						}
+						addToCart();
 					},
 				}, [ 'Add to cart' ] )
 				: el( 'button', {
@@ -319,9 +317,7 @@
 					type: 'button',
 					class: 'configkit-c__nav-btn configkit-c__nav-btn--primary configkit-c__sticky-btn',
 					onClick: function () {
-						if ( window.ConfigKitFrontend && typeof window.ConfigKitFrontend.addToCart === 'function' ) {
-							window.ConfigKitFrontend.addToCart();
-						}
+						addToCart();
 					},
 				}, [ 'Add to cart' ] ),
 			] ),
@@ -357,12 +353,10 @@
 			el( 'button', {
 				type: 'button',
 				class: 'configkit-c__nav-btn configkit-c__nav-btn--primary configkit-c__nav-btn--block',
-				onClick: function () {
-					if ( window.ConfigKitFrontend && typeof window.ConfigKitFrontend.addToCart === 'function' ) {
-						window.ConfigKitFrontend.addToCart();
-					}
-				},
-			}, [ 'Add to cart' ] ),
+				disabled: state.cartBusy,
+				onClick: addToCart,
+			}, [ state.cartBusy ? 'Adding…' : 'Add to cart' ] ),
+			state.cartError ? el( 'p', { class: 'configkit-c__cart-error' }, [ state.cartError ] ) : null,
 		] );
 	}
 
@@ -746,14 +740,51 @@
 		return disabled && disabled[ optionKey ] === true;
 	}
 
+	async function addToCart() {
+		if ( state.cartBusy ) return;
+		state.cartBusy = true;
+		state.cartError = null;
+		render();
+		try {
+			var url = FRONT.restUrl + '/products/' + FRONT.productId + '/add-to-cart';
+			var res = await fetch( url, {
+				method: 'POST',
+				credentials: 'same-origin',
+				headers: {
+					'Content-Type': 'application/json',
+					'X-WP-Nonce': FRONT.nonce,
+				},
+				body: JSON.stringify( { selections: state.values, quantity: 1 } ),
+			} );
+			var payload = null;
+			try { payload = await res.json(); } catch ( e ) { /* ignore */ }
+			if ( ! res.ok ) {
+				var msg = ( payload && payload.message ) || ( 'HTTP ' + res.status );
+				if ( payload && payload.data && Array.isArray( payload.data.errors ) && payload.data.errors.length > 0 ) {
+					msg = payload.data.errors.map( function ( e ) { return e.message; } ).join( ' ' );
+				}
+				throw new Error( msg );
+			}
+			if ( payload && payload.cart_url ) {
+				window.location.href = payload.cart_url;
+				return;
+			}
+			if ( FRONT.cartUrl ) window.location.href = FRONT.cartUrl;
+		} catch ( err ) {
+			state.cartError = err && err.message ? err.message : String( err );
+		} finally {
+			state.cartBusy = false;
+			render();
+		}
+	}
+
 	// Boot the app.
 	boot();
 
-	// Expose for the upcoming chunks (rule engine, pricing engine,
-	// add-to-cart) so they can mutate state and trigger render.
 	window.ConfigKitFrontend = {
 		state: state,
 		render: render,
 		setValue: setValue,
+		addToCart: addToCart,
 	};
 } )();

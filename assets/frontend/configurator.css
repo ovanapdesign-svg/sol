@@ -725,3 +725,10 @@
 		font-size: 14px;
 	}
 }
+
+.configkit-c__cart-error {
+	margin: 8px 0 0;
+	color: #b32d2e;
+	font-size: 13px;
+	line-height: 1.45;
+}

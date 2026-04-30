@@ -22,6 +22,7 @@ use ConfigKit\Admin\Pages\TemplatesPage;
 use ConfigKit\Admin\WooIntegration;
 use ConfigKit\Capabilities\Registrar;
 use ConfigKit\CLI\Command;
+use ConfigKit\Frontend\AddToCartController;
 use ConfigKit\Frontend\ProductRenderer;
 use ConfigKit\Frontend\RenderDataController;
 use ConfigKit\Migration\Runner;
@@ -299,6 +300,13 @@ final class Plugin {
 			$lookup_repo,
 			$cell_repo,
 			$module_repo
+		) );
+
+		$router->add( new AddToCartController(
+			$binding_repo,
+			$template_repo,
+			$step_repo,
+			$field_repo
 		) );
 		return $router;
 	}
