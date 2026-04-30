@@ -995,6 +995,18 @@
 
 		if ( state.message ) wrap.appendChild( messageBanner( state.message ) );
 
+		// Phase 4.2c — explicit reminder that the module decides which
+		// fields render below.
+		if ( module && module.name ) {
+			wrap.appendChild( el(
+				'p',
+				{ class: 'description configkit-form__intro' },
+				'These fields come from the ',
+				el( 'strong', null, module.name ),
+				' module.'
+			) );
+		}
+
 		// Phase 4.2b.2 — Item type picker. Lives at the very top so the
 		// owner picks Single / Package before filling out anything else;
 		// the rest of the form filters its fields off this choice.
@@ -1257,36 +1269,34 @@
 			wrap.appendChild( fieldset( 'Tags', tagFields, { collapsible: true, collapsed: true } ) );
 		}
 
-		// Custom attributes per module schema
-		const schema = module.attribute_schema || {};
-		const schemaKeys = Object.keys( schema );
-		if ( schemaKeys.length > 0 ) {
-			const attrFields = schemaKeys.map( ( key ) => {
-				const type = schema[ key ];
-				const value = rec.attributes && rec.attributes[ key ] !== undefined ? rec.attributes[ key ] : '';
-				if ( type === 'boolean' ) {
-					return checkboxField( key + ' (boolean)', 'attr_' + key, !! value, ( v ) => {
-						rec.attributes = Object.assign( {}, rec.attributes || {}, { [ key ]: v } );
-						state.dirty = true;
-					} );
-				}
-				if ( type === 'integer' ) {
-					return numberField(
-						key + ' (integer)',
-						'attr_' + key,
-						value === '' || value === null ? 0 : value,
-						( v ) => {
-							rec.attributes = Object.assign( {}, rec.attributes || {}, { [ key ]: parseInt( v, 10 ) || 0 } );
-							state.dirty = true;
-						}
-					);
-				}
-				return textField( key + ' (string)', 'attr_' + key, value || '', ( v ) => {
-					rec.attributes = Object.assign( {}, rec.attributes || {}, { [ key ]: v } );
-					state.dirty = true;
-				} );
-			} );
-			wrap.appendChild( fieldset( 'Attributes', attrFields, { collapsible: true, collapsed: true } ) );
+		// Phase 4.2c — render module attribute schema in its rich shape
+		// (label, type, options, required). Legacy `{key: type-string}`
+		// shapes are still readable via the inline normaliser below.
+		const attrEntries = normaliseModuleAttributesForItem( module );
+		if ( attrEntries.length > 0 ) {
+			const attrFields = attrEntries.map( ( attr ) => renderItemAttributeField( rec, attr ) );
+			wrap.appendChild( fieldset( 'Attributes', attrFields, { collapsible: true, collapsed: false } ) );
+		}
+
+		// Phase 4.2c — read-only inherited fields from the library
+		// (only when module supports them). Owners change brand /
+		// collection by editing the library record itself.
+		const inherited = [];
+		if ( module.supports_brand && state.library && state.library.brand ) {
+			inherited.push( renderInheritedField( 'Brand', state.library.brand ) );
+		}
+		if ( module.supports_collection && state.library && state.library.collection ) {
+			inherited.push( renderInheritedField( 'Collection', state.library.collection ) );
+		}
+		if ( inherited.length > 0 ) {
+			wrap.appendChild( fieldset(
+				'Inherited from library',
+				[
+					el( 'p', { class: 'description' }, 'These values come from the library and apply to every item. Edit the library to change them.' ),
+					...inherited,
+				],
+				{ collapsible: true, collapsed: true }
+			) );
 		}
 
 		// Status
@@ -1924,6 +1934,108 @@
 	function formatKr( num ) {
 		if ( ! Number.isFinite( num ) ) return '—';
 		return num.toLocaleString( undefined, { maximumFractionDigits: 0 } ) + ' kr';
+	}
+
+	/**
+	 * Phase 4.2c — normalise the module's attribute_schema into a
+	 * sorted list of rich entries the item form can render. Accepts
+	 * legacy `{key: type-string}` AND modern
+	 * `{key: {label, type, options, required, sort_order}}` shapes.
+	 */
+	function normaliseModuleAttributesForItem( module ) {
+		const schema = ( module && module.attribute_schema ) || {};
+		const out = [];
+		let order = 10;
+		Object.keys( schema ).forEach( ( key ) => {
+			const entry = schema[ key ];
+			let row;
+			if ( typeof entry === 'string' ) {
+				row = {
+					key, label: humanizeAttrKey( key ), type: legacyAttrType( entry ),
+					required: false, sort_order: order,
+				};
+			} else if ( entry && typeof entry === 'object' ) {
+				row = {
+					key,
+					label: entry.label || humanizeAttrKey( key ),
+					type:  legacyAttrType( entry.type || 'text' ),
+					options: Array.isArray( entry.options ) ? entry.options.slice() : null,
+					required: !! entry.required,
+					sort_order: typeof entry.sort_order === 'number' ? entry.sort_order : order,
+				};
+			} else {
+				return;
+			}
+			if ( row.type === 'enum' && ( ! row.options || row.options.length === 0 ) ) {
+				row.type = 'text'; // fall back so we don't render an empty dropdown
+			}
+			out.push( row );
+			order += 10;
+		} );
+		out.sort( ( a, b ) => a.sort_order - b.sort_order );
+		return out;
+	}
+
+	function renderItemAttributeField( rec, attr ) {
+		const value = rec.attributes && rec.attributes[ attr.key ] !== undefined ? rec.attributes[ attr.key ] : '';
+		const label = attr.label + ( attr.required ? ' *' : '' );
+		if ( attr.type === 'boolean' ) {
+			return checkboxField( label, 'attr_' + attr.key, !! value, ( v ) => {
+				rec.attributes = Object.assign( {}, rec.attributes || {}, { [ attr.key ]: v } );
+				state.dirty = true;
+			} );
+		}
+		if ( attr.type === 'number' ) {
+			return numberField( label, 'attr_' + attr.key, value === '' || value === null ? '' : value, ( v ) => {
+				const n = ( typeof v === 'number' && Number.isFinite( v ) ) ? v : '';
+				rec.attributes = Object.assign( {}, rec.attributes || {}, { [ attr.key ]: n === '' ? null : n } );
+				state.dirty = true;
+			}, { allowFloat: true } );
+		}
+		if ( attr.type === 'enum' ) {
+			const choices = ( attr.options || [] ).map( ( v ) => [ v, v ] );
+			return el(
+				'div',
+				{ class: 'configkit-field' },
+				el( 'label', { for: 'cf_attr_' + attr.key }, label ),
+				selectField(
+					value || '',
+					choices,
+					( v ) => {
+						rec.attributes = Object.assign( {}, rec.attributes || {}, { [ attr.key ]: v } );
+						state.dirty = true;
+					}
+				)
+			);
+		}
+		// Default: text
+		return textField( label, 'attr_' + attr.key, value || '', ( v ) => {
+			rec.attributes = Object.assign( {}, rec.attributes || {}, { [ attr.key ]: v } );
+			state.dirty = true;
+		} );
+	}
+
+	function renderInheritedField( label, value ) {
+		return el(
+			'div',
+			{ class: 'configkit-field configkit-field--inherited' },
+			el( 'label', null, label ),
+			el( 'span', { class: 'configkit-field__readonly' }, String( value ) )
+		);
+	}
+
+	function legacyAttrType( raw ) {
+		const t = String( raw || 'text' ).toLowerCase();
+		if ( t === 'string' || t === 'str' ) return 'text';
+		if ( t === 'integer' || t === 'int' || t === 'float' || t === 'decimal' ) return 'number';
+		if ( t === 'bool' ) return 'boolean';
+		if ( [ 'text', 'number', 'boolean', 'enum' ].indexOf( t ) >= 0 ) return t;
+		return 'text';
+	}
+
+	function humanizeAttrKey( key ) {
+		const out = String( key ).replace( /[_\-]+/g, ' ' ).trim();
+		return out === '' ? key : out.charAt( 0 ).toUpperCase() + out.slice( 1 );
 	}
 
 	/**
