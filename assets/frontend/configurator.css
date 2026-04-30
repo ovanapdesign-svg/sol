@@ -630,3 +630,98 @@
 	/* Push the page so content isn't hidden behind the sticky bar. */
 	.configkit-frontend { padding-bottom: 96px; }
 }
+
+/* ================================================================
+   Polish — hover lift, focus rings, swatch placeholders
+   ================================================================ */
+
+.configkit-c__card {
+	position: relative;
+	transform: translateY( 0 );
+}
+
+.configkit-c__card:hover:not( :disabled ):not( .is-selected ) {
+	transform: translateY( -1px );
+	box-shadow: 0 4px 14px rgba( 0, 0, 0, 0.06 );
+}
+
+.configkit-c__card:focus-visible {
+	outline: 0;
+	border-color: #1d2128;
+	box-shadow: 0 0 0 3px rgba( 29, 33, 40, 0.18 );
+}
+
+.configkit-c__card-check {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	background: #1d2128;
+	color: #fff;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 12px;
+	font-weight: 700;
+	box-shadow: 0 1px 3px rgba( 0, 0, 0, 0.16 );
+}
+
+.configkit-c__card-placeholder--swatch {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	color: #1d2128;
+}
+
+.configkit-c__card-placeholder-initial {
+	font-size: 24px;
+	font-weight: 700;
+	color: rgba( 0, 0, 0, 0.36 );
+	letter-spacing: 0;
+}
+
+/* Number stepper — focus ring */
+.configkit-c__number:focus-within {
+	border-color: #1d2128;
+	box-shadow: 0 0 0 3px rgba( 29, 33, 40, 0.10 );
+}
+
+/* Radio rows — focus ring */
+.configkit-c__radio-row:focus-within,
+.configkit-c__check-row:focus-within {
+	border-color: #1d2128;
+	box-shadow: 0 0 0 3px rgba( 29, 33, 40, 0.08 );
+}
+
+/* Selected radio row gets a subtle dark border too */
+.configkit-c__radio-row:has( input[ type="radio" ]:checked ) {
+	border-color: #1d2128;
+	background: #f8f9fb;
+}
+
+.configkit-c__check-row:has( input[ type="checkbox" ]:checked ) {
+	border-color: #1d2128;
+	background: #f8f9fb;
+}
+
+/* Mobile polish */
+@media ( max-width: 480px ) {
+	.configkit-c__cards {
+		grid-template-columns: repeat( auto-fill, minmax( 140px, 1fr ) );
+	}
+	.configkit-c__cards--swatch {
+		grid-template-columns: repeat( auto-fill, minmax( 80px, 1fr ) );
+	}
+	.configkit-c__title {
+		font-size: 20px;
+	}
+	.configkit-c__step-title {
+		font-size: 17px;
+	}
+	.configkit-c__nav-btn {
+		padding: 12px 18px;
+		font-size: 14px;
+	}
+}

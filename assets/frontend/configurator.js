@@ -546,13 +546,56 @@
 				'aria-pressed': selected ? 'true' : 'false',
 				onClick: function () { if ( ! disabled ) setValue( field.field_key, c.key ); },
 			}, [
-				c.image_url
-					? el( 'img', { src: c.image_url, alt: c.label, loading: 'lazy', class: 'configkit-c__card-image' }, [] )
-					: el( 'span', { class: 'configkit-c__card-placeholder' }, [] ),
+				renderCardMedia( c, opts ),
 				el( 'span', { class: 'configkit-c__card-label' }, [ c.label ] ),
-				c.helper_text ? el( 'span', { class: 'configkit-c__card-helper' }, [ c.helper_text ] ) : null,
+				c.helper_text && ! opts.swatch ? el( 'span', { class: 'configkit-c__card-helper' }, [ c.helper_text ] ) : null,
+				selected ? el( 'span', { class: 'configkit-c__card-check', 'aria-hidden': 'true' }, [ '✓' ] ) : null,
 			] );
 		} ) );
+	}
+
+	function renderCardMedia( choice, opts ) {
+		if ( choice.image_url ) {
+			return el( 'img', {
+				src:     choice.image_url,
+				alt:     choice.label,
+				loading: 'lazy',
+				class:   'configkit-c__card-image',
+			}, [] );
+		}
+		// Color-family fallback — render a solid swatch using the
+		// item's color_family if the picker is in swatch mode.
+		var colorFamily = ( choice.item && choice.item.color_family ) || null;
+		var bg = colorFamilyToCss( colorFamily );
+		return el( 'span', {
+			class: 'configkit-c__card-placeholder' + ( opts && opts.swatch ? ' configkit-c__card-placeholder--swatch' : '' ),
+			style: bg ? ( 'background:' + bg + ';' ) : null,
+		}, [
+			! bg ? el( 'span', { class: 'configkit-c__card-placeholder-initial' }, [ ( choice.label || '?' ).charAt( 0 ).toUpperCase() ] ) : null,
+		] );
+	}
+
+	function colorFamilyToCss( name ) {
+		if ( ! name || typeof name !== 'string' ) return null;
+		var map = {
+			white:  '#fafafa',
+			black:  '#222',
+			grey:   '#9aa0a6',
+			gray:   '#9aa0a6',
+			beige:  '#e7d8b1',
+			brown:  '#8b5a2b',
+			red:    '#d63838',
+			orange: '#f59e0b',
+			yellow: '#f3d23a',
+			green:  '#3f8a4a',
+			blue:   '#2271b1',
+			purple: '#8b5cf6',
+			pink:   '#ec4899',
+			natural: '#d6c8a3',
+			neutral: '#bfb9ac',
+		};
+		var key = name.toLowerCase().trim();
+		return map[ key ] || null;
 	}
 
 	function renderCheckboxList( field ) {
