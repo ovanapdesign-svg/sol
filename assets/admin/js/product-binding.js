@@ -451,6 +451,9 @@
 
 	function renderBaseSetupSection() {
 		const b = state.binding;
+		const tmpl  = b.template_key      ? state.templates.find( ( t ) => t.template_key === b.template_key ) : null;
+		const lt    = b.lookup_table_key  ? state.lookupTables.find( ( t ) => t.lookup_table_key === b.lookup_table_key ) : null;
+		const fam   = b.family_key        ? state.families.find( ( f ) => f.family_key === b.family_key ) : null;
 		return section(
 			'section-base-setup',
 			'2. Base setup',
@@ -462,7 +465,8 @@
 					[ { value: '', label: '— Select a template —' } ].concat(
 						state.templates.map( ( t ) => ( { value: t.template_key, label: t.name + ' (' + t.template_key + ')' } ) )
 					),
-					( v ) => setBinding( { template_key: v, template_version_id: 0 } )
+					( v ) => setBinding( { template_key: v, template_version_id: 0 } ),
+					tmpl ? adminUrlForEntity( 'configkit-templates', tmpl.id ) : null
 				),
 				numberField(
 					'Template version',
@@ -478,7 +482,8 @@
 					[ { value: '', label: '— Select a lookup table —' } ].concat(
 						state.lookupTables.map( ( t ) => ( { value: t.lookup_table_key, label: t.name + ' (' + t.lookup_table_key + ')' } ) )
 					),
-					( v ) => setBinding( { lookup_table_key: v } )
+					( v ) => setBinding( { lookup_table_key: v } ),
+					lt ? adminUrlForEntity( 'configkit-lookup-tables', lt.id ) : null
 				),
 				selectField(
 					'Family',
@@ -487,7 +492,8 @@
 					[ { value: '', label: '— None —' } ].concat(
 						state.families.map( ( f ) => ( { value: f.family_key, label: f.name + ' (' + f.family_key + ')' } ) )
 					),
-					( v ) => setBinding( { family_key: v } )
+					( v ) => setBinding( { family_key: v } ),
+					fam ? adminUrlForEntity( 'configkit-families', fam.id ) : null
 				),
 				selectField(
 					'Frontend mode',
@@ -608,6 +614,22 @@
 				( arr ) => setAllowedSources( field.field_key, 'allowed_libraries', arr ),
 				'Comma-separated library keys, e.g. textiles_dickson, textiles_orchestra'
 			) );
+			const allowed = Array.isArray( cfg.allowed_libraries ) ? cfg.allowed_libraries : [];
+			if ( allowed.length > 0 ) {
+				const linkRow = el( 'p', { class: 'configkit-binding__edit-link-row' } );
+				linkRow.appendChild( document.createTextNode( 'Open in admin: ' ) );
+				allowed.forEach( ( libKey, i ) => {
+					if ( typeof libKey !== 'string' ) return;
+					const lib = state.libraries.find( ( l ) => l.library_key === libKey );
+					if ( ! lib ) return;
+					if ( i > 0 ) linkRow.appendChild( document.createTextNode( ' · ' ) );
+					linkRow.appendChild( entityEditLink(
+						adminUrlForEntity( 'configkit-libraries', lib.id ),
+						lib.name + ' ↗'
+					) );
+				} );
+				wrap.appendChild( linkRow );
+			}
 			wrap.appendChild( csvListField(
 				'Excluded items (library_key:item_key)',
 				cfg.excluded_items || [],
@@ -906,7 +928,7 @@
 		);
 	}
 
-	function selectField( label, name, value, options, onChange ) {
+	function selectField( label, name, value, options, onChange, editHref ) {
 		const select = el( 'select', {
 			id: 'cfb_' + name,
 			onChange: ( ev ) => onChange( ev.target.value ),
@@ -920,9 +942,29 @@
 			'div',
 			{ class: 'configkit-field' },
 			el( 'label', { for: 'cfb_' + name }, label ),
-			select,
+			el( 'div', { class: 'configkit-binding__select-row' },
+				select,
+				editHref ? entityEditLink( editHref, 'Edit ↗' ) : null
+			),
 			fieldErrors( name )
 		);
+	}
+
+	function entityEditLink( href, label ) {
+		return el( 'a', {
+			class: 'configkit-binding__edit-link',
+			href: href,
+			target: '_blank',
+			rel: 'noopener',
+			title: 'Open in admin (new tab)',
+		}, label );
+	}
+
+	function adminUrlForEntity( page, id ) {
+		// Resolve relative to the current admin URL so tests that
+		// patch window.location keep working.
+		const path = window.location.pathname || '/wp-admin/admin.php';
+		return path + '?page=' + encodeURIComponent( page ) + '&action=edit&id=' + encodeURIComponent( String( id ) );
 	}
 
 	function csvListField( label, value, onChange, help ) {

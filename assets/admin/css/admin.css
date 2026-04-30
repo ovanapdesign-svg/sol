@@ -1913,3 +1913,41 @@
 	min-width: 0;
 	margin: 0;
 }
+
+/* ---- Phase 4.1: edit-jump links from Woo product binding ---- */
+
+.configkit-binding__select-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+
+.configkit-binding__select-row select {
+	flex: 1 1 200px;
+	min-width: 0;
+}
+
+.configkit-binding__edit-link {
+	color: #2271b1;
+	font-size: 12px;
+	text-decoration: none;
+	white-space: nowrap;
+	transition: color 0.12s;
+}
+
+.configkit-binding__edit-link:hover,
+.configkit-binding__edit-link:focus {
+	color: #135e96;
+	text-decoration: underline;
+}
+
+.configkit-binding__edit-link-row {
+	margin: 6px 0 0;
+	color: #50575e;
+	font-size: 12px;
+}
+
+.configkit-binding__edit-link-row .configkit-binding__edit-link {
+	font-size: 12px;
+}
